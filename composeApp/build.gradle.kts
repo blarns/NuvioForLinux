@@ -54,10 +54,18 @@ kotlin {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
             implementation(libs.ktor.client.android)
-            implementation(libs.androidx.media3.exoplayer)
-            implementation(libs.androidx.media3.exoplayer.dash)
             implementation(libs.androidx.media3.exoplayer.hls)
-            implementation(libs.androidx.media3.ui)
+            implementation(libs.androidx.media3.exoplayer.dash)
+            implementation(libs.androidx.media3.exoplayer.smoothstreaming)
+            implementation(libs.androidx.media3.exoplayer.rtsp)
+            implementation(libs.androidx.media3.datasource)
+            implementation(libs.androidx.media3.datasource.okhttp)
+            implementation(libs.androidx.media3.decoder)
+            implementation(libs.androidx.media3.session)
+            implementation(libs.androidx.media3.common)
+            implementation(libs.androidx.media3.container)
+            implementation(libs.androidx.media3.extractor)
+            implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("lib-*.aar"))))
         }
         commonMain.dependencies {
             implementation(libs.coil.compose)
@@ -87,6 +95,11 @@ kotlin {
     }
 }
 
+configurations.all {
+    exclude(group = "androidx.media3", module = "media3-exoplayer")
+    exclude(group = "androidx.media3", module = "media3-ui")
+}
+
 android {
     namespace = "com.nuvio.app"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
@@ -101,6 +114,15 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        jniLibs {
+            pickFirsts += listOf(
+                "lib/*/libc++_shared.so",
+                "lib/*/libavcodec.so",
+                "lib/*/libavutil.so",
+                "lib/*/libswscale.so",
+                "lib/*/libswresample.so"
+            )
         }
     }
     buildTypes {

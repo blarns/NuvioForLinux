@@ -15,4 +15,10 @@ internal expect object PlayerSettingsStorage {
     fun saveStreamReuseLastLinkEnabled(enabled: Boolean)
     fun loadStreamReuseLastLinkCacheHours(): Int?
     fun saveStreamReuseLastLinkCacheHours(hours: Int)
+    fun loadDecoderPriority(): Int?
+    fun saveDecoderPriority(priority: Int)
+    fun loadMapDV7ToHevc(): Boolean?
+    fun saveMapDV7ToHevc(enabled: Boolean)
+    fun loadTunnelingEnabled(): Boolean?
+    fun saveTunnelingEnabled(enabled: Boolean)
 }

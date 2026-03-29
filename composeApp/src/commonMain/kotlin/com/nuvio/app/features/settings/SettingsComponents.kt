@@ -181,7 +181,7 @@ internal fun SettingsSection(
 internal fun SettingsNavigationRow(
     title: String,
     description: String,
-    icon: ImageVector,
+    icon: ImageVector? = null,
     isTablet: Boolean,
     onClick: () -> Unit,
 ) {
@@ -204,24 +204,26 @@ internal fun SettingsNavigationRow(
                 .widthIn(max = if (isTablet) 560.dp else 320.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Surface(
-                modifier = Modifier.size(iconSize),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                shape = RoundedCornerShape(iconRadius),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
+            if (icon != null) {
+                Surface(
+                    modifier = Modifier.size(iconSize),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(iconRadius),
                 ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
+                Spacer(modifier = Modifier.width(if (isTablet) 16.dp else 14.dp))
             }
-            Spacer(modifier = Modifier.width(if (isTablet) 16.dp else 14.dp))
             Column {
                 Text(
                     text = title,

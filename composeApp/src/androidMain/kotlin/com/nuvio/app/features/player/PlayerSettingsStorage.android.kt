@@ -13,6 +13,9 @@ actual object PlayerSettingsStorage {
     private const val secondaryPreferredSubtitleLanguageKey = "secondary_preferred_subtitle_language"
     private const val streamReuseLastLinkEnabledKey = "stream_reuse_last_link_enabled"
     private const val streamReuseLastLinkCacheHoursKey = "stream_reuse_last_link_cache_hours"
+    private const val decoderPriorityKey = "decoder_priority"
+    private const val mapDV7ToHevcKey = "map_dv7_to_hevc"
+    private const val tunnelingEnabledKey = "tunneling_enabled"
 
     private var preferences: SharedPreferences? = null
 
@@ -122,6 +125,57 @@ actual object PlayerSettingsStorage {
         preferences
             ?.edit()
             ?.putInt(ProfileScopedKey.of(streamReuseLastLinkCacheHoursKey), hours)
+            ?.apply()
+    }
+
+    actual fun loadDecoderPriority(): Int? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(decoderPriorityKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getInt(key, 1)
+            } else {
+                null
+            }
+        }
+
+    actual fun saveDecoderPriority(priority: Int) {
+        preferences
+            ?.edit()
+            ?.putInt(ProfileScopedKey.of(decoderPriorityKey), priority)
+            ?.apply()
+    }
+
+    actual fun loadMapDV7ToHevc(): Boolean? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(mapDV7ToHevcKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getBoolean(key, false)
+            } else {
+                null
+            }
+        }
+
+    actual fun saveMapDV7ToHevc(enabled: Boolean) {
+        preferences
+            ?.edit()
+            ?.putBoolean(ProfileScopedKey.of(mapDV7ToHevcKey), enabled)
+            ?.apply()
+    }
+
+    actual fun loadTunnelingEnabled(): Boolean? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(tunnelingEnabledKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getBoolean(key, false)
+            } else {
+                null
+            }
+        }
+
+    actual fun saveTunnelingEnabled(enabled: Boolean) {
+        preferences
+            ?.edit()
+            ?.putBoolean(ProfileScopedKey.of(tunnelingEnabledKey), enabled)
             ?.apply()
     }
 }

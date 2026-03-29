@@ -21,7 +21,14 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
+import androidx.media3.extractor.ts.TsExtractor
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
@@ -44,12 +51,51 @@ actual fun PlatformPlayerSurface(
     val lifecycleOwner = LocalLifecycleOwner.current
     val latestOnSnapshot = rememberUpdatedState(onSnapshot)
     val latestOnError = rememberUpdatedState(onError)
+
+    val playerSettings = remember {
+        PlayerSettingsRepository.ensureLoaded()
+        PlayerSettingsRepository.uiState.value
+    }
+
     val exoPlayer = remember(sourceUrl) {
-        ExoPlayer.Builder(context).build().apply {
-            setMediaItem(MediaItem.fromUri(sourceUrl))
-            prepare()
-            this.playWhenReady = playWhenReady
+        val renderersFactory = DefaultRenderersFactory(context)
+            .setExtensionRendererMode(playerSettings.decoderPriority)
+            .setMapDV7ToHevc(playerSettings.mapDV7ToHevc)
+
+        val trackSelector = DefaultTrackSelector(context).apply {
+            setParameters(
+                buildUponParameters()
+                    .setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)
+            )
+            if (playerSettings.tunnelingEnabled) {
+                setParameters(buildUponParameters().setTunnelingEnabled(true))
+            }
         }
+
+        val loadControl = DefaultLoadControl.Builder()
+            .setTargetBufferBytes(100 * 1024 * 1024)
+            .setBufferDurationsMs(
+                DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
+                70_000,
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                5_000
+            )
+            .build()
+
+        val extractorsFactory = DefaultExtractorsFactory()
+            .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS)
+            .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
+
+        ExoPlayer.Builder(context)
+            .setRenderersFactory(renderersFactory)
+            .setTrackSelector(trackSelector)
+            .setLoadControl(loadControl)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(context, extractorsFactory))
+            .build().apply {
+                setMediaItem(MediaItem.fromUri(sourceUrl))
+                prepare()
+                this.playWhenReady = playWhenReady
+            }
     }
 
     val pendingSubtitleTrackIndex = remember { mutableListOf<Int>() }

@@ -12,6 +12,9 @@ data class PlayerSettingsUiState(
     val secondaryPreferredSubtitleLanguage: String? = null,
     val streamReuseLastLinkEnabled: Boolean = false,
     val streamReuseLastLinkCacheHours: Int = 24,
+    val decoderPriority: Int = 1,
+    val mapDV7ToHevc: Boolean = false,
+    val tunnelingEnabled: Boolean = false,
 )
 
 object PlayerSettingsRepository {
@@ -26,6 +29,9 @@ object PlayerSettingsRepository {
     private var secondaryPreferredSubtitleLanguage: String? = null
     private var streamReuseLastLinkEnabled = false
     private var streamReuseLastLinkCacheHours = 24
+    private var decoderPriority = 1
+    private var mapDV7ToHevc = false
+    private var tunnelingEnabled = false
 
     fun ensureLoaded() {
         if (hasLoaded) return
@@ -45,6 +51,9 @@ object PlayerSettingsRepository {
         secondaryPreferredSubtitleLanguage = null
         streamReuseLastLinkEnabled = false
         streamReuseLastLinkCacheHours = 24
+        decoderPriority = 1
+        mapDV7ToHevc = false
+        tunnelingEnabled = false
         publish()
     }
 
@@ -63,6 +72,9 @@ object PlayerSettingsRepository {
             normalizeLanguageCode(PlayerSettingsStorage.loadSecondaryPreferredSubtitleLanguage())
         streamReuseLastLinkEnabled = PlayerSettingsStorage.loadStreamReuseLastLinkEnabled() ?: false
         streamReuseLastLinkCacheHours = PlayerSettingsStorage.loadStreamReuseLastLinkCacheHours() ?: 24
+        decoderPriority = PlayerSettingsStorage.loadDecoderPriority() ?: 1
+        mapDV7ToHevc = PlayerSettingsStorage.loadMapDV7ToHevc() ?: false
+        tunnelingEnabled = PlayerSettingsStorage.loadTunnelingEnabled() ?: false
         publish()
     }
 
@@ -126,6 +138,30 @@ object PlayerSettingsRepository {
         PlayerSettingsStorage.saveStreamReuseLastLinkCacheHours(hours)
     }
 
+    fun setDecoderPriority(priority: Int) {
+        ensureLoaded()
+        if (decoderPriority == priority) return
+        decoderPriority = priority
+        publish()
+        PlayerSettingsStorage.saveDecoderPriority(priority)
+    }
+
+    fun setMapDV7ToHevc(enabled: Boolean) {
+        ensureLoaded()
+        if (mapDV7ToHevc == enabled) return
+        mapDV7ToHevc = enabled
+        publish()
+        PlayerSettingsStorage.saveMapDV7ToHevc(enabled)
+    }
+
+    fun setTunnelingEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (tunnelingEnabled == enabled) return
+        tunnelingEnabled = enabled
+        publish()
+        PlayerSettingsStorage.saveTunnelingEnabled(enabled)
+    }
+
     private fun publish() {
         _uiState.value = PlayerSettingsUiState(
             showLoadingOverlay = showLoadingOverlay,
@@ -135,6 +171,9 @@ object PlayerSettingsRepository {
             secondaryPreferredSubtitleLanguage = secondaryPreferredSubtitleLanguage,
             streamReuseLastLinkEnabled = streamReuseLastLinkEnabled,
             streamReuseLastLinkCacheHours = streamReuseLastLinkCacheHours,
+            decoderPriority = decoderPriority,
+            mapDV7ToHevc = mapDV7ToHevc,
+            tunnelingEnabled = tunnelingEnabled,
         )
     }
 }

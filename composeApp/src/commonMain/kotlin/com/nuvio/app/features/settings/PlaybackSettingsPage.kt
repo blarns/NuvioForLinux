@@ -17,8 +17,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Language
-import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -39,6 +37,7 @@ import com.nuvio.app.features.player.AvailableLanguageOptions
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.player.SubtitleLanguageOption
 import com.nuvio.app.features.player.languageLabelForCode
+import com.nuvio.app.isIos
 
 internal fun LazyListScope.playbackSettingsContent(
     isTablet: Boolean,
@@ -49,6 +48,9 @@ internal fun LazyListScope.playbackSettingsContent(
     secondaryPreferredSubtitleLanguage: String?,
     streamReuseLastLinkEnabled: Boolean,
     streamReuseLastLinkCacheHours: Int,
+    decoderPriority: Int,
+    mapDV7ToHevc: Boolean,
+    tunnelingEnabled: Boolean,
 ) {
     item {
         PlaybackSettingsSection(
@@ -60,6 +62,9 @@ internal fun LazyListScope.playbackSettingsContent(
             secondaryPreferredSubtitleLanguage = secondaryPreferredSubtitleLanguage,
             streamReuseLastLinkEnabled = streamReuseLastLinkEnabled,
             streamReuseLastLinkCacheHours = streamReuseLastLinkCacheHours,
+            decoderPriority = decoderPriority,
+            mapDV7ToHevc = mapDV7ToHevc,
+            tunnelingEnabled = tunnelingEnabled,
         )
     }
 }
@@ -74,12 +79,16 @@ private fun PlaybackSettingsSection(
     secondaryPreferredSubtitleLanguage: String?,
     streamReuseLastLinkEnabled: Boolean,
     streamReuseLastLinkCacheHours: Int,
+    decoderPriority: Int,
+    mapDV7ToHevc: Boolean,
+    tunnelingEnabled: Boolean,
 ) {
     var showPreferredAudioDialog by remember { mutableStateOf(false) }
     var showSecondaryAudioDialog by remember { mutableStateOf(false) }
     var showPreferredSubtitleDialog by remember { mutableStateOf(false) }
     var showSecondarySubtitleDialog by remember { mutableStateOf(false) }
     var showReuseCacheDurationDialog by remember { mutableStateOf(false) }
+    var showDecoderPriorityDialog by remember { mutableStateOf(false) }
     val sectionSpacing = if (isTablet) 18.dp else 12.dp
 
     Column(
@@ -97,7 +106,14 @@ private fun PlaybackSettingsSection(
                     isTablet = isTablet,
                     onCheckedChange = PlayerSettingsRepository::setShowLoadingOverlay,
                 )
-                SettingsGroupDivider(isTablet = isTablet)
+            }
+        }
+
+        SettingsSection(
+            title = "SUBTITLE AND AUDIO",
+            isTablet = isTablet,
+        ) {
+            SettingsGroup(isTablet = isTablet) {
                 SettingsNavigationRow(
                     title = "Preferred Audio Language",
                     description = when (preferredAudioLanguage) {
@@ -105,7 +121,6 @@ private fun PlaybackSettingsSection(
                         AudioLanguageOption.DEVICE -> "Device Language"
                         else -> languageLabelForCode(preferredAudioLanguage)
                     },
-                    icon = Icons.Rounded.Language,
                     isTablet = isTablet,
                     onClick = { showPreferredAudioDialog = true },
                 )
@@ -113,7 +128,6 @@ private fun PlaybackSettingsSection(
                 SettingsNavigationRow(
                     title = "Secondary Audio Language",
                     description = languageLabelForCode(secondaryPreferredAudioLanguage),
-                    icon = Icons.Rounded.Language,
                     isTablet = isTablet,
                     onClick = { showSecondaryAudioDialog = true },
                 )
@@ -126,7 +140,6 @@ private fun PlaybackSettingsSection(
                         SubtitleLanguageOption.FORCED -> "Forced"
                         else -> languageLabelForCode(preferredSubtitleLanguage)
                     },
-                    icon = Icons.Rounded.Subtitles,
                     isTablet = isTablet,
                     onClick = { showPreferredSubtitleDialog = true },
                 )
@@ -134,7 +147,6 @@ private fun PlaybackSettingsSection(
                 SettingsNavigationRow(
                     title = "Secondary Subtitle Language",
                     description = languageLabelForCode(secondaryPreferredSubtitleLanguage),
-                    icon = Icons.Rounded.Subtitles,
                     isTablet = isTablet,
                     onClick = { showSecondarySubtitleDialog = true },
                 )
@@ -158,9 +170,45 @@ private fun PlaybackSettingsSection(
                     SettingsNavigationRow(
                         title = "Last Link Cache Duration",
                         description = formatReuseCacheDuration(streamReuseLastLinkCacheHours),
-                        icon = Icons.Rounded.Language,
                         isTablet = isTablet,
                         onClick = { showReuseCacheDurationDialog = true },
+                    )
+                }
+            }
+        }
+
+        if (!isIos) {
+            SettingsSection(
+                title = "DECODER",
+                isTablet = isTablet,
+            ) {
+                SettingsGroup(isTablet = isTablet) {
+                    SettingsNavigationRow(
+                        title = "Decoder Priority",
+                        description = when (decoderPriority) {
+                            0 -> "Device Only"
+                            1 -> "Prefer Device"
+                            2 -> "Prefer App (FFmpeg)"
+                            else -> "Prefer Device"
+                        },
+                        isTablet = isTablet,
+                        onClick = { showDecoderPriorityDialog = true },
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsSwitchRow(
+                        title = "Map DV7 to HEVC",
+                        description = "Dolby Vision Profile 7 to HEVC fallback for unsupported devices.",
+                        checked = mapDV7ToHevc,
+                        isTablet = isTablet,
+                        onCheckedChange = PlayerSettingsRepository::setMapDV7ToHevc,
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsSwitchRow(
+                        title = "Tunneled Playback",
+                        description = "Enable tunneled playback for lower latency audio/video sync.",
+                        checked = tunnelingEnabled,
+                        isTablet = isTablet,
+                        onCheckedChange = PlayerSettingsRepository::setTunnelingEnabled,
                     )
                 }
             }
@@ -247,6 +295,17 @@ private fun PlaybackSettingsSection(
                 showReuseCacheDurationDialog = false
             },
             onDismiss = { showReuseCacheDurationDialog = false },
+        )
+    }
+
+    if (showDecoderPriorityDialog) {
+        DecoderPriorityDialog(
+            selectedPriority = decoderPriority,
+            onPrioritySelected = { priority ->
+                PlayerSettingsRepository.setDecoderPriority(priority)
+                showDecoderPriorityDialog = false
+            },
+            onDismiss = { showDecoderPriorityDialog = false },
         )
     }
 }
@@ -410,6 +469,97 @@ private fun ReuseCacheDurationDialog(
                             ) {
                                 Text(
                                     text = formatReuseCacheDuration(hours),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Box(
+                                    modifier = Modifier.size(24.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Tap outside to close",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun DecoderPriorityDialog(
+    selectedPriority: Int,
+    onPrioritySelected: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val options = listOf(
+        0 to "Device Only",
+        1 to "Prefer Device",
+        2 to "Prefer App (FFmpeg)",
+    )
+
+    BasicAlertDialog(
+        onDismissRequest = onDismiss,
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = "Decoder Priority",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    options.forEach { (priority, label) ->
+                        val isSelected = priority == selectedPriority
+                        val containerColor = if (isSelected) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onPrioritySelected(priority) },
+                            shape = RoundedCornerShape(12.dp),
+                            color = containerColor,
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = label,
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.weight(1f),
