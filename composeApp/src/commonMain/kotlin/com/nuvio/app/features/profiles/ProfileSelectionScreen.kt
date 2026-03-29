@@ -170,7 +170,9 @@ fun ProfileSelectionScreen(
                                 }
                                 index++
                             } else {
-                                Spacer(modifier = Modifier.width(150.dp))
+                                if (profiles.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.width(150.dp))
+                                }
                             }
                         }
                     }

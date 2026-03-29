@@ -1,5 +1,10 @@
 package com.nuvio.app.features.auth
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -40,6 +45,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -52,6 +58,9 @@ import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.ui.NuvioPrimaryButton
 import com.nuvio.app.core.ui.NuvioSurfaceCard
 import kotlinx.coroutines.launch
+import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.app_logo_wordmark
+import org.jetbrains.compose.resources.painterResource
 
 @Composable
 fun AuthScreen(
@@ -80,11 +89,13 @@ fun AuthScreen(
                 .padding(top = statusBarTop + 60.dp, bottom = 40.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(
-                text = "Nuvio",
-                style = MaterialTheme.typography.displayLarge,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Black,
+            Image(
+                painter = painterResource(Res.drawable.app_logo_wordmark),
+                contentDescription = "Nuvio",
+                modifier = Modifier
+                    .fillMaxWidth(0.6f)
+                    .height(48.dp),
+                contentScale = ContentScale.Fit,
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -96,18 +107,30 @@ fun AuthScreen(
             Spacer(modifier = Modifier.height(48.dp))
 
             NuvioSurfaceCard {
-                Text(
-                    text = if (isSignUp) "Create Account" else "Welcome Back",
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
+                AnimatedContent(
+                    targetState = isSignUp,
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    label = "heading",
+                ) { signUp ->
+                    Text(
+                        text = if (signUp) "Create Account" else "Welcome Back",
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
                 Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = if (isSignUp) "Sign up to sync your data across devices"
-                    else "Sign in to access your library and progress",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                AnimatedContent(
+                    targetState = isSignUp,
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    label = "subtitle",
+                ) { signUp ->
+                    Text(
+                        text = if (signUp) "Sign up to sync your data across devices"
+                        else "Sign in to access your library and progress",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(24.dp))
 
@@ -244,21 +267,33 @@ fun AuthScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Center,
                 ) {
-                    Text(
-                        text = if (isSignUp) "Already have an account? " else "Don't have an account? ",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = if (isSignUp) "Sign In" else "Sign Up",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clickable {
-                            isSignUp = !isSignUp
-                            AuthRepository.clearError()
-                        },
-                    )
+                    AnimatedContent(
+                        targetState = isSignUp,
+                        transitionSpec = { fadeIn() togetherWith fadeOut() },
+                        label = "togglePrompt",
+                    ) { signUp ->
+                        Text(
+                            text = if (signUp) "Already have an account? " else "Don't have an account? ",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    AnimatedContent(
+                        targetState = isSignUp,
+                        transitionSpec = { fadeIn() togetherWith fadeOut() },
+                        label = "toggleAction",
+                    ) { signUp ->
+                        Text(
+                            text = if (signUp) "Sign In" else "Sign Up",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clickable {
+                                isSignUp = !isSignUp
+                                AuthRepository.clearError()
+                            },
+                        )
+                    }
                 }
             }
 

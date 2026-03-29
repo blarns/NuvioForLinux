@@ -252,11 +252,17 @@ fun NuvioPrimaryButton(
             disabledContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.65f),
         ),
     ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.titleMedium,
-            textAlign = TextAlign.Center,
-        )
+        AnimatedContent(
+            targetState = text,
+            transitionSpec = { fadeIn() togetherWith fadeOut() },
+            label = "buttonText",
+        ) { animatedText ->
+            Text(
+                text = animatedText,
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }
 
