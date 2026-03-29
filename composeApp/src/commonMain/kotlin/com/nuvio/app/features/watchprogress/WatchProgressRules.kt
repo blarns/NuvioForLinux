@@ -63,7 +63,13 @@ internal fun List<WatchProgressEntry>.resumeEntryForSeries(metaId: String): Watc
 
 internal fun List<WatchProgressEntry>.continueWatchingEntries(
     limit: Int = ContinueWatchingLimit,
-): List<WatchProgressEntry> =
-    filterNot { it.isCompleted }
+): List<WatchProgressEntry> {
+    val inProgress = filterNot { it.isCompleted }
+    val (episodes, nonEpisodes) = inProgress.partition { it.isEpisode }
+    val latestPerSeries = episodes
+        .sortedByDescending { it.lastUpdatedEpochMs }
+        .distinctBy { it.parentMetaId }
+    return (nonEpisodes + latestPerSeries)
         .sortedByDescending { it.lastUpdatedEpochMs }
         .take(limit)
+}

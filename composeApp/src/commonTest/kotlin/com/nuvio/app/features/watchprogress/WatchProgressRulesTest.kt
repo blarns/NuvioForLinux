@@ -72,6 +72,29 @@ class WatchProgressRulesTest {
     }
 
     @Test
+    fun `continue watching deduplicates series keeping latest episode per show`() {
+        val ep1 = entry(videoId = "show:1:1", parentMetaId = "show", seasonNumber = 1, episodeNumber = 1, lastUpdatedEpochMs = 10L)
+        val ep2 = entry(videoId = "show:1:2", parentMetaId = "show", seasonNumber = 1, episodeNumber = 2, lastUpdatedEpochMs = 20L)
+        val movie = entry(videoId = "movie-1", parentMetaId = "movie-1", lastUpdatedEpochMs = 15L)
+
+        val result = listOf(ep1, ep2, movie).continueWatchingEntries()
+
+        assertEquals(2, result.size)
+        assertEquals("show:1:2", result.first().videoId)
+        assertEquals("movie-1", result.last().videoId)
+    }
+
+    @Test
+    fun `continue watching keeps multiple movies without deduplication`() {
+        val m1 = entry(videoId = "movie-a", parentMetaId = "movie-a", lastUpdatedEpochMs = 10L)
+        val m2 = entry(videoId = "movie-b", parentMetaId = "movie-b", lastUpdatedEpochMs = 20L)
+
+        val result = listOf(m1, m2).continueWatchingEntries()
+
+        assertEquals(2, result.size)
+    }
+
+    @Test
     fun `build playback video id uses season and episode when present`() {
         assertEquals("show:1:2", buildPlaybackVideoId(parentMetaId = "show", seasonNumber = 1, episodeNumber = 2, fallbackVideoId = "fallback"))
         assertEquals("fallback", buildPlaybackVideoId(parentMetaId = "movie", seasonNumber = null, episodeNumber = null, fallbackVideoId = "fallback"))
