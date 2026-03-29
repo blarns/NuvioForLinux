@@ -53,6 +53,7 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
+            implementation("androidx.recyclerview:recyclerview:1.4.0")
             implementation(libs.ktor.client.android)
             implementation(libs.androidx.media3.exoplayer.hls)
             implementation(libs.androidx.media3.exoplayer.dash)

@@ -12,6 +12,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
@@ -24,11 +25,14 @@ val MaterialTheme.appTheme: AppTheme
     @ReadOnlyComposable
     get() = LocalAppTheme.current
 
+private fun contentColorFor(background: Color): Color =
+    if (background.luminance() > 0.5f) Color(0xFF111111) else Color(0xFFF5F7F8)
+
 private fun buildColorScheme(palette: ThemeColorPalette, amoled: Boolean = false) = darkColorScheme(
     primary = palette.secondary,
     onPrimary = palette.onSecondary,
     primaryContainer = palette.focusBackground,
-    onPrimaryContainer = palette.onSecondary,
+    onPrimaryContainer = contentColorFor(palette.focusBackground),
     secondary = palette.secondaryVariant,
     onSecondary = palette.onSecondaryVariant,
     background = if (amoled) Color.Black else palette.background,
