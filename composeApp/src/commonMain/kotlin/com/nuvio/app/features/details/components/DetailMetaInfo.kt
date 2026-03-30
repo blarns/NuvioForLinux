@@ -3,8 +3,6 @@ package com.nuvio.app.features.details.components
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,7 +27,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nuvio.app.features.details.MetaDetails
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DetailMetaInfo(
     meta: MetaDetails,
@@ -88,22 +85,6 @@ fun DetailMetaInfo(
             }
         }
 
-        val detailChips = buildList {
-            meta.status?.let { add(it) }
-            meta.country?.let { add(it) }
-            meta.language?.let { add(it.uppercase()) }
-        }
-        if (detailChips.isNotEmpty()) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                detailChips.forEach { chip ->
-                    DetailChip(label = chip)
-                }
-            }
-        }
-
         if (meta.director.isNotEmpty()) {
             MetaLabelValueRow(
                 label = "Director",
@@ -115,20 +96,6 @@ fun DetailMetaInfo(
             MetaLabelValueRow(
                 label = "Writer",
                 value = meta.writer.joinToString(", "),
-            )
-        }
-
-        if (meta.productionCompanies.isNotEmpty()) {
-            MetaLabelValueRow(
-                label = "Production",
-                value = meta.productionCompanies.joinToString(", ") { it.name },
-            )
-        }
-
-        if (meta.networks.isNotEmpty()) {
-            MetaLabelValueRow(
-                label = "Network",
-                value = meta.networks.joinToString(", ") { it.name },
             )
         }
 
@@ -171,22 +138,6 @@ private fun MetaLabelValueRow(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
-        )
-    }
-}
-
-@Composable
-private fun DetailChip(label: String) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-        shape = RoundedCornerShape(999.dp),
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = FontWeight.Medium,
         )
     }
 }

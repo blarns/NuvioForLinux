@@ -37,10 +37,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.ui.NuvioBackButton
 import com.nuvio.app.core.ui.nuvioPlatformExtraBottomPadding
 import com.nuvio.app.features.details.components.DetailActionButtons
+import com.nuvio.app.features.details.components.DetailAdditionalInfoSection
 import com.nuvio.app.features.details.components.DetailCastSection
 import com.nuvio.app.features.details.components.DetailFloatingHeader
 import com.nuvio.app.features.details.components.DetailHero
 import com.nuvio.app.features.details.components.DetailMetaInfo
+import com.nuvio.app.features.details.components.DetailProductionSection
 import com.nuvio.app.features.details.components.DetailSeriesContent
 import com.nuvio.app.features.details.components.EpisodeWatchedActionSheet
 import com.nuvio.app.features.library.LibraryRepository
@@ -162,6 +164,17 @@ fun MetaDetailsScreen(
                     }?.overview
                 }
                 val hasEpisodes = meta.videos.any { it.season != null || it.episode != null }
+                val hasProductionSection = remember(meta) {
+                    meta.productionCompanies.isNotEmpty() || meta.networks.isNotEmpty()
+                }
+                val hasAdditionalInfoSection = remember(meta) {
+                    meta.status != null ||
+                        meta.releaseInfo != null ||
+                        meta.runtime != null ||
+                        meta.ageRating != null ||
+                        meta.country != null ||
+                        meta.language != null
+                }
                 val playButtonLabel = remember(movieProgress, seriesAction, meta.type, hasEpisodes) {
                     when {
                         (meta.type == "series" || hasEpisodes) && seriesAction != null ->
@@ -259,7 +272,15 @@ fun MetaDetailsScreen(
 
                             DetailMetaInfo(meta = meta)
 
+                            if (hasEpisodes && hasProductionSection) {
+                                DetailProductionSection(meta = meta)
+                            }
+
                             DetailCastSection(cast = meta.cast)
+
+                            if (!hasEpisodes && hasProductionSection) {
+                                DetailProductionSection(meta = meta)
+                            }
 
                             DetailSeriesContent(
                                 meta = meta,
@@ -297,6 +318,14 @@ fun MetaDetailsScreen(
                                     selectedEpisodeForActions = video
                                 },
                             )
+
+                            if (hasEpisodes && hasAdditionalInfoSection) {
+                                DetailAdditionalInfoSection(meta = meta)
+                            }
+
+                            if (!hasEpisodes && hasAdditionalInfoSection) {
+                                DetailAdditionalInfoSection(meta = meta)
+                            }
 
                             Spacer(modifier = Modifier.height(32.dp + nuvioPlatformExtraBottomPadding))
                         }
