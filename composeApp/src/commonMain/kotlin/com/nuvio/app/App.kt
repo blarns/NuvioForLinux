@@ -8,11 +8,16 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Search
@@ -35,12 +40,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
@@ -95,6 +101,9 @@ import com.nuvio.app.features.watched.toWatchedItem
 import com.nuvio.app.features.watched.watchedItemKey
 import com.nuvio.app.features.watchprogress.ContinueWatchingItem
 import kotlinx.serialization.Serializable
+import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.app_logo_wordmark
+import org.jetbrains.compose.resources.painterResource
 
 @Serializable
 object TabsRoute
@@ -277,10 +286,11 @@ private fun MainAppContent(
             LibraryRepository.ensureLoaded()
             LibraryRepository.uiState
         }.collectAsStateWithLifecycle()
-        val watchedUiState by remember {
-            WatchedRepository.ensureLoaded()
-            WatchedRepository.uiState
-        }.collectAsStateWithLifecycle()
+    val watchedUiState by remember {
+        WatchedRepository.ensureLoaded()
+        WatchedRepository.uiState
+    }.collectAsStateWithLifecycle()
+    var initialHomeReady by rememberSaveable { mutableStateOf(false) }
 
         val onPlay: (String, String, String, String, String, String?, String?, String?, Int?, Int?, String?, String?, String?, Long?) -> Unit =
             { type, videoId, parentMetaId, parentMetaType, title, logo, poster, background, seasonNumber, episodeNumber, episodeTitle, episodeThumbnail, pauseDescription, resumePositionMs ->
@@ -365,7 +375,9 @@ private fun MainAppContent(
             ) {
                 composable<TabsRoute> {
                     Scaffold(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .alpha(if (initialHomeReady) 1f else 0f),
                         containerColor = MaterialTheme.colorScheme.background,
                         contentWindowInsets = WindowInsets(0),
                         bottomBar = {
@@ -434,6 +446,7 @@ private fun MainAppContent(
                             onContinueWatchingSettingsClick = { navController.navigate(ContinueWatchingSettingsRoute) },
                             onAddonsSettingsClick = { navController.navigate(AddonsSettingsRoute) },
                             onAccountSettingsClick = { navController.navigate(AccountSettingsRoute) },
+                            onInitialHomeContentRendered = { initialHomeReady = true },
                         )
                     }
                 }
@@ -669,6 +682,10 @@ private fun MainAppContent(
                     }
                 },
             )
+
+            if (!initialHomeReady) {
+                AppLaunchOverlay(modifier = Modifier.fillMaxSize())
+            }
         }
 }
 
@@ -687,6 +704,7 @@ private fun AppTabHost(
     onContinueWatchingSettingsClick: () -> Unit = {},
     onAddonsSettingsClick: () -> Unit = {},
     onAccountSettingsClick: () -> Unit = {},
+    onInitialHomeContentRendered: () -> Unit = {},
 ) {
     Box(modifier = modifier.fillMaxSize()) {
         keepAliveTab(
@@ -699,6 +717,7 @@ private fun AppTabHost(
                 onPosterLongClick = onPosterLongClick,
                 onContinueWatchingClick = onContinueWatchingClick,
                 onContinueWatchingLongPress = onContinueWatchingLongPress,
+                onFirstCatalogRendered = onInitialHomeContentRendered,
             )
         }
         keepAliveTab(
@@ -729,6 +748,33 @@ private fun AppTabHost(
                 onAddonsClick = onAddonsSettingsClick,
                 onAccountClick = onAccountSettingsClick,
             )
+        }
+    }
+}
+
+@Composable
+private fun AppLaunchOverlay(
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.background)
+            .zIndex(10f),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Image(
+                painter = painterResource(Res.drawable.app_logo_wordmark),
+                contentDescription = "Nuvio",
+                modifier = Modifier
+                    .fillMaxWidth(0.48f)
+                    .height(44.dp),
+                contentScale = ContentScale.Fit,
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
         }
     }
 }
