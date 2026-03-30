@@ -1,5 +1,7 @@
 package com.nuvio.app.features.details
 
+import com.nuvio.app.features.streams.StreamItem
+
 data class MetaDetails(
     val id: String,
     val type: String,
@@ -44,6 +46,7 @@ data class MetaVideo(
     val season: Int? = null,
     val episode: Int? = null,
     val overview: String? = null,
+    val streams: List<StreamItem> = emptyList(),
 )
 
 data class MetaDetailsUiState(

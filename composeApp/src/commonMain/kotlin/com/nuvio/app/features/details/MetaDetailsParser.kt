@@ -1,5 +1,7 @@
 package com.nuvio.app.features.details
 
+import com.nuvio.app.features.streams.StreamBehaviorHints
+import com.nuvio.app.features.streams.StreamItem
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -8,6 +10,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
 internal object MetaDetailsParser {
@@ -203,8 +206,43 @@ internal object MetaDetailsParser {
                 season = video.int("season"),
                 episode = video.int("episode"),
                 overview = video.string("overview") ?: video.string("description"),
+                streams = video.embeddedStreams(),
             )
         }
+
+    private fun JsonObject.embeddedStreams(): List<StreamItem> {
+        val arr = this["streams"] as? JsonArray ?: return emptyList()
+        return arr.mapNotNull { element ->
+            val obj = element as? JsonObject ?: return@mapNotNull null
+            val url = obj.string("url")
+            val infoHash = obj.string("infoHash")
+            val externalUrl = obj.string("externalUrl")
+            if (url == null && infoHash == null && externalUrl == null) return@mapNotNull null
+
+            val hintsObj = obj["behaviorHints"] as? JsonObject
+            val streamData = obj["streamData"] as? JsonObject
+            val addonName = streamData?.string("addon") ?: obj.string("name") ?: "Embedded"
+            StreamItem(
+                name = obj.string("name"),
+                description = obj.string("description") ?: obj.string("title"),
+                url = url,
+                infoHash = infoHash,
+                fileIdx = obj.int("fileIdx"),
+                externalUrl = externalUrl,
+                addonName = addonName,
+                addonId = "embedded",
+                behaviorHints = StreamBehaviorHints(
+                    bingeGroup = hintsObj?.string("bingeGroup"),
+                    notWebReady = hintsObj?.boolean("notWebReady") ?: false,
+                    videoSize = hintsObj?.long("videoSize"),
+                    filename = hintsObj?.string("filename"),
+                ),
+            )
+        }
+    }
+
+    private fun JsonObject.long(name: String): Long? =
+        this[name]?.jsonPrimitive?.longOrNull
 }
 
 private fun JsonElement?.asJsonObjectOrNull(): JsonObject? = this as? JsonObject

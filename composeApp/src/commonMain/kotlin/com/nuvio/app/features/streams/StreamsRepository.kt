@@ -3,6 +3,7 @@ package com.nuvio.app.features.streams
 import co.touchlab.kermit.Logger
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.httpGetText
+import com.nuvio.app.features.details.MetaDetailsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -47,6 +48,23 @@ object StreamsRepository {
         activeRequestKey = requestKey
         activeJob?.cancel()
         _uiState.value = StreamsUiState()
+
+        val embeddedStreams = MetaDetailsRepository.findEmbeddedStreams(videoId)
+        if (embeddedStreams.isNotEmpty()) {
+            log.d { "Using ${embeddedStreams.size} embedded streams for type=$type id=$videoId" }
+            val group = AddonStreamGroup(
+                addonName = embeddedStreams.first().addonName,
+                addonId = "embedded",
+                streams = embeddedStreams,
+                isLoading = false,
+            )
+            _uiState.value = StreamsUiState(
+                groups = listOf(group),
+                activeAddonIds = setOf("embedded"),
+                isAnyLoading = false,
+            )
+            return
+        }
 
         val installedAddons = AddonRepository.uiState.value.addons
         if (installedAddons.isEmpty()) {

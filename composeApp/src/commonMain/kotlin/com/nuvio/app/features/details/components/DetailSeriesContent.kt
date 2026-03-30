@@ -57,7 +57,8 @@ fun DetailSeriesContent(
     progressByVideoId: Map<String, WatchProgressEntry> = emptyMap(),
     onEpisodeClick: ((MetaVideo) -> Unit)? = null,
 ) {
-    if (meta.type != "series") return
+    val hasVideos = meta.videos.isNotEmpty()
+    if (meta.type != "series" && !hasVideos) return
 
     if (meta.videos.isEmpty()) {
         DetailSection(
@@ -85,21 +86,30 @@ fun DetailSeriesContent(
         if (meta.videos.isNotEmpty() && withSeasonOrEp.isEmpty()) {
             log.w { "All videos lack season/episode fields! First: ${meta.videos.first()}" }
         }
-        withSeasonOrEp
-            .sortedWith(metaVideoSeasonEpisodeComparator)
-            .groupBy { normalizeSeasonNumber(it.season) }
+        if (withSeasonOrEp.isNotEmpty()) {
+            withSeasonOrEp
+                .sortedWith(metaVideoSeasonEpisodeComparator)
+                .groupBy { normalizeSeasonNumber(it.season) }
+        } else if (meta.type != "series" && meta.videos.isNotEmpty()) {
+            // For non-series types (e.g. "other"), show videos without season/episode as a flat list
+            mapOf(normalizeSeasonNumber(null) to meta.videos)
+        } else {
+            emptyMap()
+        }
     }
 
     if (groupedEpisodes.isEmpty()) {
-        DetailSection(
-            title = "Episodes",
-            modifier = modifier,
-        ) {
-            Text(
-                text = "This addon returned videos for the series, but none included season or episode numbers.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        if (meta.type == "series") {
+            DetailSection(
+                title = "Episodes",
+                modifier = modifier,
+            ) {
+                Text(
+                    text = "This addon returned videos for the series, but none included season or episode numbers.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         return
     }
@@ -172,8 +182,13 @@ fun DetailSeriesContent(
                 }
             }
 
+            val sectionTitle = if (meta.type != "series" && seasons.size == 1 && currentSeason <= 0) {
+                "Videos"
+            } else {
+                currentSeason.label()
+            }
             DetailSectionTitle(
-                title = currentSeason.label(),
+                title = sectionTitle,
             )
 
             Column(
@@ -496,7 +511,11 @@ private fun Int.label(): String =
     }
 
 private fun MetaVideo.episodeBadge(): String =
-    episode?.let { "E${it.toString().padStart(2, '0')}" } ?: "EP"
+    when {
+        episode != null -> "E${episode.toString().padStart(2, '0')}"
+        season != null -> "S${season.toString().padStart(2, '0')}"
+        else -> "FILE"
+    }
 
 private fun String.formattedDate(): String {
     val isoDate = substringBefore('T')

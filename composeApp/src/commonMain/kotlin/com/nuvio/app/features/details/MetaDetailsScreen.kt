@@ -147,11 +147,12 @@ fun MetaDetailsScreen(
                         ) == action.videoId
                     }?.overview
                 }
-                val playButtonLabel = remember(movieProgress, seriesAction, meta.type) {
+                val hasEpisodes = meta.videos.any { it.season != null || it.episode != null }
+                val playButtonLabel = remember(movieProgress, seriesAction, meta.type, hasEpisodes) {
                     when {
-                        meta.type == "series" && seriesAction != null ->
+                        (meta.type == "series" || hasEpisodes) && seriesAction != null ->
                             seriesAction.label
-                        meta.type != "series" && movieProgress != null ->
+                        meta.type != "series" && !hasEpisodes && movieProgress != null ->
                             "Resume"
                         else -> "Play"
                     }
@@ -200,7 +201,7 @@ fun MetaDetailsScreen(
                                 isSaved = isSaved,
                                 onPlayClick = {
                                     when {
-                                        meta.type == "series" && seriesAction != null -> {
+                                        (meta.type == "series" || hasEpisodes) && seriesAction != null -> {
                                             onPlay?.invoke(
                                                 meta.type,
                                                 seriesAction.videoId,

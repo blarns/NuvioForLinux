@@ -130,12 +130,45 @@ object MetaDetailsRepository {
             log.d { "Parsed meta: type=${result.type}, name=${result.name}, videos=${result.videos.size}" }
             if (result.videos.isNotEmpty()) {
                 val first = result.videos.first()
-                log.d { "First video: id=${first.id} title=${first.title} s=${first.season} e=${first.episode}" }
+                log.d { "First video: id=${first.id} title=${first.title} s=${first.season} e=${first.episode} embeddedStreams=${first.streams.size}" }
             }
             result
         } catch (e: Throwable) {
             log.e(e) { "Failed to fetch/parse meta from ${manifest.transportUrl}" }
             null
         }
+    }
+
+   
+    fun findEmbeddedStreams(videoId: String): List<com.nuvio.app.features.streams.StreamItem> {
+        val meta = _uiState.value.meta ?: return emptyList()
+        val videosWithStreams = meta.videos.filter { it.streams.isNotEmpty() }
+        if (videosWithStreams.isEmpty()) return emptyList()
+
+        val directMatch = videosWithStreams.firstOrNull { it.id == videoId }
+        if (directMatch != null) return directMatch.streams
+
+        val parts = videoId.split(":")
+        if (parts.size >= 3) {
+            val season = parts[parts.size - 2].toIntOrNull()
+            val episode = parts[parts.size - 1].toIntOrNull()
+            if (season != null && episode != null) {
+                val episodeMatch = videosWithStreams.firstOrNull { it.season == season && it.episode == episode }
+                if (episodeMatch != null) return episodeMatch.streams
+            }
+        }
+
+        val prefixMatch = videosWithStreams.firstOrNull { it.id.startsWith("$videoId:") }
+        if (prefixMatch != null) return prefixMatch.streams
+
+        if (videoId == meta.id && videosWithStreams.size == 1) {
+            return videosWithStreams.first().streams
+        }
+
+        if (videoId == meta.id && videosWithStreams.isNotEmpty()) {
+            return videosWithStreams.flatMap { it.streams }
+        }
+
+        return emptyList()
     }
 }
