@@ -75,6 +75,13 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
     func setSubtitleUrl(url: String) { playerVC?.addSubtitleUrl(url) }
     func clearExternalSubtitle() { playerVC?.removeExternalSubtitles() }
     func clearExternalSubtitleAndSelect(trackId: Int32) { playerVC?.removeExternalSubtitlesAndSelect(Int(trackId)) }
+    func applySubtitleStyle(textColor: String, outlineSize: Float, subPos: Int32) {
+        playerVC?.applySubtitleStyle(
+            textColor: textColor,
+            outlineSize: outlineSize,
+            subPos: Int(subPos)
+        )
+    }
 
     // State - refreshes position from mpv on each call (polled from Kotlin every 250ms)
     func getIsLoading() -> Bool { playerVC?.refreshPlaybackState(); return playerVC?.isPlayerLoading ?? true }
@@ -328,6 +335,20 @@ final class MPVPlayerViewController: UIViewController {
         } else {
             checkError(mpv_set_option_string(mpv, "sid", "no"))
         }
+    }
+
+    func applySubtitleStyle(textColor: String, outlineSize: Float, subPos: Int) {
+        guard mpv != nil else { return }
+
+        checkError(mpv_set_property_string(mpv, "sub-ass-override", "force"))
+        checkError(mpv_set_property_string(mpv, "sub-color", textColor))
+        checkError(mpv_set_property_string(mpv, "sub-outline-color", "#000000"))
+
+        var outline = Double(outlineSize)
+        checkError(mpv_set_property(mpv, "sub-outline-size", MPV_FORMAT_DOUBLE, &outline))
+
+        var position = Int64(subPos)
+        checkError(mpv_set_property(mpv, "sub-pos", MPV_FORMAT_INT64, &position))
     }
 
     func destroyPlayer() {

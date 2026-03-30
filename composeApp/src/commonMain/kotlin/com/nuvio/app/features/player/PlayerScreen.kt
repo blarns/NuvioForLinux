@@ -426,6 +426,10 @@ fun PlayerScreen(
             WatchProgressRepository.ensureLoaded()
         }
 
+        LaunchedEffect(playerController, subtitleStyle) {
+            playerController?.applySubtitleStyle(subtitleStyle)
+        }
+
         LaunchedEffect(playbackSnapshot.isLoading, playerController) {
             if (!playbackSnapshot.isLoading && playerController != null) {
                 refreshTracks()
@@ -694,7 +698,6 @@ fun PlayerScreen(
                 addonSubtitles = addonSubtitles,
                 selectedAddonSubtitleId = selectedAddonSubtitleId,
                 isLoadingAddonSubtitles = isLoadingAddonSubtitles,
-                useCustomSubtitles = useCustomSubtitles,
                 subtitleStyle = subtitleStyle,
                 onTabSelected = { activeSubtitleTab = it },
                 onBuiltInTrackSelected = { index ->

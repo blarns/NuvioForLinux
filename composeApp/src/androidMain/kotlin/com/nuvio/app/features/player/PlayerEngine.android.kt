@@ -3,11 +3,15 @@ package com.nuvio.app.features.player
 import android.net.Uri
 import android.util.Log
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.platform.LocalContext
@@ -31,6 +35,8 @@ import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import androidx.media3.ui.SubtitleView
+import androidx.media3.ui.CaptionStyleCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
@@ -99,6 +105,8 @@ actual fun PlatformPlayerSurface(
     }
 
     val pendingSubtitleTrackIndex = remember { mutableListOf<Int>() }
+    var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
+    var currentSubtitleStyle by remember { mutableStateOf(SubtitleStyleState.DEFAULT) }
 
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
@@ -299,6 +307,11 @@ actual fun PlatformPlayerSurface(
                     exoPlayer.playWhenReady = wasPlaying
                     Log.d(TAG, "clearExternalSubtitleAndSelect: done, pending=$trackIndex position=$currentPosition")
                 }
+
+                override fun applySubtitleStyle(style: SubtitleStyleState) {
+                    currentSubtitleStyle = style
+                    playerViewRef?.applySubtitleStyle(style)
+                }
             }
         )
     }
@@ -320,11 +333,15 @@ actual fun PlatformPlayerSurface(
                 keepScreenOn = true
                 this.resizeMode = resizeMode.toExoResizeMode()
                 setShutterBackgroundColor(android.graphics.Color.BLACK)
+                playerViewRef = this
+                applySubtitleStyle(currentSubtitleStyle)
             }
         },
         update = { playerView ->
             playerView.player = exoPlayer
             playerView.resizeMode = resizeMode.toExoResizeMode()
+            playerViewRef = playerView
+            playerView.applySubtitleStyle(currentSubtitleStyle)
         },
     )
 }
@@ -346,6 +363,25 @@ private fun PlayerResizeMode.toExoResizeMode(): Int =
         PlayerResizeMode.Fill -> AspectRatioFrameLayout.RESIZE_MODE_FILL
         PlayerResizeMode.Zoom -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
     }
+
+private fun PlayerView.applySubtitleStyle(style: SubtitleStyleState) {
+    subtitleView?.apply {
+        setApplyEmbeddedStyles(false)
+        setApplyEmbeddedFontSizes(false)
+        setBottomPaddingFraction(style.bottomOffset / 400f)
+        setStyle(
+            CaptionStyleCompat(
+                style.textColor.toArgb(),
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT,
+                if (style.outlineEnabled) CaptionStyleCompat.EDGE_TYPE_OUTLINE else CaptionStyleCompat.EDGE_TYPE_NONE,
+                android.graphics.Color.BLACK,
+                null,
+            )
+        )
+        setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION)
+    }
+}
 
 private fun ExoPlayer.extractAudioTracks(): List<AudioTrack> {
     val tracks = mutableListOf<AudioTrack>()

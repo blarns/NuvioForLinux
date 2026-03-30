@@ -5,6 +5,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.interop.UIKitViewController
 import co.touchlab.kermit.Logger
@@ -188,6 +189,14 @@ actual fun PlatformPlayerSurface(
                     }
                     bridge.clearExternalSubtitleAndSelect(trackId)
                 }
+
+                override fun applySubtitleStyle(style: SubtitleStyleState) {
+                    bridge.applySubtitleStyle(
+                        textColor = style.textColor.toMpvColorString(),
+                        outlineSize = if (style.outlineEnabled) 1.65f else 0f,
+                        subPos = style.toMpvSubtitlePosition(),
+                    )
+                }
             }
         )
     }
@@ -254,4 +263,28 @@ actual fun PlatformPlayerSurface(
         modifier = modifier,
         interactive = false,
     )
+}
+
+private fun Color.toMpvColorString(): String {
+    val redInt = (red * 255f).toInt().coerceIn(0, 255)
+    val greenInt = (green * 255f).toInt().coerceIn(0, 255)
+    val blueInt = (blue * 255f).toInt().coerceIn(0, 255)
+    return buildString {
+        append('#')
+        append(redInt.toHexByte())
+        append(greenInt.toHexByte())
+        append(blueInt.toHexByte())
+    }
+}
+
+private fun SubtitleStyleState.toMpvSubtitlePosition(): Int =
+    (100 - (bottomOffset / 2)).coerceIn(0, 150)
+
+private fun Int.toHexByte(): String {
+    val digits = "0123456789ABCDEF"
+    val value = coerceIn(0, 255)
+    return buildString {
+        append(digits[value / 16])
+        append(digits[value % 16])
+    }
 }

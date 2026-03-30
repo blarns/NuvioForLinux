@@ -6,58 +6,38 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Build
-import androidx.compose.material.icons.rounded.FormatAlignCenter
-import androidx.compose.material.icons.automirrored.rounded.FormatAlignLeft
-import androidx.compose.material.icons.automirrored.rounded.FormatAlignRight
-import androidx.compose.material.icons.rounded.FormatSize
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Remove
-import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.math.abs
 import kotlin.math.min
-import kotlin.math.roundToInt
 
 @Composable
 fun SubtitleStylePanel(
     style: SubtitleStyleState,
-    useCustomSubtitles: Boolean,
     isCompact: Boolean,
     onStyleChanged: (SubtitleStyleState) -> Unit,
 ) {
@@ -70,43 +50,13 @@ fun SubtitleStylePanel(
     ) {
         LivePreviewCard(
             style = style,
-            useCustomSubtitles = useCustomSubtitles,
             isCompact = isCompact,
             sectionPadding = sectionPadding,
             colorScheme = colorScheme,
         )
 
-        if (useCustomSubtitles) {
-            QuickPresetsCard(
-                style = style,
-                isCompact = isCompact,
-                sectionPadding = sectionPadding,
-                colorScheme = colorScheme,
-                onStyleChanged = onStyleChanged,
-            )
-        }
-
-        CoreControlsCard(
+        StyleControlsCard(
             style = style,
-            useCustomSubtitles = useCustomSubtitles,
-            isCompact = isCompact,
-            sectionPadding = sectionPadding,
-            colorScheme = colorScheme,
-            onStyleChanged = onStyleChanged,
-        )
-
-        AdvancedControlsCard(
-            style = style,
-            useCustomSubtitles = useCustomSubtitles,
-            isCompact = isCompact,
-            sectionPadding = sectionPadding,
-            colorScheme = colorScheme,
-            onStyleChanged = onStyleChanged,
-        )
-
-        TimingOffsetSection(
-            style = style,
-            useCustomSubtitles = useCustomSubtitles,
             isCompact = isCompact,
             sectionPadding = sectionPadding,
             colorScheme = colorScheme,
@@ -115,22 +65,15 @@ fun SubtitleStylePanel(
     }
 }
 
-private fun formatOneDecimal(value: Float, suffix: String = ""): String {
-    val roundedTenths = (value * 10f).roundToInt()
-    val sign = if (roundedTenths < 0) "-" else ""
-    val absoluteTenths = abs(roundedTenths)
-    return "$sign${absoluteTenths / 10}.${absoluteTenths % 10}$suffix"
-}
-
 @Composable
 private fun LivePreviewCard(
     style: SubtitleStyleState,
-    useCustomSubtitles: Boolean,
     isCompact: Boolean,
     sectionPadding: androidx.compose.ui.unit.Dp,
     colorScheme: androidx.compose.material3.ColorScheme,
 ) {
     val previewHeight = if (isCompact) 90.dp else 120.dp
+    val previewFontSize = if (isCompact) 18.sp else 22.sp
 
     Column(
         modifier = Modifier
@@ -152,91 +95,37 @@ private fun LivePreviewCard(
                 .background(Color.Black),
             contentAlignment = Alignment.BottomCenter,
         ) {
-            val bgOpacity = if (useCustomSubtitles && style.backgroundEnabled) style.backgroundOpacity else 0f
-            val align = style.alignment
-
             Box(
                 modifier = Modifier
-                    .padding(bottom = min(80, style.bottomOffset).dp, start = 10.dp, end = 10.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color.Black.copy(alpha = bgOpacity))
-                    .padding(horizontal = if (isCompact) 10.dp else 12.dp, vertical = if (isCompact) 6.dp else 8.dp),
+                    .padding(bottom = min(80, style.bottomOffset).dp, start = 10.dp, end = 10.dp),
             ) {
+                if (style.outlineEnabled) {
+                    Text(
+                        text = "The quick brown fox jumps over the lazy dog.",
+                        color = Color.Black,
+                        fontSize = previewFontSize,
+                        style = TextStyle(
+                            shadow = Shadow(
+                                color = Color.Black,
+                                blurRadius = 6f,
+                            ),
+                        ),
+                    )
+                }
+
                 Text(
                     text = "The quick brown fox jumps over the lazy dog.",
                     color = style.textColor,
-                    fontSize = style.fontSize.sp,
-                    letterSpacing = style.letterSpacing.sp,
-                    lineHeight = (style.fontSize * style.lineHeightMultiplier).sp,
-                    textAlign = align,
-                    style = TextStyle(
-                        shadow = if (style.textShadowEnabled) Shadow(
-                            color = Color.Black,
-                            offset = Offset(1f, 1f),
-                            blurRadius = 3f,
-                        ) else null,
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
+                    fontSize = previewFontSize,
                 )
             }
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun QuickPresetsCard(
+private fun StyleControlsCard(
     style: SubtitleStyleState,
-    isCompact: Boolean,
-    sectionPadding: androidx.compose.ui.unit.Dp,
-    colorScheme: androidx.compose.material3.ColorScheme,
-    onStyleChanged: (SubtitleStyleState) -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(colorScheme.surfaceVariant.copy(alpha = 0.45f))
-            .padding(sectionPadding),
-    ) {
-        SectionHeader(
-            icon = Icons.Rounded.Star,
-            label = "Presets",
-        )
-
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            SubtitlePreset.entries.forEach { preset ->
-                val chipPadH = if (isCompact) 8.dp else 12.dp
-                val chipPadV = if (isCompact) 6.dp else 8.dp
-                val chipSize = if (isCompact) 11.sp else 12.sp
-
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(colorScheme.surface.copy(alpha = 0.55f))
-                        .border(1.dp, colorScheme.outlineVariant.copy(alpha = 0.7f), RoundedCornerShape(20.dp))
-                        .clickable { onStyleChanged(SubtitleStyleState.fromPreset(preset)) }
-                        .padding(horizontal = chipPadH, vertical = chipPadV),
-                ) {
-                    Text(
-                        text = preset.label,
-                        color = colorScheme.onSurface,
-                        fontSize = chipSize,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CoreControlsCard(
-    style: SubtitleStyleState,
-    useCustomSubtitles: Boolean,
     isCompact: Boolean,
     sectionPadding: androidx.compose.ui.unit.Dp,
     colorScheme: androidx.compose.material3.ColorScheme,
@@ -255,7 +144,7 @@ private fun CoreControlsCard(
     ) {
         SectionHeader(
             icon = Icons.Rounded.Tune,
-            label = "Core",
+            label = "Style",
         )
 
         Row(
@@ -263,125 +152,28 @@ private fun CoreControlsCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.FormatSize,
-                    contentDescription = null,
-                    tint = colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp),
-                )
-                Text(
-                    text = "Font Size",
-                    color = colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-            StepperControl(
-                value = style.fontSize.toString(),
-                onMinus = { onStyleChanged(style.copy(fontSize = (style.fontSize - 1).coerceAtLeast(8))) },
-                onPlus = { onStyleChanged(style.copy(fontSize = (style.fontSize + 1).coerceAtMost(40))) },
-                buttonSize = btnSize,
-                buttonRadius = btnRadius,
+            Text(
+                text = "Outline",
+                color = colorScheme.onSurfaceVariant,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
             )
-        }
-
-        if (useCustomSubtitles) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(
+                        if (style.outlineEnabled) colorScheme.primaryContainer
+                        else colorScheme.surface.copy(alpha = 0.8f)
+                    )
+                    .border(1.dp, colorScheme.outlineVariant.copy(alpha = 0.8f), RoundedCornerShape(10.dp))
+                    .clickable { onStyleChanged(style.copy(outlineEnabled = !style.outlineEnabled)) }
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
             ) {
                 Text(
-                    text = "Background",
-                    color = colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-                Switch(
-                    checked = style.backgroundEnabled,
-                    onCheckedChange = { onStyleChanged(style.copy(backgroundEnabled = it)) },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = colorScheme.onPrimary,
-                        checkedTrackColor = colorScheme.primary,
-                        uncheckedThumbColor = colorScheme.onSurfaceVariant,
-                        uncheckedTrackColor = colorScheme.surface.copy(alpha = 0.9f),
-                    ),
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun AdvancedControlsCard(
-    style: SubtitleStyleState,
-    useCustomSubtitles: Boolean,
-    isCompact: Boolean,
-    sectionPadding: androidx.compose.ui.unit.Dp,
-    colorScheme: androidx.compose.material3.ColorScheme,
-    onStyleChanged: (SubtitleStyleState) -> Unit,
-) {
-    val btnSize = if (isCompact) 28.dp else 32.dp
-    val btnRadius = if (isCompact) 14.dp else 16.dp
-    val headerLabel = if (useCustomSubtitles) "Advanced" else "Position"
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(colorScheme.surfaceVariant.copy(alpha = 0.45f))
-            .padding(sectionPadding),
-        verticalArrangement = Arrangement.spacedBy(if (isCompact) 12.dp else 16.dp),
-    ) {
-        SectionHeader(
-            icon = Icons.Rounded.Build,
-            label = headerLabel,
-        )
-
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            SubtitleColorSwatches.forEach { color ->
-                val isSelected = style.textColor == color
-                Box(
-                    modifier = Modifier
-                        .size(22.dp)
-                        .clip(CircleShape)
-                        .background(color)
-                        .border(
-                            2.dp,
-                            if (isSelected) colorScheme.primary else colorScheme.outlineVariant,
-                            CircleShape,
-                        )
-                        .clickable { onStyleChanged(style.copy(textColor = color)) },
-                )
-            }
-        }
-
-        if (useCustomSubtitles) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                AlignmentButton(
-                    icon = Icons.AutoMirrored.Rounded.FormatAlignLeft,
-                    isSelected = style.alignment == TextAlign.Left,
-                    onClick = { onStyleChanged(style.copy(alignment = TextAlign.Left)) },
-                )
-                AlignmentButton(
-                    icon = Icons.Rounded.FormatAlignCenter,
-                    isSelected = style.alignment == TextAlign.Center,
-                    onClick = { onStyleChanged(style.copy(alignment = TextAlign.Center)) },
-                )
-                AlignmentButton(
-                    icon = Icons.AutoMirrored.Rounded.FormatAlignRight,
-                    isSelected = style.alignment == TextAlign.Right,
-                    onClick = { onStyleChanged(style.copy(alignment = TextAlign.Right)) },
+                    text = if (style.outlineEnabled) "On" else "Off",
+                    color = if (style.outlineEnabled) colorScheme.onPrimaryContainer else colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
                 )
             }
         }
@@ -409,202 +201,36 @@ private fun AdvancedControlsCard(
             )
         }
 
-        if (useCustomSubtitles) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Bg Opacity",
-                    color = colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-                StepperControl(
-                    value = formatOneDecimal(style.backgroundOpacity),
-                    onMinus = { onStyleChanged(style.copy(backgroundOpacity = (style.backgroundOpacity - 0.1f).coerceAtLeast(0f))) },
-                    onPlus = { onStyleChanged(style.copy(backgroundOpacity = (style.backgroundOpacity + 0.1f).coerceAtMost(1f))) },
-                    buttonSize = btnSize,
-                    buttonRadius = btnRadius,
-                    minWidth = 48.dp,
-                )
-            }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Color",
+                color = colorScheme.onSurfaceVariant,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Text Shadow",
-                    color = colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            SubtitleColorSwatches.forEach { color ->
+                val isSelected = style.textColor == color
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(
-                            if (style.textShadowEnabled) colorScheme.primaryContainer
-                            else colorScheme.surface.copy(alpha = 0.8f)
+                        .size(22.dp)
+                        .clip(CircleShape)
+                        .background(color)
+                        .border(
+                            2.dp,
+                            if (isSelected) colorScheme.primary else colorScheme.outlineVariant,
+                            CircleShape,
                         )
-                        .border(1.dp, colorScheme.outlineVariant.copy(alpha = 0.8f), RoundedCornerShape(10.dp))
-                        .clickable { onStyleChanged(style.copy(textShadowEnabled = !style.textShadowEnabled)) }
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                ) {
-                    Text(
-                        text = if (style.textShadowEnabled) "On" else "Off",
-                        color = if (style.textShadowEnabled) colorScheme.onPrimaryContainer else colorScheme.onSurface,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Outline",
-                    color = colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
+                        .clickable { onStyleChanged(style.copy(textColor = color)) },
                 )
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(
-                            if (style.outlineEnabled) colorScheme.primaryContainer
-                            else colorScheme.surface.copy(alpha = 0.8f)
-                        )
-                        .border(1.dp, colorScheme.outlineVariant.copy(alpha = 0.8f), RoundedCornerShape(10.dp))
-                        .clickable { onStyleChanged(style.copy(outlineEnabled = !style.outlineEnabled)) }
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                ) {
-                    Text(
-                        text = if (style.outlineEnabled) "On" else "Off",
-                        color = if (style.outlineEnabled) colorScheme.onPrimaryContainer else colorScheme.onSurface,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                    )
-                }
-            }
-
-            if (style.outlineEnabled) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    OutlineColorSwatches.forEach { color ->
-                        val isSelected = style.outlineColor == color
-                        Box(
-                            modifier = Modifier
-                                .size(22.dp)
-                                .clip(CircleShape)
-                                .background(color)
-                                .border(
-                                    2.dp,
-                                    if (isSelected) colorScheme.primary else colorScheme.outlineVariant,
-                                    CircleShape,
-                                )
-                                .clickable { onStyleChanged(style.copy(outlineColor = color)) },
-                        )
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "Outline Width",
-                        color = colorScheme.onSurfaceVariant,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    StepperControl(
-                        value = formatOneDecimal(style.outlineWidth),
-                        onMinus = { onStyleChanged(style.copy(outlineWidth = (style.outlineWidth - 0.5f).coerceAtLeast(0.5f))) },
-                        onPlus = { onStyleChanged(style.copy(outlineWidth = (style.outlineWidth + 0.5f).coerceAtMost(5f))) },
-                        buttonSize = btnSize,
-                        buttonRadius = btnRadius,
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Letter Spacing",
-                    color = colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-                StepperControl(
-                    value = formatOneDecimal(style.letterSpacing),
-                    onMinus = { onStyleChanged(style.copy(letterSpacing = (style.letterSpacing - 0.5f).coerceAtLeast(-2f))) },
-                    onPlus = { onStyleChanged(style.copy(letterSpacing = (style.letterSpacing + 0.5f).coerceAtMost(5f))) },
-                    buttonSize = btnSize,
-                    buttonRadius = btnRadius,
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Line Height",
-                    color = colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-                StepperControl(
-                    value = formatOneDecimal(style.lineHeightMultiplier),
-                    onMinus = { onStyleChanged(style.copy(lineHeightMultiplier = (style.lineHeightMultiplier - 0.1f).coerceAtLeast(1f))) },
-                    onPlus = { onStyleChanged(style.copy(lineHeightMultiplier = (style.lineHeightMultiplier + 0.1f).coerceAtMost(2.5f))) },
-                    buttonSize = btnSize,
-                    buttonRadius = btnRadius,
-                )
-            }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Outline",
-                    color = colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(
-                            if (style.outlineEnabled) colorScheme.primaryContainer
-                            else colorScheme.surface.copy(alpha = 0.8f)
-                        )
-                        .border(1.dp, colorScheme.outlineVariant.copy(alpha = 0.8f), RoundedCornerShape(10.dp))
-                        .clickable { onStyleChanged(style.copy(outlineEnabled = !style.outlineEnabled)) }
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                ) {
-                    Text(
-                        text = if (style.outlineEnabled) "On" else "Off",
-                        color = if (style.outlineEnabled) colorScheme.onPrimaryContainer else colorScheme.onSurface,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                    )
-                }
             }
         }
 
@@ -632,57 +258,6 @@ private fun AdvancedControlsCard(
 }
 
 @Composable
-private fun TimingOffsetSection(
-    style: SubtitleStyleState,
-    useCustomSubtitles: Boolean,
-    isCompact: Boolean,
-    sectionPadding: androidx.compose.ui.unit.Dp,
-    colorScheme: androidx.compose.material3.ColorScheme,
-    onStyleChanged: (SubtitleStyleState) -> Unit,
-) {
-    if (!useCustomSubtitles) return
-
-    val btnSize = if (isCompact) 28.dp else 32.dp
-    val btnRadius = if (isCompact) 14.dp else 16.dp
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(colorScheme.surfaceVariant.copy(alpha = 0.45f))
-            .padding(sectionPadding),
-        verticalArrangement = Arrangement.spacedBy(if (isCompact) 8.dp else 12.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Timing Offset",
-                color = colorScheme.onSurfaceVariant,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-            )
-            StepperControl(
-                value = formatOneDecimal(style.timingOffsetMs / 1000f, suffix = "s"),
-                onMinus = { onStyleChanged(style.copy(timingOffsetMs = style.timingOffsetMs - 250L)) },
-                onPlus = { onStyleChanged(style.copy(timingOffsetMs = style.timingOffsetMs + 250L)) },
-                buttonSize = btnSize,
-                buttonRadius = btnRadius,
-                minWidth = 60.dp,
-            )
-        }
-
-        Text(
-            text = "Adjust if subtitles are out of sync with audio",
-            color = colorScheme.onSurfaceVariant,
-            fontSize = 11.sp,
-        )
-    }
-}
-
-@Composable
 private fun StepperControl(
     value: String,
     onMinus: () -> Unit,
@@ -690,8 +265,8 @@ private fun StepperControl(
     buttonSize: androidx.compose.ui.unit.Dp,
     buttonRadius: androidx.compose.ui.unit.Dp,
     minWidth: androidx.compose.ui.unit.Dp = 42.dp,
-    minusIcon: ImageVector = Icons.Rounded.Remove,
-    plusIcon: ImageVector = Icons.Rounded.Add,
+    minusIcon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Rounded.Remove,
+    plusIcon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Rounded.KeyboardArrowUp,
 ) {
     val colorScheme = MaterialTheme.colorScheme
 
@@ -752,56 +327,27 @@ private fun StepperControl(
 
 @Composable
 private fun SectionHeader(
-    icon: ImageVector,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
 ) {
     val colorScheme = MaterialTheme.colorScheme
 
     Row(
-        modifier = Modifier.padding(bottom = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.padding(bottom = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = colorScheme.onSurfaceVariant,
+            tint = colorScheme.primary,
             modifier = Modifier.size(16.dp),
         )
         Text(
             text = label,
-            color = colorScheme.onSurfaceVariant,
-            fontSize = 12.sp,
+            color = colorScheme.onSurface,
+            fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
-        )
-    }
-}
-
-@Composable
-private fun AlignmentButton(
-    icon: ImageVector,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-) {
-    val colorScheme = MaterialTheme.colorScheme
-
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (isSelected) colorScheme.primaryContainer
-                else colorScheme.surface.copy(alpha = 0.82f)
-            )
-            .border(1.dp, colorScheme.outlineVariant.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (isSelected) colorScheme.onPrimaryContainer else colorScheme.onSurface,
-            modifier = Modifier.size(18.dp),
         )
     }
 }

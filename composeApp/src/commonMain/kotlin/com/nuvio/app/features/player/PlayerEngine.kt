@@ -17,6 +17,7 @@ interface PlayerEngineController {
     fun setSubtitleUri(url: String)
     fun clearExternalSubtitle()
     fun clearExternalSubtitleAndSelect(trackIndex: Int)
+    fun applySubtitleStyle(style: SubtitleStyleState) {}
 }
 
 @Composable

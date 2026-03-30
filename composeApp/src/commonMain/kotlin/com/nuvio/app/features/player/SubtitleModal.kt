@@ -53,7 +53,6 @@ fun SubtitleModal(
     addonSubtitles: List<AddonSubtitle>,
     selectedAddonSubtitleId: String?,
     isLoadingAddonSubtitles: Boolean,
-    useCustomSubtitles: Boolean,
     subtitleStyle: SubtitleStyleState,
     onTabSelected: (SubtitleTab) -> Unit,
     onBuiltInTrackSelected: (Int) -> Unit,
@@ -144,7 +143,6 @@ fun SubtitleModal(
                                 )
                                 SubtitleTab.Style -> SubtitleStylePanel(
                                     style = subtitleStyle,
-                                    useCustomSubtitles = useCustomSubtitles,
                                     isCompact = isCompact,
                                     onStyleChanged = onStyleChanged,
                                 )

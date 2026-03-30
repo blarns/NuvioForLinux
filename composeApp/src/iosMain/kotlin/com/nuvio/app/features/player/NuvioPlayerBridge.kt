@@ -33,6 +33,11 @@ interface NuvioPlayerBridge {
     fun setSubtitleUrl(url: String)
     fun clearExternalSubtitle()
     fun clearExternalSubtitleAndSelect(trackId: Int)
+    fun applySubtitleStyle(
+        textColor: String,
+        outlineSize: Float,
+        subPos: Int,
+    )
     fun getIsLoading(): Boolean
     fun getIsPlaying(): Boolean
     fun getIsEnded(): Boolean

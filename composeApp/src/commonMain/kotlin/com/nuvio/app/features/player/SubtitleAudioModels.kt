@@ -1,7 +1,6 @@
 package com.nuvio.app.features.player
 
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextAlign
 
 data class AudioTrack(
     val index: Int,
@@ -34,56 +33,13 @@ enum class SubtitleTab {
     Style,
 }
 
-enum class SubtitlePreset(val label: String) {
-    Default("Default"),
-    Yellow("Yellow"),
-    HighContrast("High Contrast"),
-    Large("Large"),
-}
-
 data class SubtitleStyleState(
     val textColor: Color = Color.White,
-    val fontSize: Int = 16,
-    val backgroundEnabled: Boolean = true,
-    val backgroundOpacity: Float = 0.7f,
-    val textShadowEnabled: Boolean = false,
     val outlineEnabled: Boolean = false,
-    val outlineColor: Color = Color.Black,
-    val outlineWidth: Float = 1f,
-    val alignment: TextAlign = TextAlign.Center,
     val bottomOffset: Int = 50,
-    val letterSpacing: Float = 0f,
-    val lineHeightMultiplier: Float = 1.4f,
-    val timingOffsetMs: Long = 0L,
 ) {
     companion object {
         val DEFAULT = SubtitleStyleState()
-
-        fun fromPreset(preset: SubtitlePreset): SubtitleStyleState =
-            when (preset) {
-                SubtitlePreset.Default -> DEFAULT
-                SubtitlePreset.Yellow -> DEFAULT.copy(
-                    textColor = Color(0xFFFFD700),
-                    outlineEnabled = true,
-                    outlineColor = Color.Black,
-                    outlineWidth = 2f,
-                    backgroundEnabled = false,
-                    textShadowEnabled = true,
-                )
-                SubtitlePreset.HighContrast -> DEFAULT.copy(
-                    textColor = Color.White,
-                    outlineEnabled = true,
-                    outlineColor = Color.Black,
-                    outlineWidth = 2f,
-                    backgroundEnabled = true,
-                    backgroundOpacity = 0.9f,
-                )
-                SubtitlePreset.Large -> DEFAULT.copy(
-                    fontSize = 22,
-                    backgroundEnabled = true,
-                    backgroundOpacity = 0.8f,
-                )
-            }
     }
 }
 
@@ -98,14 +54,6 @@ val SubtitleColorSwatches = listOf(
     Color(0xFF22C55E),
     Color(0xFF3B82F6),
     Color.Black,
-)
-
-val OutlineColorSwatches = listOf(
-    Color.Black,
-    Color.White,
-    Color(0xFFFFD700),
-    Color(0xFF00E5FF),
-    Color(0xFFFF5C5C),
 )
 
 data class SubtitleAudioUiState(
