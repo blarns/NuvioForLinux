@@ -20,6 +20,10 @@ internal actual object PlatformLocalAccountDataCleaner {
         "secondary_preferred_audio_language",
         "preferred_subtitle_language",
         "secondary_preferred_subtitle_language",
+        "subtitle_text_color",
+        "subtitle_outline_enabled",
+        "subtitle_font_size_sp",
+        "subtitle_bottom_offset",
         "stream_reuse_last_link_enabled",
         "stream_reuse_last_link_cache_hours",
     )

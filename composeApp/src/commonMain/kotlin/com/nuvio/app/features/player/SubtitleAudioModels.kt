@@ -1,6 +1,7 @@
 package com.nuvio.app.features.player
 
 import androidx.compose.ui.graphics.Color
+import kotlin.math.roundToInt
 
 data class AudioTrack(
     val index: Int,
@@ -56,6 +57,41 @@ val SubtitleColorSwatches = listOf(
     Color(0xFF3B82F6),
     Color.Black,
 )
+
+fun Color.toStorageHexString(): String {
+    fun component(value: Float): String =
+        (value * 255f).roundToInt().coerceIn(0, 255).toString(16).padStart(2, '0').uppercase()
+
+    return buildString {
+        append('#')
+        append(component(alpha))
+        append(component(red))
+        append(component(green))
+        append(component(blue))
+    }
+}
+
+fun subtitleColorFromStorage(value: String?): Color? {
+    val normalized = value
+        ?.trim()
+        ?.removePrefix("#")
+        ?.takeIf { it.length == 6 || it.length == 8 }
+        ?: return null
+
+    val argb = if (normalized.length == 6) {
+        "FF$normalized"
+    } else {
+        normalized
+    }
+
+    val parsed = argb.toLongOrNull(16) ?: return null
+    return Color(
+        red = ((parsed shr 16) and 0xFF).toFloat() / 255f,
+        green = ((parsed shr 8) and 0xFF).toFloat() / 255f,
+        blue = (parsed and 0xFF).toFloat() / 255f,
+        alpha = ((parsed shr 24) and 0xFF).toFloat() / 255f,
+    )
+}
 
 data class SubtitleAudioUiState(
     val audioTracks: List<AudioTrack> = emptyList(),

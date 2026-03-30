@@ -11,6 +11,10 @@ actual object PlayerSettingsStorage {
     private const val secondaryPreferredAudioLanguageKey = "secondary_preferred_audio_language"
     private const val preferredSubtitleLanguageKey = "preferred_subtitle_language"
     private const val secondaryPreferredSubtitleLanguageKey = "secondary_preferred_subtitle_language"
+    private const val subtitleTextColorKey = "subtitle_text_color"
+    private const val subtitleOutlineEnabledKey = "subtitle_outline_enabled"
+    private const val subtitleFontSizeSpKey = "subtitle_font_size_sp"
+    private const val subtitleBottomOffsetKey = "subtitle_bottom_offset"
     private const val streamReuseLastLinkEnabledKey = "stream_reuse_last_link_enabled"
     private const val streamReuseLastLinkCacheHoursKey = "stream_reuse_last_link_cache_hours"
     private const val decoderPriorityKey = "decoder_priority"
@@ -91,6 +95,67 @@ actual object PlayerSettingsStorage {
                     putString(key, language)
                 }
             }
+            ?.apply()
+    }
+
+    actual fun loadSubtitleTextColor(): String? =
+        preferences?.getString(ProfileScopedKey.of(subtitleTextColorKey), null)
+
+    actual fun saveSubtitleTextColor(colorHex: String) {
+        preferences
+            ?.edit()
+            ?.putString(ProfileScopedKey.of(subtitleTextColorKey), colorHex)
+            ?.apply()
+    }
+
+    actual fun loadSubtitleOutlineEnabled(): Boolean? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(subtitleOutlineEnabledKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getBoolean(key, false)
+            } else {
+                null
+            }
+        }
+
+    actual fun saveSubtitleOutlineEnabled(enabled: Boolean) {
+        preferences
+            ?.edit()
+            ?.putBoolean(ProfileScopedKey.of(subtitleOutlineEnabledKey), enabled)
+            ?.apply()
+    }
+
+    actual fun loadSubtitleFontSizeSp(): Int? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(subtitleFontSizeSpKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getInt(key, SubtitleStyleState.DEFAULT.fontSizeSp)
+            } else {
+                null
+            }
+        }
+
+    actual fun saveSubtitleFontSizeSp(fontSizeSp: Int) {
+        preferences
+            ?.edit()
+            ?.putInt(ProfileScopedKey.of(subtitleFontSizeSpKey), fontSizeSp)
+            ?.apply()
+    }
+
+    actual fun loadSubtitleBottomOffset(): Int? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(subtitleBottomOffsetKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getInt(key, SubtitleStyleState.DEFAULT.bottomOffset)
+            } else {
+                null
+            }
+        }
+
+    actual fun saveSubtitleBottomOffset(bottomOffset: Int) {
+        preferences
+            ?.edit()
+            ?.putInt(ProfileScopedKey.of(subtitleBottomOffsetKey), bottomOffset)
             ?.apply()
     }
 

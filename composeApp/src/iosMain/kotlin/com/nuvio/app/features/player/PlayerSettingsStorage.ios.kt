@@ -9,6 +9,10 @@ actual object PlayerSettingsStorage {
     private const val secondaryPreferredAudioLanguageKey = "secondary_preferred_audio_language"
     private const val preferredSubtitleLanguageKey = "preferred_subtitle_language"
     private const val secondaryPreferredSubtitleLanguageKey = "secondary_preferred_subtitle_language"
+    private const val subtitleTextColorKey = "subtitle_text_color"
+    private const val subtitleOutlineEnabledKey = "subtitle_outline_enabled"
+    private const val subtitleFontSizeSpKey = "subtitle_font_size_sp"
+    private const val subtitleBottomOffsetKey = "subtitle_bottom_offset"
     private const val streamReuseLastLinkEnabledKey = "stream_reuse_last_link_enabled"
     private const val streamReuseLastLinkCacheHoursKey = "stream_reuse_last_link_cache_hours"
     private const val decoderPriorityKey = "decoder_priority"
@@ -79,6 +83,58 @@ actual object PlayerSettingsStorage {
         } else {
             defaults.setObject(language, forKey = key)
         }
+    }
+
+    actual fun loadSubtitleTextColor(): String? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(subtitleTextColorKey)
+        return defaults.stringForKey(key)
+    }
+
+    actual fun saveSubtitleTextColor(colorHex: String) {
+        NSUserDefaults.standardUserDefaults.setObject(colorHex, forKey = ProfileScopedKey.of(subtitleTextColorKey))
+    }
+
+    actual fun loadSubtitleOutlineEnabled(): Boolean? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(subtitleOutlineEnabledKey)
+        return if (defaults.objectForKey(key) != null) {
+            defaults.boolForKey(key)
+        } else {
+            null
+        }
+    }
+
+    actual fun saveSubtitleOutlineEnabled(enabled: Boolean) {
+        NSUserDefaults.standardUserDefaults.setBool(enabled, forKey = ProfileScopedKey.of(subtitleOutlineEnabledKey))
+    }
+
+    actual fun loadSubtitleFontSizeSp(): Int? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(subtitleFontSizeSpKey)
+        return if (defaults.objectForKey(key) != null) {
+            defaults.integerForKey(key).toInt()
+        } else {
+            null
+        }
+    }
+
+    actual fun saveSubtitleFontSizeSp(fontSizeSp: Int) {
+        NSUserDefaults.standardUserDefaults.setInteger(fontSizeSp.toLong(), forKey = ProfileScopedKey.of(subtitleFontSizeSpKey))
+    }
+
+    actual fun loadSubtitleBottomOffset(): Int? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(subtitleBottomOffsetKey)
+        return if (defaults.objectForKey(key) != null) {
+            defaults.integerForKey(key).toInt()
+        } else {
+            null
+        }
+    }
+
+    actual fun saveSubtitleBottomOffset(bottomOffset: Int) {
+        NSUserDefaults.standardUserDefaults.setInteger(bottomOffset.toLong(), forKey = ProfileScopedKey.of(subtitleBottomOffsetKey))
     }
 
     actual fun loadStreamReuseLastLinkEnabled(): Boolean? {

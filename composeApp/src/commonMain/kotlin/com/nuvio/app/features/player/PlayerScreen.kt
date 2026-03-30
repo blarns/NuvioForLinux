@@ -200,8 +200,8 @@ fun PlayerScreen(
         var useCustomSubtitles by remember { mutableStateOf(false) }
         var preferredAudioSelectionApplied by rememberSaveable(sourceUrl) { mutableStateOf(false) }
         var preferredSubtitleSelectionApplied by rememberSaveable(sourceUrl) { mutableStateOf(false) }
-        var subtitleStyle by remember { mutableStateOf(SubtitleStyleState.DEFAULT) }
         var activeSubtitleTab by remember { mutableStateOf(SubtitleTab.BuiltIn) }
+        val subtitleStyle = playerSettingsUiState.subtitleStyle
         val addonSubtitles by SubtitleRepository.addonSubtitles.collectAsStateWithLifecycle()
         val isLoadingAddonSubtitles by SubtitleRepository.isLoading.collectAsStateWithLifecycle()
 
@@ -725,7 +725,7 @@ fun PlayerScreen(
                         SubtitleRepository.fetchAddonSubtitles(contentType, activeVideoId!!)
                     }
                 },
-                onStyleChanged = { subtitleStyle = it },
+                onStyleChanged = PlayerSettingsRepository::setSubtitleStyle,
                 onDismiss = { showSubtitleModal = false },
             )
 
