@@ -5,6 +5,7 @@ data class AddonManifest(
     val name: String,
     val description: String,
     val version: String,
+    val logoUrl: String? = null,
     val resources: List<AddonResource>,
     val types: List<String>,
     val idPrefixes: List<String> = emptyList(),

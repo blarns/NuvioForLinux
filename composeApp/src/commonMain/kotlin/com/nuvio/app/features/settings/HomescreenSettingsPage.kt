@@ -1,10 +1,17 @@
 package com.nuvio.app.features.settings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,42 +58,19 @@ internal fun LazyListScope.homescreenSettingsContent(
         }
     }
     item {
-        if (items.isNotEmpty()) {
+        if (heroEnabled && items.isNotEmpty()) {
+            var heroSourcesExpanded by remember { mutableStateOf(false) }
             SettingsSection(
                 title = "HERO SOURCES",
                 isTablet = isTablet,
             ) {
-                SettingsGroup(isTablet = isTablet) {
-                    Text(
-                        text = "$selectedHeroSourceCount of ${HomeCatalogSettingsRepository.HERO_SOURCE_SELECTION_LIMIT} selected",
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (items.isNotEmpty()) {
-                        SettingsGroupDivider(isTablet = isTablet)
-                    }
-                    items.forEachIndexed { index, item ->
-                        if (index > 0) {
-                            SettingsGroupDivider(isTablet = isTablet)
-                        }
-                        SettingsSwitchRow(
-                            title = item.displayTitle,
-                            description = if (!item.heroSourceEnabled &&
-                                selectedHeroSourceCount >= HomeCatalogSettingsRepository.HERO_SOURCE_SELECTION_LIMIT
-                            ) {
-                                "${item.addonName} • Limit reached (max 2)"
-                            } else {
-                                item.addonName
-                            },
-                            checked = item.heroSourceEnabled,
-                            enabled = item.heroSourceEnabled ||
-                                selectedHeroSourceCount < HomeCatalogSettingsRepository.HERO_SOURCE_SELECTION_LIMIT,
-                            isTablet = isTablet,
-                            onCheckedChange = { HomeCatalogSettingsRepository.setHeroSourceEnabled(item.key, it) },
-                        )
-                    }
-                }
+                HeroSourcesDropdown(
+                    isTablet = isTablet,
+                    items = items,
+                    selectedHeroSourceCount = selectedHeroSourceCount,
+                    expanded = heroSourcesExpanded,
+                    onExpandedChange = { heroSourcesExpanded = it },
+                )
             }
         }
     }
@@ -106,6 +90,75 @@ internal fun LazyListScope.homescreenSettingsContent(
                     isTablet = isTablet,
                     items = items,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroSourcesDropdown(
+    isTablet: Boolean,
+    items: List<HomeCatalogSettingsItem>,
+    selectedHeroSourceCount: Int,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+) {
+    SettingsGroup(isTablet = isTablet) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp)
+                .clickable { onExpandedChange(!expanded) },
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = "$selectedHeroSourceCount of ${HomeCatalogSettingsRepository.HERO_SOURCE_SELECTION_LIMIT} selected",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    text = items.filter { it.heroSourceEnabled }
+                        .joinToString(separator = ", ") { it.displayTitle }
+                        .ifBlank { "No hero sources selected" },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(
+                imageVector = if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        AnimatedVisibility(visible = expanded) {
+            Column {
+                SettingsGroupDivider(isTablet = isTablet)
+                items.forEachIndexed { index, item ->
+                    if (index > 0) {
+                        SettingsGroupDivider(isTablet = isTablet)
+                    }
+                    SettingsSwitchRow(
+                        title = item.displayTitle,
+                        description = if (!item.heroSourceEnabled &&
+                            selectedHeroSourceCount >= HomeCatalogSettingsRepository.HERO_SOURCE_SELECTION_LIMIT
+                        ) {
+                            "${item.addonName} • Limit reached (max 2)"
+                        } else {
+                            item.addonName
+                        },
+                        checked = item.heroSourceEnabled,
+                        enabled = item.heroSourceEnabled ||
+                            selectedHeroSourceCount < HomeCatalogSettingsRepository.HERO_SOURCE_SELECTION_LIMIT,
+                        isTablet = isTablet,
+                        onCheckedChange = { HomeCatalogSettingsRepository.setHeroSourceEnabled(item.key, it) },
+                    )
+                }
             }
         }
     }

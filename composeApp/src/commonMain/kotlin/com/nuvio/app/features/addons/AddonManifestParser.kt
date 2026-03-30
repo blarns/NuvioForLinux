@@ -27,6 +27,7 @@ internal object AddonManifestParser {
             name = root.requiredString("name"),
             description = root.requiredString("description"),
             version = root.requiredString("version"),
+            logoUrl = root.optionalString("logo")?.resolveAgainstManifest(manifestUrl),
             resources = root.resources(defaultTypes, defaultPrefixes),
             types = defaultTypes,
             idPrefixes = defaultPrefixes,
@@ -110,3 +111,25 @@ internal object AddonManifestParser {
     private fun JsonObject.int(name: String): Int? =
         this[name]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
 }
+
+private fun String.resolveAgainstManifest(manifestUrl: String): String =
+    when {
+        startsWith("http://") || startsWith("https://") || startsWith("data:") -> this
+        startsWith("//") -> "https:$this"
+        else -> {
+            val manifestBase = manifestUrl.substringBefore("?").substringBeforeLast('/', "")
+            if (startsWith('/')) {
+                val origin = manifestBase.substringBefore("/", missingDelimiterValue = manifestBase)
+                val schemeAndHost = if (origin.contains("://")) {
+                    val scheme = origin.substringBefore("://")
+                    val host = manifestBase.substringAfter("://").substringBefore("/")
+                    "$scheme://$host"
+                } else {
+                    manifestBase
+                }
+                "$schemeAndHost$this"
+            } else {
+                "$manifestBase/$this"
+            }
+        }
+    }

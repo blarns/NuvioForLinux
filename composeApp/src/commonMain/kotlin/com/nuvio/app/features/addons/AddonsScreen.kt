@@ -17,7 +17,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -35,9 +34,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
 import com.nuvio.app.core.ui.NuvioIconActionButton
 import com.nuvio.app.core.ui.NuvioInfoBadge
 import com.nuvio.app.core.ui.NuvioInputField
@@ -81,15 +82,10 @@ internal fun AddonsSettingsPageContent(
     val coroutineScope = rememberCoroutineScope()
     var addonUrl by rememberSaveable { mutableStateOf("") }
     var formMessage by rememberSaveable { mutableStateOf<String?>(null) }
-    var sortAscending by rememberSaveable { mutableStateOf(true) }
     var installModalState by remember { mutableStateOf<AddonInstallModalState?>(null) }
 
-    val sortedAddons = remember(uiState.addons, sortAscending) {
-        if (sortAscending) {
-            uiState.addons.sortedBy { it.displayTitle.lowercase() }
-        } else {
-            uiState.addons.sortedByDescending { it.displayTitle.lowercase() }
-        }
+    val sortedAddons = remember(uiState.addons) {
+        uiState.addons.sortedBy { it.displayTitle.lowercase() }
     }
     val overview = remember(sortedAddons) { sortedAddons.toOverview() }
 
@@ -98,22 +94,6 @@ internal fun AddonsSettingsPageContent(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         SectionHeader("OVERVIEW")
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-        ) {
-            NuvioIconActionButton(
-                icon = Icons.Rounded.SwapVert,
-                contentDescription = if (sortAscending) "Sort descending" else "Sort ascending",
-                onClick = { sortAscending = !sortAscending },
-            )
-            NuvioIconActionButton(
-                icon = Icons.Rounded.Refresh,
-                contentDescription = "Refresh all addons",
-                onClick = { AddonRepository.refreshAll() },
-            )
-        }
-
         OverviewCard(overview = overview)
 
         SectionHeader("ADD ADDON")
@@ -345,6 +325,7 @@ private fun InstalledAddonCard(
                 verticalAlignment = Alignment.Top,
             ) {
                 AddonIconBadge(
+                    imageUrl = manifest?.logoUrl,
                     icon = Icons.Rounded.Extension,
                     tint = if (manifest != null) Color(0xFF71BDE8) else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -356,12 +337,6 @@ private fun InstalledAddonCard(
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = addon.manifestUrl,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     manifest?.version?.let { version ->
                         Spacer(modifier = Modifier.height(8.dp))
@@ -462,6 +437,7 @@ private fun InstalledAddonCard(
 
 @Composable
 private fun AddonIconBadge(
+    imageUrl: String?,
     icon: ImageVector,
     tint: Color,
 ) {
@@ -472,12 +448,21 @@ private fun AddonIconBadge(
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = tint,
-            modifier = Modifier.size(34.dp),
-        )
+        if (!imageUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = null,
+                modifier = Modifier.matchParentSize(),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(34.dp),
+            )
+        }
     }
 }
 
