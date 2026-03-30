@@ -4,6 +4,7 @@ import android.net.Uri
 import android.util.Log
 import android.util.TypedValue
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import kotlin.math.roundToInt
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.Composable
@@ -367,9 +368,11 @@ private fun PlayerResizeMode.toExoResizeMode(): Int =
 
 private fun PlayerView.applySubtitleStyle(style: SubtitleStyleState) {
     subtitleView?.apply {
+        val bottomOffsetPx = (style.bottomOffset * resources.displayMetrics.density).roundToInt()
         setApplyEmbeddedStyles(false)
         setApplyEmbeddedFontSizes(false)
-        setBottomPaddingFraction(style.bottomOffset / 400f)
+        setPadding(paddingLeft, paddingTop, paddingRight, bottomOffsetPx)
+        setBottomPaddingFraction(0f)
         setStyle(
             CaptionStyleCompat(
                 style.textColor.toArgb(),
