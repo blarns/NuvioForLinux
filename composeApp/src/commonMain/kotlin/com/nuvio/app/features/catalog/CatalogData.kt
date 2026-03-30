@@ -37,7 +37,7 @@ suspend fun fetchCatalogPage(
         payload = payload,
         maxItems = maxItems,
     )
-    val nextSkip = if (parsed.rawItemCount >= CATALOG_PAGE_SIZE) {
+    val nextSkip = if (parsed.rawItemCount > 0) {
         (skip ?: 0) + CATALOG_PAGE_SIZE
     } else {
         null
