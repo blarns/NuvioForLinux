@@ -1,5 +1,13 @@
 package com.nuvio.app.features.profiles
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +41,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -49,6 +61,7 @@ fun PinEntryDialog(
     var error by remember { mutableStateOf<String?>(null) }
     var isVerifying by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
 
     BasicAlertDialog(onDismissRequest = onDismiss) {
         Surface(
@@ -83,13 +96,17 @@ fun PinEntryDialog(
                     }
                 }
 
-                error?.let { errorText ->
-                    Spacer(modifier = Modifier.height(12.dp))
+                AnimatedVisibility(
+                    visible = error != null,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
                     Text(
-                        text = errorText,
+                        text = error.orEmpty(),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
                         textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 12.dp),
                     )
                 }
 
@@ -100,11 +117,13 @@ fun PinEntryDialog(
                         if (pin.length < 4 && !isVerifying) {
                             error = null
                             pin += digit
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             if (pin.length == 4) {
                                 isVerifying = true
                                 scope.launch {
                                     val result = onVerify(pin)
                                     if (!result.unlocked) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         error = if (result.retryAfterSeconds > 0) {
                                             "Locked. Try again in ${result.retryAfterSeconds}s"
                                         } else {
@@ -121,6 +140,7 @@ fun PinEntryDialog(
                         if (pin.isNotEmpty() && !isVerifying) {
                             pin = pin.dropLast(1)
                             error = null
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         }
                     },
                 )
@@ -150,8 +170,25 @@ private fun PinDot(filled: Boolean, hasError: Boolean) {
         filled -> MaterialTheme.colorScheme.primary
         else -> MaterialTheme.colorScheme.outline
     }
+    val dotScale = remember { Animatable(1f) }
+    LaunchedEffect(filled) {
+        if (filled) {
+            dotScale.snapTo(1.5f)
+            dotScale.animateTo(
+                1f,
+                spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessHigh,
+                ),
+            )
+        }
+    }
     Box(
         modifier = Modifier
+            .graphicsLayer {
+                scaleX = dotScale.value
+                scaleY = dotScale.value
+            }
             .size(16.dp)
             .clip(CircleShape)
             .then(

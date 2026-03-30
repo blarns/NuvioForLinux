@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.LaunchedEffect
@@ -83,6 +82,7 @@ import com.nuvio.app.features.profiles.NuvioProfile
 import com.nuvio.app.features.profiles.ProfileEditScreen
 import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.profiles.ProfileSelectionScreen
+import com.nuvio.app.features.profiles.ProfileSwitcherTab
 import com.nuvio.app.features.search.SearchScreen
 import com.nuvio.app.features.settings.SettingsScreen
 import com.nuvio.app.features.settings.HomescreenSettingsScreen
@@ -291,6 +291,7 @@ private fun MainAppContent(
         WatchedRepository.uiState
     }.collectAsStateWithLifecycle()
     var initialHomeReady by rememberSaveable { mutableStateOf(false) }
+    var profileSwitchLoading by remember { mutableStateOf(false) }
 
         val onPlay: (String, String, String, String, String, String?, String?, String?, Int?, Int?, String?, String?, String?, Long?) -> Unit =
             { type, videoId, parentMetaId, parentMetaType, title, logo, poster, background, seasonNumber, episodeNumber, episodeTitle, episodeThumbnail, pauseDescription, resumePositionMs ->
@@ -416,8 +417,19 @@ private fun MainAppContent(
                                 NavigationBarItem(
                                     selected = selectedTab == AppScreenTab.Settings,
                                     onClick = { selectedTab = AppScreenTab.Settings },
-                                    icon = { Icon(Icons.Rounded.Settings, contentDescription = null) },
-                                    label = { Text("Settings") },
+                                    icon = {
+                                        ProfileSwitcherTab(
+                                            selected = selectedTab == AppScreenTab.Settings,
+                                            onClick = { selectedTab = AppScreenTab.Settings },
+                                            onProfileSelected = { profile ->
+                                                profileSwitchLoading = true
+                                                selectedTab = AppScreenTab.Home
+                                                ProfileRepository.selectProfile(profile.profileIndex)
+                                                com.nuvio.app.core.sync.SyncManager.pullAllForProfile(profile.profileIndex)
+                                            },
+                                        )
+                                    },
+                                    label = { Text("Profile") },
                                     colors = navigationItemColors,
                                 )
                             }
@@ -683,8 +695,21 @@ private fun MainAppContent(
                 },
             )
 
-            if (!initialHomeReady) {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = !initialHomeReady || profileSwitchLoading,
+                enter = fadeIn(),
+                exit = fadeOut(androidx.compose.animation.core.tween(400)),
+            ) {
                 AppLaunchOverlay(modifier = Modifier.fillMaxSize())
+            }
+
+            // Auto-dismiss profile switch overlay
+            if (profileSwitchLoading) {
+                LaunchedEffect(Unit) {
+                    // Brief loading screen while home refreshes for the new profile
+                    kotlinx.coroutines.delay(1200)
+                    profileSwitchLoading = false
+                }
             }
         }
 }
