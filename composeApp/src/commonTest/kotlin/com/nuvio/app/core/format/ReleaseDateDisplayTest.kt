@@ -23,4 +23,14 @@ class ReleaseDateDisplayTest {
     fun leavesNonIsoUnchanged() {
         assertEquals("TBA", formatReleaseDateForDisplay("TBA"))
     }
+
+    @Test
+    fun extractsYearFromIso() {
+        assertEquals(2025, extractReleaseYearForDisplay("2025-03-15"))
+    }
+
+    @Test
+    fun extractsYearFromYearOnly() {
+        assertEquals(2024, extractReleaseYearForDisplay("2024"))
+    }
 }

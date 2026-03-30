@@ -101,6 +101,7 @@ object TmdbMetadataService {
         if (enrichment != null && settings.useDetails) {
             updated = updated.copy(
                 releaseInfo = enrichment.releaseInfo ?: updated.releaseInfo,
+                lastAirDate = enrichment.lastAirDate ?: updated.lastAirDate,
                 status = enrichment.status ?: updated.status,
                 ageRating = enrichment.ageRating ?: updated.ageRating,
                 runtime = enrichment.runtimeMinutes?.formatRuntime() ?: updated.runtime,
@@ -263,6 +264,8 @@ object TmdbMetadataService {
         val people = buildPeople(details = details, credits = credits, mediaType = mediaType)
         val directors = buildDirectors(details = details, credits = credits, mediaType = mediaType)
         val writers = buildWriters(credits = credits, mediaType = mediaType, hasDirectors = directors.isNotEmpty())
+        val lastAirDate = details.lastAirDate?.trim()?.takeIf(String::isNotBlank)
+            ?.takeIf { mediaType == "tv" }
         val enrichment = TmdbEnrichment(
             localizedTitle = localizedTitle,
             description = description,
@@ -274,6 +277,7 @@ object TmdbMetadataService {
             director = directors,
             writer = writers,
             releaseInfo = releaseInfo,
+            lastAirDate = lastAirDate,
             rating = details.voteAverage,
             runtimeMinutes = details.runtime ?: details.episodeRunTime.firstOrNull(),
             ageRating = response.fourth.first,
@@ -453,6 +457,7 @@ internal data class TmdbEnrichment(
     val director: List<String>,
     val writer: List<String>,
     val releaseInfo: String?,
+    val lastAirDate: String? = null,
     val rating: Double?,
     val runtimeMinutes: Int?,
     val ageRating: String?,
@@ -476,6 +481,7 @@ internal data class TmdbEnrichment(
             director.isNotEmpty() ||
             writer.isNotEmpty() ||
             releaseInfo != null ||
+            lastAirDate != null ||
             rating != null ||
             runtimeMinutes != null ||
             ageRating != null ||
@@ -725,6 +731,7 @@ private data class TmdbDetailsResponse(
     val overview: String? = null,
     @SerialName("release_date") val releaseDate: String? = null,
     @SerialName("first_air_date") val firstAirDate: String? = null,
+    @SerialName("last_air_date") val lastAirDate: String? = null,
     val status: String? = null,
     @SerialName("vote_average") val voteAverage: Double? = null,
     val runtime: Int? = null,
