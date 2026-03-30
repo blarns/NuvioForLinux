@@ -10,6 +10,8 @@ data class WatchedItem(
     val name: String,
     val poster: String? = null,
     val releaseInfo: String? = null,
+    val season: Int? = null,
+    val episode: Int? = null,
     val markedAtEpochMs: Long,
 )
 
@@ -29,5 +31,13 @@ fun MetaPreview.toWatchedItem(markedAtEpochMs: Long): WatchedItem =
         markedAtEpochMs = markedAtEpochMs,
     )
 
-fun watchedItemKey(type: String, id: String): String = "${type.trim()}:${id.trim()}"
+val WatchedItem.isEpisode: Boolean
+    get() = season != null && episode != null
+
+fun watchedItemKey(
+    type: String,
+    id: String,
+    season: Int? = null,
+    episode: Int? = null,
+): String = "${type.trim()}:${id.trim()}:${season ?: -1}:${episode ?: -1}"
 

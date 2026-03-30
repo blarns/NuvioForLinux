@@ -25,6 +25,7 @@ import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -97,9 +98,16 @@ import com.nuvio.app.features.streams.StreamsRepository
 import com.nuvio.app.features.streams.StreamsScreen
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.watched.WatchedRepository
+import com.nuvio.app.features.watched.releasedPlayableEpisodes
+import com.nuvio.app.features.watched.toEpisodeWatchedItem
+import com.nuvio.app.features.watched.toSeriesWatchedItem
+import com.nuvio.app.features.watched.episodePlaybackId
 import com.nuvio.app.features.watched.toWatchedItem
 import com.nuvio.app.features.watched.watchedItemKey
 import com.nuvio.app.features.watchprogress.ContinueWatchingItem
+import com.nuvio.app.features.watchprogress.CurrentDateProvider
+import com.nuvio.app.features.watchprogress.WatchProgressRepository
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.app_logo_wordmark
@@ -280,6 +288,7 @@ private fun MainAppContent(
 ) {
         val navController = rememberNavController()
         val hapticFeedback = LocalHapticFeedback.current
+        val coroutineScope = rememberCoroutineScope()
         var selectedTab by rememberSaveable { mutableStateOf(AppScreenTab.Home) }
         var selectedPosterForActions by remember { mutableStateOf<MetaPreview?>(null) }
         val libraryUiState by remember {
@@ -694,7 +703,9 @@ private fun MainAppContent(
                 },
                 onToggleWatched = {
                     selectedPosterForActions?.let { preview ->
-                        WatchedRepository.toggleWatched(preview.toWatchedItem(markedAtEpochMs = 0L))
+                        coroutineScope.launch {
+                            togglePosterWatched(preview)
+                        }
                     }
                 },
             )
@@ -826,5 +837,37 @@ private fun BoxScope.keepAliveTab(
             .zIndex(if (selected) 1f else 0f),
     ) {
         content()
+    }
+}
+
+private suspend fun togglePosterWatched(preview: MetaPreview) {
+    if (preview.type != "series") {
+        WatchedRepository.toggleWatched(preview.toWatchedItem(markedAtEpochMs = 0L))
+        return
+    }
+
+    val isCurrentlyWatched = WatchedRepository.isWatched(
+        id = preview.id,
+        type = preview.type,
+    )
+    val meta = MetaDetailsRepository.fetch(type = preview.type, id = preview.id)
+    if (meta == null) {
+        WatchedRepository.toggleWatched(preview.toWatchedItem(markedAtEpochMs = 0L))
+        return
+    }
+
+    val todayIsoDate = CurrentDateProvider.todayIsoDate()
+    val seriesItems = buildList {
+        add(meta.toSeriesWatchedItem())
+        addAll(meta.releasedPlayableEpisodes(todayIsoDate).map(meta::toEpisodeWatchedItem))
+    }
+
+    if (isCurrentlyWatched) {
+        WatchedRepository.unmarkWatched(seriesItems)
+    } else {
+        WatchedRepository.markWatched(seriesItems)
+        WatchProgressRepository.clearProgress(
+            meta.releasedPlayableEpisodes(todayIsoDate).map(meta::episodePlaybackId),
+        )
     }
 }

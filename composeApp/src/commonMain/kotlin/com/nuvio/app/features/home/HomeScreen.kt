@@ -22,6 +22,7 @@ import com.nuvio.app.features.home.components.HomeHeroSection
 import com.nuvio.app.features.home.components.HomeSkeletonHero
 import com.nuvio.app.features.home.components.HomeSkeletonRow
 import com.nuvio.app.features.watched.WatchedRepository
+import com.nuvio.app.features.watched.isEpisode
 import com.nuvio.app.features.watchprogress.CurrentDateProvider
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepository
 import com.nuvio.app.features.watchprogress.ContinueWatchingItem
@@ -53,29 +54,73 @@ fun HomeScreen(
     val watchedUiState by WatchedRepository.uiState.collectAsStateWithLifecycle()
     val watchProgressUiState by WatchProgressRepository.uiState.collectAsStateWithLifecycle()
 
-    val completedSeriesCandidates = remember(watchProgressUiState.entries) {
+    val latestResumableBySeries = remember(watchProgressUiState.entries) {
         watchProgressUiState.entries
+            .filter { !it.isCompleted && it.isEpisode }
+            .groupBy { it.parentMetaId }
+            .mapValues { (_, entries) -> entries.maxByOrNull { it.lastUpdatedEpochMs } }
+    }
+    val latestCompletedBySeries = remember(watchProgressUiState.entries, watchedUiState.items) {
+        val progressCandidates = watchProgressUiState.entries
             .filter { it.isCompleted && it.isEpisode }
+            .map { entry ->
+                CompletedSeriesCandidate(
+                    parentMetaId = entry.parentMetaId,
+                    parentMetaType = entry.parentMetaType,
+                    seasonNumber = entry.seasonNumber ?: return@map null,
+                    episodeNumber = entry.episodeNumber ?: return@map null,
+                    markedAtEpochMs = entry.lastUpdatedEpochMs,
+                )
+            }
+            .filterNotNull()
+
+        val watchedCandidates = watchedUiState.items
+            .filter { it.isEpisode }
+            .map { item ->
+                CompletedSeriesCandidate(
+                    parentMetaId = item.id,
+                    parentMetaType = item.type,
+                    seasonNumber = item.season ?: return@map null,
+                    episodeNumber = item.episode ?: return@map null,
+                    markedAtEpochMs = item.markedAtEpochMs,
+                )
+            }
+            .filterNotNull()
+
+        (progressCandidates + watchedCandidates)
             .groupBy { it.parentMetaId }
             .mapNotNull { (parentMetaId, entries) ->
-                val hasResumableEntry = watchProgressUiState.entries.any {
-                    it.parentMetaId == parentMetaId && !it.isCompleted
-                }
-                if (hasResumableEntry) {
-                    null
-                } else {
-                    entries.maxByOrNull { it.lastUpdatedEpochMs }
-                }
+                entries.maxByOrNull { it.markedAtEpochMs }?.let { parentMetaId to it }
             }
+            .toMap()
+    }
+    val completedSeriesCandidates = remember(latestCompletedBySeries, latestResumableBySeries) {
+        latestCompletedBySeries.values.filter { completed ->
+            val latestResume = latestResumableBySeries[completed.parentMetaId]
+            latestResume == null || latestResume.lastUpdatedEpochMs <= completed.markedAtEpochMs
+        }
+    }
+    val visibleContinueWatchingEntries = remember(
+        watchProgressUiState.continueWatchingEntries,
+        latestCompletedBySeries,
+    ) {
+        watchProgressUiState.continueWatchingEntries.filter { entry ->
+            if (!entry.isEpisode) {
+                true
+            } else {
+                val latestCompleted = latestCompletedBySeries[entry.parentMetaId]
+                latestCompleted == null || entry.lastUpdatedEpochMs > latestCompleted.markedAtEpochMs
+            }
+        }
     }
     var nextUpItemsBySeries by remember { mutableStateOf<Map<String, Pair<Long, ContinueWatchingItem>>>(emptyMap()) }
     val continueWatchingItems = remember(
-        watchProgressUiState.continueWatchingEntries,
+        visibleContinueWatchingEntries,
         nextUpItemsBySeries,
     ) {
         buildList {
             addAll(
-                watchProgressUiState.continueWatchingEntries.map { entry ->
+                visibleContinueWatchingEntries.map { entry ->
                     entry.lastUpdatedEpochMs to entry.toContinueWatchingItem()
                 },
             )
@@ -134,11 +179,12 @@ fun HomeScreen(
                 id = completedEntry.parentMetaId,
             ) ?: return@forEach
             val nextEpisode = meta.nextReleasedEpisodeAfter(
-                completedEntry = completedEntry,
+                seasonNumber = completedEntry.seasonNumber,
+                episodeNumber = completedEntry.episodeNumber,
                 todayIsoDate = todayIsoDate,
             ) ?: return@forEach
             resolvedItems[completedEntry.parentMetaId] =
-                completedEntry.lastUpdatedEpochMs to completedEntry.toUpNextContinueWatchingItem(nextEpisode)
+                completedEntry.markedAtEpochMs to completedEntry.toContinueWatchingSeed(meta).toUpNextContinueWatchingItem(nextEpisode)
         }
         nextUpItemsBySeries = resolvedItems
     }
@@ -268,3 +314,29 @@ fun HomeScreen(
 }
 
 private const val HOME_CATALOG_PREVIEW_LIMIT = 18
+
+private data class CompletedSeriesCandidate(
+    val parentMetaId: String,
+    val parentMetaType: String,
+    val seasonNumber: Int,
+    val episodeNumber: Int,
+    val markedAtEpochMs: Long,
+)
+
+private fun CompletedSeriesCandidate.toContinueWatchingSeed(meta: com.nuvio.app.features.details.MetaDetails) =
+    com.nuvio.app.features.watchprogress.WatchProgressEntry(
+        contentType = parentMetaType,
+        parentMetaId = parentMetaId,
+        parentMetaType = parentMetaType,
+        videoId = "${parentMetaId}:${seasonNumber}:${episodeNumber}",
+        title = meta.name,
+        logo = meta.logo,
+        poster = meta.poster,
+        background = meta.background,
+        seasonNumber = seasonNumber,
+        episodeNumber = episodeNumber,
+        lastPositionMs = 0L,
+        durationMs = 0L,
+        lastUpdatedEpochMs = markedAtEpochMs,
+        isCompleted = true,
+    )

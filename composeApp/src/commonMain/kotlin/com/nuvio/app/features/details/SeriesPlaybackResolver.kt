@@ -1,5 +1,6 @@
 package com.nuvio.app.features.details
 
+import com.nuvio.app.features.watched.WatchedItem
 import com.nuvio.app.features.watchprogress.WatchProgressEntry
 import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
 import com.nuvio.app.features.watchprogress.resumeEntryForSeries
@@ -19,7 +20,24 @@ internal fun MetaDetails.nextReleasedEpisodeAfter(
     completedEntry: WatchProgressEntry,
     todayIsoDate: String,
 ): MetaVideo? {
+    return nextReleasedEpisodeAfter(
+        seasonNumber = completedEntry.seasonNumber,
+        episodeNumber = completedEntry.episodeNumber,
+        todayIsoDate = todayIsoDate,
+    )
+}
+
+internal fun MetaDetails.nextReleasedEpisodeAfter(
+    seasonNumber: Int?,
+    episodeNumber: Int?,
+    todayIsoDate: String,
+): MetaVideo? {
     val sortedEpisodes = sortedPlayableEpisodes()
+    val watchedVideoId = buildPlaybackVideoId(
+        parentMetaId = id,
+        seasonNumber = seasonNumber,
+        episodeNumber = episodeNumber,
+    )
     return sortedEpisodes
         .dropWhile { episode ->
             buildPlaybackVideoId(
@@ -27,7 +45,7 @@ internal fun MetaDetails.nextReleasedEpisodeAfter(
                 seasonNumber = episode.season,
                 episodeNumber = episode.episode,
                 fallbackVideoId = episode.id,
-            ) != completedEntry.videoId
+            ) != watchedVideoId
         }
         .drop(1)
         .firstOrNull { it.isReleasedBy(todayIsoDate) }
@@ -45,10 +63,21 @@ internal data class SeriesPrimaryAction(
 
 internal fun MetaDetails.seriesPrimaryAction(
     entries: List<WatchProgressEntry>,
+    watchedItems: List<WatchedItem>,
     todayIsoDate: String,
 ): SeriesPrimaryAction? {
     val resumeEntry = entries.resumeEntryForSeries(id)
-    if (resumeEntry != null) {
+    val latestCompleted = latestCompletedSeriesEpisode(
+        parentMetaId = id,
+        parentMetaType = type,
+        progressEntries = entries,
+        watchedItems = watchedItems,
+    )
+
+    val shouldPreferResume = resumeEntry != null &&
+        (latestCompleted == null || resumeEntry.lastUpdatedEpochMs > latestCompleted.markedAtEpochMs)
+
+    if (shouldPreferResume) {
         return SeriesPrimaryAction(
             label = resumeEntry.resumeLabel(),
             videoId = resumeEntry.videoId,
@@ -60,13 +89,10 @@ internal fun MetaDetails.seriesPrimaryAction(
         )
     }
 
-    val latestCompleted = entries
-        .filter { it.parentMetaId == id && it.isCompleted }
-        .maxByOrNull { it.lastUpdatedEpochMs }
-
     val nextEpisode = if (latestCompleted != null) {
         nextReleasedEpisodeAfter(
-            completedEntry = latestCompleted,
+            seasonNumber = latestCompleted.seasonNumber,
+            episodeNumber = latestCompleted.episodeNumber,
             todayIsoDate = todayIsoDate,
         )
     } else {
@@ -112,10 +138,62 @@ internal fun WatchProgressEntry.resumeLabel(): String =
         "Resume"
     }
 
-private fun MetaVideo.isReleasedBy(todayIsoDate: String): Boolean {
+internal fun MetaVideo.isReleasedBy(todayIsoDate: String): Boolean {
     val releaseDate = released
         ?.substringBefore('T')
         ?.takeIf { it.length == 10 }
         ?: return true
     return releaseDate <= todayIsoDate
+}
+
+internal data class CompletedSeriesEpisode(
+    val seasonNumber: Int,
+    val episodeNumber: Int,
+    val markedAtEpochMs: Long,
+)
+
+internal fun latestCompletedSeriesEpisode(
+    parentMetaId: String,
+    parentMetaType: String,
+    progressEntries: List<WatchProgressEntry>,
+    watchedItems: List<WatchedItem>,
+): CompletedSeriesEpisode? {
+    val progressMarker = progressEntries
+        .asSequence()
+        .filter { entry ->
+            entry.parentMetaId == parentMetaId &&
+                entry.isCompleted &&
+                entry.seasonNumber != null &&
+                entry.episodeNumber != null
+        }
+        .map { entry ->
+            CompletedSeriesEpisode(
+                seasonNumber = entry.seasonNumber ?: return@map null,
+                episodeNumber = entry.episodeNumber ?: return@map null,
+                markedAtEpochMs = entry.lastUpdatedEpochMs,
+            )
+        }
+        .filterNotNull()
+        .maxByOrNull { marker -> marker.markedAtEpochMs }
+
+    val watchedMarker = watchedItems
+        .asSequence()
+        .filter { item ->
+            item.id == parentMetaId &&
+                item.type == parentMetaType &&
+                item.season != null &&
+                item.episode != null
+        }
+        .map { item ->
+            CompletedSeriesEpisode(
+                seasonNumber = item.season ?: return@map null,
+                episodeNumber = item.episode ?: return@map null,
+                markedAtEpochMs = item.markedAtEpochMs,
+            )
+        }
+        .filterNotNull()
+        .maxByOrNull { marker -> marker.markedAtEpochMs }
+
+    return listOfNotNull(progressMarker, watchedMarker)
+        .maxByOrNull { marker -> marker.markedAtEpochMs }
 }

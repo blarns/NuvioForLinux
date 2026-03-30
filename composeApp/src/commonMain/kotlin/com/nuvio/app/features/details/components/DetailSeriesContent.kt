@@ -1,8 +1,10 @@
 package com.nuvio.app.features.details.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,7 +57,9 @@ fun DetailSeriesContent(
     meta: MetaDetails,
     modifier: Modifier = Modifier,
     progressByVideoId: Map<String, WatchProgressEntry> = emptyMap(),
+    watchedKeys: Set<String> = emptySet(),
     onEpisodeClick: ((MetaVideo) -> Unit)? = null,
+    onEpisodeLongPress: ((MetaVideo) -> Unit)? = null,
 ) {
     val hasVideos = meta.videos.isNotEmpty()
     if (meta.type != "series" && !hasVideos) return
@@ -205,8 +209,18 @@ fun DetailSeriesContent(
                         video = episode,
                         fallbackImage = meta.background ?: meta.poster,
                         progressEntry = progressByVideoId[episodeVideoId],
+                        isWatched = progressByVideoId[episodeVideoId]?.isCompleted == true ||
+                            watchedKeys.contains(
+                                com.nuvio.app.features.watched.watchedItemKey(
+                                    type = meta.type,
+                                    id = meta.id,
+                                    season = episode.season,
+                                    episode = episode.episode,
+                                ),
+                            ),
                         sizing = sizing,
                         onClick = { onEpisodeClick?.invoke(episode) },
+                        onLongPress = { onEpisodeLongPress?.invoke(episode) },
                     )
                 }
             }
@@ -214,14 +228,17 @@ fun DetailSeriesContent(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun EpisodeCard(
     video: MetaVideo,
     fallbackImage: String?,
     progressEntry: WatchProgressEntry?,
+    isWatched: Boolean,
     sizing: SeriesContentSizing,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    onLongPress: (() -> Unit)? = null,
 ) {
     val cardShape = RoundedCornerShape(sizing.cardRadius)
     Box(
@@ -235,7 +252,11 @@ private fun EpisodeCard(
                 color = Color.White.copy(alpha = 0.1f),
                 shape = cardShape,
             )
-            .clickable(enabled = onClick != null) { onClick?.invoke() },
+            .combinedClickable(
+                enabled = onClick != null || onLongPress != null,
+                onClick = { onClick?.invoke() },
+                onLongClick = onLongPress,
+            ),
     ) {
         Row(
             modifier = Modifier.fillMaxSize(),
@@ -291,7 +312,7 @@ private fun EpisodeCard(
                 }
 
                 NuvioAnimatedWatchedBadge(
-                    isVisible = progressEntry?.isCompleted == true,
+                    isVisible = isWatched,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(8.dp),

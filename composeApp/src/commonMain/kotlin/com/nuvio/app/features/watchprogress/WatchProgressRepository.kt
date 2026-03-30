@@ -193,12 +193,19 @@ object WatchProgressRepository {
     }
 
     fun clearProgress(videoId: String) {
+        clearProgress(listOf(videoId))
+    }
+
+    fun clearProgress(videoIds: Collection<String>) {
         ensureLoaded()
-        val entry = entriesByVideoId[videoId]
-        if (entriesByVideoId.remove(videoId) != null) {
+        if (videoIds.isEmpty()) return
+        val removedEntries = videoIds.mapNotNull { videoId ->
+            entriesByVideoId.remove(videoId)
+        }
+        if (removedEntries.isNotEmpty()) {
             publish()
             persist()
-            entry?.let { pushDeleteToServer(it) }
+            pushDeleteToServer(removedEntries)
         }
     }
 
@@ -289,18 +296,15 @@ object WatchProgressRepository {
         }
     }
 
-    private fun pushDeleteToServer(entry: WatchProgressEntry) {
+    private fun pushDeleteToServer(entries: Collection<WatchProgressEntry>) {
         syncScope.launch {
             runCatching {
+                if (entries.isEmpty()) return@runCatching
                 val profileId = ProfileRepository.activeProfileId
-                val progressKey = if (entry.seasonNumber != null && entry.episodeNumber != null) {
-                    "${entry.parentMetaId}_s${entry.seasonNumber}e${entry.episodeNumber}"
-                } else {
-                    entry.parentMetaId
-                }
+                val progressKeys = entries.map(::progressKeyForEntry)
                 val params = buildJsonObject {
-                    put("p_progress_key", progressKey)
                     put("p_profile_id", profileId)
+                    put("p_keys", json.encodeToJsonElement(progressKeys))
                 }
                 SupabaseProvider.client.postgrest.rpc("sync_delete_watch_progress", params)
             }.onFailure { e ->
@@ -321,4 +325,11 @@ object WatchProgressRepository {
             WatchProgressCodec.encodeEntries(entriesByVideoId.values),
         )
     }
+
+    private fun progressKeyForEntry(entry: WatchProgressEntry): String =
+        if (entry.seasonNumber != null && entry.episodeNumber != null) {
+            "${entry.parentMetaId}_s${entry.seasonNumber}e${entry.episodeNumber}"
+        } else {
+            entry.parentMetaId
+        }
 }

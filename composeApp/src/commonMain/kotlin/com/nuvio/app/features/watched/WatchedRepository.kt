@@ -87,7 +87,7 @@ object WatchedRepository {
             val items = runCatching {
                 json.decodeFromString<StoredWatchedPayload>(payload).items
             }.getOrDefault(emptyList())
-            itemsByKey = items.associateBy { watchedItemKey(it.type, it.id) }.toMutableMap()
+            itemsByKey = items.associateBy { watchedItemKey(it.type, it.id, it.season, it.episode) }.toMutableMap()
         }
 
         publish()
@@ -118,9 +118,11 @@ object WatchedRepository {
                     id = syncItem.contentId,
                     type = syncItem.contentType,
                     name = syncItem.title,
+                    season = syncItem.season,
+                    episode = syncItem.episode,
                     markedAtEpochMs = syncItem.watchedAt,
                 )
-            }.associateBy { watchedItemKey(it.type, it.id) }.toMutableMap()
+            }.associateBy { watchedItemKey(it.type, it.id, it.season, it.episode) }.toMutableMap()
             hasLoaded = true
             publish()
             persist()
@@ -131,65 +133,119 @@ object WatchedRepository {
 
     fun toggleWatched(item: WatchedItem) {
         ensureLoaded()
-        val key = watchedItemKey(item.type, item.id)
+        val key = watchedItemKey(item.type, item.id, item.season, item.episode)
         if (itemsByKey.containsKey(key)) {
-            unmarkWatched(item.id, item.type)
+            unmarkWatched(item)
         } else {
             markWatched(item)
         }
     }
 
     fun markWatched(item: WatchedItem) {
-        ensureLoaded()
-        val key = watchedItemKey(item.type, item.id)
-        val timestamped = item.copy(markedAtEpochMs = WatchedClock.nowEpochMs())
-        itemsByKey[key] = timestamped
-        publish()
-        persist()
-        pushMarkToServer(timestamped)
+        markWatched(listOf(item))
     }
 
-    fun unmarkWatched(id: String, type: String) {
+    fun markWatched(items: Collection<WatchedItem>) {
         ensureLoaded()
-        val removed = itemsByKey.remove(watchedItemKey(type, id))
-        if (removed != null) {
+        if (items.isEmpty()) return
+        val markedAt = WatchedClock.nowEpochMs()
+        val timestampedItems = items.map { watchedItem ->
+            watchedItem.copy(markedAtEpochMs = markedAt)
+        }
+        timestampedItems.forEach { watchedItem ->
+            val key = watchedItemKey(watchedItem.type, watchedItem.id, watchedItem.season, watchedItem.episode)
+            itemsByKey[key] = watchedItem
+        }
+        publish()
+        persist()
+        pushMarksToServer(timestampedItems)
+    }
+
+    fun unmarkWatched(item: WatchedItem) {
+        unmarkWatched(listOf(item))
+    }
+
+    fun unmarkWatched(
+        id: String,
+        type: String,
+        season: Int? = null,
+        episode: Int? = null,
+    ) {
+        unmarkWatched(
+            listOf(
+                WatchedItem(
+                    id = id,
+                    type = type,
+                    name = "",
+                    season = season,
+                    episode = episode,
+                    markedAtEpochMs = 0L,
+                ),
+            ),
+        )
+    }
+
+    fun unmarkWatched(items: Collection<WatchedItem>) {
+        ensureLoaded()
+        if (items.isEmpty()) return
+        val removedItems = items.mapNotNull { watchedItem ->
+            itemsByKey.remove(watchedItemKey(watchedItem.type, watchedItem.id, watchedItem.season, watchedItem.episode))
+        }
+        if (removedItems.isNotEmpty()) {
             publish()
             persist()
-            pushDeleteToServer(id, type)
+            pushDeleteToServer(removedItems)
         }
     }
 
-    fun isWatched(id: String, type: String): Boolean {
+    fun isWatched(
+        id: String,
+        type: String,
+        season: Int? = null,
+        episode: Int? = null,
+    ): Boolean {
         ensureLoaded()
-        return itemsByKey.containsKey(watchedItemKey(type, id))
+        return itemsByKey.containsKey(watchedItemKey(type, id, season, episode))
     }
 
-    private fun pushMarkToServer(item: WatchedItem) {
+    private fun pushMarksToServer(items: Collection<WatchedItem>) {
         syncScope.launch {
             runCatching {
+                if (items.isEmpty()) return@runCatching
                 val profileId = ProfileRepository.activeProfileId
-                val syncItem = WatchedSyncItem(
-                    contentId = item.id,
-                    contentType = item.type,
-                    title = item.name,
-                    watchedAt = item.markedAtEpochMs,
-                )
+                val syncItems = items.map { item ->
+                    WatchedSyncItem(
+                        contentId = item.id,
+                        contentType = item.type,
+                        title = item.name,
+                        season = item.season,
+                        episode = item.episode,
+                        watchedAt = item.markedAtEpochMs,
+                    )
+                }
                 val params = buildJsonObject {
                     put("p_profile_id", profileId)
-                    put("p_items", json.encodeToJsonElement(listOf(syncItem)))
+                    put("p_items", json.encodeToJsonElement(syncItems))
                 }
                 SupabaseProvider.client.postgrest.rpc("sync_push_watched_items", params)
             }.onFailure { e ->
-                log.e(e) { "Failed to push watched item" }
+                log.e(e) { "Failed to push watched items" }
             }
         }
     }
 
-    private fun pushDeleteToServer(contentId: String, contentType: String) {
+    private fun pushDeleteToServer(items: Collection<WatchedItem>) {
         syncScope.launch {
             runCatching {
+                if (items.isEmpty()) return@runCatching
                 val profileId = ProfileRepository.activeProfileId
-                val keys = listOf(WatchedDeleteKey(contentId = contentId))
+                val keys = items.map { item ->
+                    WatchedDeleteKey(
+                        contentId = item.id,
+                        season = item.season,
+                        episode = item.episode,
+                    )
+                }
                 val params = buildJsonObject {
                     put("p_profile_id", profileId)
                     put("p_keys", json.encodeToJsonElement(keys))
@@ -205,7 +261,9 @@ object WatchedRepository {
         val items = itemsByKey.values.sortedByDescending { it.markedAtEpochMs }
         _uiState.value = WatchedUiState(
             items = items,
-            watchedKeys = items.mapTo(linkedSetOf()) { watchedItemKey(it.type, it.id) },
+            watchedKeys = items.mapTo(linkedSetOf()) {
+                watchedItemKey(it.type, it.id, it.season, it.episode)
+            },
             isLoaded = true,
         )
     }
