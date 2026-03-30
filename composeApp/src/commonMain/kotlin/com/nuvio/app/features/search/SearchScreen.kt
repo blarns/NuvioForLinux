@@ -1,12 +1,26 @@
 package com.nuvio.app.features.search
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -17,6 +31,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.ui.NuvioInputField
@@ -42,11 +59,13 @@ fun SearchScreen(
     LaunchedEffect(Unit) {
         AddonRepository.initialize()
         WatchedRepository.ensureLoaded()
+        SearchHistoryRepository.ensureLoaded()
     }
 
     val addonsUiState by AddonRepository.uiState.collectAsStateWithLifecycle()
     val uiState by SearchRepository.uiState.collectAsStateWithLifecycle()
     val discoverUiState by SearchRepository.discoverUiState.collectAsStateWithLifecycle()
+    val recentSearches by SearchHistoryRepository.uiState.collectAsStateWithLifecycle()
     val watchedUiState by WatchedRepository.uiState.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -115,6 +134,12 @@ fun SearchScreen(
             }
     }
 
+    LaunchedEffect(query, uiState.sections) {
+        val normalizedQuery = query.trim()
+        if (normalizedQuery.isBlank() || uiState.sections.isEmpty()) return@LaunchedEffect
+        SearchHistoryRepository.recordSearch(normalizedQuery)
+    }
+
     NuvioScreen(
         horizontalPadding = 0.dp,
         listState = listState,
@@ -145,6 +170,15 @@ fun SearchScreen(
         }
 
         if (query.isBlank()) {
+            if (recentSearches.isNotEmpty()) {
+                item(key = "recent_searches") {
+                    SearchRecentSection(
+                        recentSearches = recentSearches,
+                        onSearchPress = { recentQuery -> query = recentQuery },
+                        onRemoveSearch = SearchHistoryRepository::removeSearch,
+                    )
+                }
+            }
             discoverContent(
                 state = discoverUiState,
                 onTypeSelected = SearchRepository::selectDiscoverType,
@@ -226,4 +260,87 @@ private fun SearchEmptyStateCard(
         title = title,
         message = message,
     )
+}
+
+@Composable
+private fun SearchRecentSection(
+    recentSearches: List<String>,
+    onSearchPress: (String) -> Unit,
+    onRemoveSearch: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = "Recent Searches",
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        recentSearches.forEach { recentQuery ->
+            SearchRecentRow(
+                query = recentQuery,
+                onSearchPress = { onSearchPress(recentQuery) },
+                onRemovePress = { onRemoveSearch(recentQuery) },
+            )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+    }
+}
+
+@Composable
+private fun SearchRecentRow(
+    query: String,
+    onSearchPress: () -> Unit,
+    onRemovePress: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onSearchPress)
+            .padding(vertical = 2.dp)
+            .background(
+                color = MaterialTheme.colorScheme.background,
+                shape = RoundedCornerShape(16.dp),
+            )
+            .padding(start = 2.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .background(
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(999.dp),
+                )
+                .padding(8.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.History,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            text = query,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        IconButton(onClick = onRemovePress) {
+            Icon(
+                imageVector = Icons.Rounded.Close,
+                contentDescription = "Remove recent search",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }

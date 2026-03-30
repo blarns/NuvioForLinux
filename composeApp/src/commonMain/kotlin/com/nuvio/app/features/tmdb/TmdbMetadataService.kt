@@ -435,9 +435,9 @@ internal data class TmdbEnrichment(
     val language: String?,
     val productionCompanies: List<MetaCompany>,
     val networks: List<MetaCompany>,
-    val collectionName: String?,
-    val collectionItems: List<MetaPreview>,
-    val moreLikeThis: List<MetaPreview>,
+    val collectionName: String? = null,
+    val collectionItems: List<MetaPreview> = emptyList(),
+    val moreLikeThis: List<MetaPreview> = emptyList(),
 ) {
     fun hasContent(): Boolean =
         localizedTitle != null ||
