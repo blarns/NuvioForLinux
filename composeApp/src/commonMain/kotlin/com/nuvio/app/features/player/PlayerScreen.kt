@@ -44,6 +44,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+private const val PlaybackProgressPersistIntervalMs = 60_000L
+
 @Composable
 fun PlayerScreen(
     title: String,
@@ -496,7 +498,7 @@ fun PlayerScreen(
             }
 
             val now = WatchProgressClock.nowEpochMs()
-            if (now - lastProgressPersistEpochMs < 5_000L) {
+            if (now - lastProgressPersistEpochMs < PlaybackProgressPersistIntervalMs) {
                 return@LaunchedEffect
             }
             lastProgressPersistEpochMs = now
