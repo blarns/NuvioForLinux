@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.toArgb
@@ -40,7 +41,13 @@ import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import androidx.media3.ui.CaptionStyleCompat
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.net.HttpURLConnection
+import java.net.URL
 
 private const val TAG = "NuvioPlayer"
 
@@ -59,6 +66,7 @@ actual fun PlatformPlayerSurface(
     val lifecycleOwner = LocalLifecycleOwner.current
     val latestOnSnapshot = rememberUpdatedState(onSnapshot)
     val latestOnError = rememberUpdatedState(onError)
+    val coroutineScope = rememberCoroutineScope()
 
     val playerSettings = remember {
         PlayerSettingsRepository.ensureLoaded()
@@ -109,6 +117,7 @@ actual fun PlatformPlayerSurface(
     val pendingSubtitleTrackIndex = remember { mutableListOf<Int>() }
     var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
     var currentSubtitleStyle by remember { mutableStateOf(SubtitleStyleState.DEFAULT) }
+    var subtitleSelectionJob by remember { mutableStateOf<Job?>(null) }
 
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
@@ -156,10 +165,12 @@ actual fun PlatformPlayerSurface(
                 }
                 latestOnSnapshot.value(exoPlayer.snapshot())
             }
+
         }
         exoPlayer.addListener(listener)
         onDispose {
             exoPlayer.removeListener(listener)
+            subtitleSelectionJob?.cancel()
         }
     }
 
@@ -249,35 +260,43 @@ actual fun PlatformPlayerSurface(
 
                 override fun setSubtitleUri(url: String) {
                     Log.d(TAG, "setSubtitleUri: url=$url")
-                    Log.d(TAG, "setSubtitleUri: mime=${guessSubtitleMime(url)}")
-                    val currentPosition = exoPlayer.currentPosition
-                    val wasPlaying = exoPlayer.isPlaying
-                    val currentMediaItem = exoPlayer.currentMediaItem ?: run {
-                        Log.e(TAG, "setSubtitleUri: currentMediaItem is null, aborting")
-                        return
+                    subtitleSelectionJob?.cancel()
+                    subtitleSelectionJob = coroutineScope.launch {
+                        val currentPosition = exoPlayer.currentPosition
+                        val wasPlaying = exoPlayer.isPlaying
+                        val currentMediaItem = exoPlayer.currentMediaItem ?: run {
+                            Log.e(TAG, "setSubtitleUri: currentMediaItem is null, aborting")
+                            return@launch
+                        }
+                        val resolvedMime = withContext(Dispatchers.IO) {
+                            resolveSubtitleMimeType(url)
+                        }
+                        Log.d(TAG, "setSubtitleUri: currentPosition=$currentPosition, wasPlaying=$wasPlaying")
+                        val subtitleConfig = MediaItem.SubtitleConfiguration.Builder(Uri.parse(url))
+                            .setMimeType(resolvedMime)
+                            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                            .setRoleFlags(C.ROLE_FLAG_SUBTITLE)
+                            .build()
+                        Log.d(
+                            TAG,
+                            "setSubtitleUri: subtitleConfig built, uri=${subtitleConfig.uri}, mime=${subtitleConfig.mimeType}, selectionFlags=${subtitleConfig.selectionFlags}"
+                        )
+                        val newMediaItem = currentMediaItem.buildUpon()
+                            .setSubtitleConfigurations(listOf(subtitleConfig))
+                            .build()
+                        Log.d(TAG, "setSubtitleUri: newMediaItem subtitleConfigs count=${newMediaItem.localConfiguration?.subtitleConfigurations?.size}")
+                        exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                            .buildUpon()
+                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                            .setPreferredTextRoleFlags(C.ROLE_FLAG_SUBTITLE)
+                            .build()
+                        Log.d(TAG, "setSubtitleUri: track params set before prepare, textDisabled=${exoPlayer.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)}")
+                        exoPlayer.setMediaItem(newMediaItem, currentPosition)
+                        exoPlayer.prepare()
+                        exoPlayer.playWhenReady = wasPlaying
+                        Log.d(TAG, "setSubtitleUri: prepare() called, waiting for STATE_READY")
                     }
-                    Log.d(TAG, "setSubtitleUri: currentPosition=$currentPosition, wasPlaying=$wasPlaying")
-                    val subtitleConfig = MediaItem.SubtitleConfiguration.Builder(Uri.parse(url))
-                        .setMimeType(guessSubtitleMime(url))
-                        .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
-                        .setRoleFlags(C.ROLE_FLAG_SUBTITLE)
-                        .build()
-                    Log.d(TAG, "setSubtitleUri: subtitleConfig built, uri=${subtitleConfig.uri}, mime=${subtitleConfig.mimeType}, selectionFlags=${subtitleConfig.selectionFlags}")
-                    val newMediaItem = currentMediaItem.buildUpon()
-                        .setSubtitleConfigurations(listOf(subtitleConfig))
-                        .build()
-                    Log.d(TAG, "setSubtitleUri: newMediaItem subtitleConfigs count=${newMediaItem.localConfiguration?.subtitleConfigurations?.size}")
-                    exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
-                        .buildUpon()
-                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                        .clearOverridesOfType(C.TRACK_TYPE_TEXT)
-                        .setPreferredTextRoleFlags(C.ROLE_FLAG_SUBTITLE)
-                        .build()
-                    Log.d(TAG, "setSubtitleUri: track params set before prepare, textDisabled=${exoPlayer.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)}")
-                    exoPlayer.setMediaItem(newMediaItem, currentPosition)
-                    exoPlayer.prepare()
-                    exoPlayer.playWhenReady = wasPlaying
-                    Log.d(TAG, "setSubtitleUri: prepare() called, waiting for STATE_READY")
                 }
 
                 override fun clearExternalSubtitle() {
@@ -473,6 +492,68 @@ private fun ExoPlayer.logCurrentTracks(context: String) {
     }
     Log.d(TAG, "--- end logCurrentTracks ---")
 }
+
+private fun resolveSubtitleMimeType(url: String): String {
+    probeSubtitleHeaders(url)?.let { (contentType, contentDisposition) ->
+        mapSubtitleMime(contentType)?.let { return it }
+        filenameFromContentDisposition(contentDisposition)?.let(::guessSubtitleMime)?.let { return it }
+    }
+    return guessSubtitleMime(url)
+}
+
+private fun probeSubtitleHeaders(url: String): Pair<String?, String?>? {
+    val methods = listOf("HEAD", "GET")
+    methods.forEach { method ->
+        runCatching {
+            val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = method
+                connectTimeout = 5_000
+                readTimeout = 5_000
+                instanceFollowRedirects = true
+                setRequestProperty("Accept", "*/*")
+            }
+            try {
+                connection.responseCode
+                connection.contentType to connection.getHeaderField("Content-Disposition")
+            } finally {
+                connection.disconnect()
+            }
+        }.getOrNull()?.let { return it }
+    }
+    return null
+}
+
+private fun mapSubtitleMime(contentType: String?): String? {
+    val normalized = contentType
+        ?.substringBefore(';')
+        ?.trim()
+        ?.lowercase()
+        ?: return null
+
+    return when (normalized) {
+        "application/x-subrip",
+        "application/srt",
+        "text/srt",
+        "text/plain" -> MimeTypes.APPLICATION_SUBRIP
+        "text/vtt",
+        "application/vtt" -> MimeTypes.TEXT_VTT
+        "text/x-ssa",
+        "text/ssa",
+        "text/ass",
+        "application/x-ssa" -> MimeTypes.TEXT_SSA
+        "application/ttml+xml",
+        "text/xml",
+        "application/xml" -> MimeTypes.APPLICATION_TTML
+        else -> null
+    }
+}
+
+private fun filenameFromContentDisposition(contentDisposition: String?): String? =
+    contentDisposition
+        ?.substringAfter("filename=", missingDelimiterValue = "")
+        ?.trim()
+        ?.trim('"')
+        ?.takeIf { it.isNotEmpty() }
 
 private fun guessSubtitleMime(url: String): String {
     val lower = url.lowercase()
