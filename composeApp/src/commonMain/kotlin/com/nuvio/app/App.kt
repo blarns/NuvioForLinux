@@ -291,6 +291,10 @@ private fun MainAppContent(
         WatchedRepository.uiState
     }.collectAsStateWithLifecycle()
     var initialHomeReady by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(5_000)
+        initialHomeReady = true
+    }
     var profileSwitchLoading by remember { mutableStateOf(false) }
 
         val onPlay: (String, String, String, String, String, String?, String?, String?, Int?, Int?, String?, String?, String?, Long?) -> Unit =
