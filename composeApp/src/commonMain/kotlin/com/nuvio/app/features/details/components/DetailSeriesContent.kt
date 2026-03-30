@@ -1,5 +1,13 @@
 package com.nuvio.app.features.details.components
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -11,7 +19,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -46,6 +53,8 @@ import com.nuvio.app.core.ui.NuvioAnimatedWatchedBadge
 import com.nuvio.app.core.ui.NuvioProgressBar
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.MetaVideo
+import com.nuvio.app.features.details.SeasonViewMode
+import com.nuvio.app.features.details.SeasonViewModeStorage
 import com.nuvio.app.features.details.metaVideoSeasonEpisodeComparator
 import com.nuvio.app.features.details.normalizeSeasonNumber
 import com.nuvio.app.features.details.seasonSortKey
@@ -125,7 +134,10 @@ fun DetailSeriesContent(
     val defaultSeason = seasons.first()
     var selectedSeason by rememberSaveable(meta.id) { mutableStateOf(defaultSeason) }
     val currentSeason = selectedSeason.takeIf { it in groupedEpisodes } ?: defaultSeason
-    val episodes = groupedEpisodes.getValue(currentSeason)
+
+    var seasonViewMode by remember {
+        mutableStateOf(SeasonViewModeStorage.load() ?: SeasonViewMode.Posters)
+    }
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val sizing = seriesContentSizing(maxWidth.value)
@@ -142,117 +154,240 @@ fun DetailSeriesContent(
                 Column(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text(
-                        text = "Seasons",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontSize = sizing.seasonHeaderSize,
-                            fontWeight = FontWeight.SemiBold,
-                        ),
-                        color = MaterialTheme.colorScheme.onBackground,
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Seasons",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontSize = sizing.seasonHeaderSize,
+                                fontWeight = FontWeight.SemiBold,
+                            ),
+                            color = MaterialTheme.colorScheme.onBackground,
+                        )
+                        if (hasSeasonPosters) {
+                            SeasonViewModeToggle(
+                                mode = seasonViewMode,
+                                sizing = sizing,
+                                onClick = {
+                                    val next = seasonViewMode.toggled()
+                                    seasonViewMode = next
+                                    SeasonViewModeStorage.save(next)
+                                },
+                            )
+                        }
+                    }
 
                     if (hasSeasonPosters) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(sizing.seasonChipGap),
-                        ) {
-                            seasons.forEach { season ->
-                                SeasonPosterButton(
-                                    label = season.label(),
-                                    imageUrl = groupedEpisodes[season]
-                                        .orEmpty()
-                                        .firstNotNullOfOrNull { episode -> episode.seasonPoster }
-                                        ?: meta.poster
-                                        ?: meta.background,
-                                    isSelected = season == currentSeason,
+                        Crossfade(
+                            targetState = seasonViewMode,
+                            animationSpec = tween(280),
+                            label = "season_selector_layout",
+                        ) { mode ->
+                            when (mode) {
+                                SeasonViewMode.Posters -> SeasonPosterScrollRow(
+                                    seasons = seasons,
+                                    groupedEpisodes = groupedEpisodes,
+                                    meta = meta,
+                                    currentSeason = currentSeason,
                                     sizing = sizing,
-                                    onClick = { selectedSeason = season },
+                                    onSelect = { selectedSeason = it },
+                                )
+                                SeasonViewMode.Text -> SeasonTextChipScrollRow(
+                                    seasons = seasons,
+                                    currentSeason = currentSeason,
+                                    sizing = sizing,
+                                    onSelect = { selectedSeason = it },
                                 )
                             }
                         }
                     } else {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(sizing.seasonChipGap),
-                        ) {
-                            seasons.forEach { season ->
-                                val isSelected = season == currentSeason
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(sizing.seasonChipRadius))
-                                        .background(
-                                            if (isSelected) {
-                                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                                            } else {
-                                                Color.Transparent
-                                            },
-                                        )
-                                        .clickable { selectedSeason = season }
-                                        .padding(
-                                            horizontal = sizing.seasonChipHorizontalPadding,
-                                            vertical = sizing.seasonChipVerticalPadding,
-                                        ),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(
-                                        text = season.label(),
-                                        style = MaterialTheme.typography.bodyLarge.copy(
-                                            fontSize = sizing.seasonChipTextSize,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
-                                        ),
-                                        color = if (isSelected) {
-                                            MaterialTheme.colorScheme.onBackground
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                    )
-                                }
-                            }
-                        }
+                        SeasonTextChipScrollRow(
+                            seasons = seasons,
+                            currentSeason = currentSeason,
+                            sizing = sizing,
+                            onSelect = { selectedSeason = it },
+                        )
                     }
                 }
             }
 
-            val sectionTitle = if (meta.type != "series" && seasons.size == 1 && currentSeason <= 0) {
-                "Videos"
-            } else {
-                currentSeason.label()
-            }
-            DetailSectionTitle(
-                title = sectionTitle,
-            )
-
-            Column(
-                verticalArrangement = Arrangement.spacedBy(sizing.cardGap),
-            ) {
-                episodes.forEach { episode ->
-                    val episodeVideoId = buildPlaybackVideoId(
-                        parentMetaId = meta.id,
-                        seasonNumber = episode.season,
-                        episodeNumber = episode.episode,
-                        fallbackVideoId = episode.id,
+            AnimatedContent(
+                targetState = currentSeason,
+                transitionSpec = {
+                    val fromIdx = seasons.indexOf(initialState).takeIf { it >= 0 } ?: 0
+                    val toIdx = seasons.indexOf(targetState).takeIf { it >= 0 } ?: 0
+                    val dir = if (toIdx >= fromIdx) 1 else -1
+                    (fadeIn(tween(220)) + slideInHorizontally(tween(220)) { dir * it / 5 })
+                        .togetherWith(
+                            fadeOut(tween(170)) + slideOutHorizontally(tween(170)) { -dir * it / 5 },
+                        )
+                },
+                label = "season_episodes",
+            ) { seasonForContent ->
+                val sectionTitle = if (meta.type != "series" && seasons.size == 1 && seasonForContent <= 0) {
+                    "Videos"
+                } else {
+                    seasonForContent.label()
+                }
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    DetailSectionTitle(
+                        title = sectionTitle,
                     )
-                    EpisodeCard(
-                        video = episode,
-                        fallbackImage = meta.background ?: meta.poster,
-                        progressEntry = progressByVideoId[episodeVideoId],
-                        isWatched = progressByVideoId[episodeVideoId]?.isCompleted == true ||
-                            WatchingState.isEpisodeWatched(
-                                watchedKeys = watchedKeys,
-                                metaType = meta.type,
-                                metaId = meta.id,
-                                episode = episode,
-                            ),
-                        sizing = sizing,
-                        onClick = { onEpisodeClick?.invoke(episode) },
-                        onLongPress = { onEpisodeLongPress?.invoke(episode) },
-                    )
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(sizing.cardGap),
+                    ) {
+                        groupedEpisodes.getValue(seasonForContent).forEach { episode ->
+                            val episodeVideoId = buildPlaybackVideoId(
+                                parentMetaId = meta.id,
+                                seasonNumber = episode.season,
+                                episodeNumber = episode.episode,
+                                fallbackVideoId = episode.id,
+                            )
+                            EpisodeCard(
+                                video = episode,
+                                fallbackImage = meta.background ?: meta.poster,
+                                progressEntry = progressByVideoId[episodeVideoId],
+                                isWatched = progressByVideoId[episodeVideoId]?.isCompleted == true ||
+                                    WatchingState.isEpisodeWatched(
+                                        watchedKeys = watchedKeys,
+                                        metaType = meta.type,
+                                        metaId = meta.id,
+                                        episode = episode,
+                                    ),
+                                sizing = sizing,
+                                onClick = { onEpisodeClick?.invoke(episode) },
+                                onLongPress = { onEpisodeLongPress?.invoke(episode) },
+                            )
+                        }
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SeasonViewModeToggle(
+    mode: SeasonViewMode,
+    sizing: SeriesContentSizing,
+    onClick: () -> Unit,
+) {
+    val isPosters = mode == SeasonViewMode.Posters
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                if (isPosters) {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                },
+            )
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = if (isPosters) 0.2f else 0.3f),
+                shape = RoundedCornerShape(8.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = if (isPosters) "Posters" else "Text",
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontSize = sizing.seasonToggleTextSize,
+                fontWeight = FontWeight.SemiBold,
+            ),
+            color = if (isPosters) {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            } else {
+                MaterialTheme.colorScheme.onBackground
+            },
+        )
+    }
+}
+
+@Composable
+private fun SeasonTextChipScrollRow(
+    seasons: List<Int>,
+    currentSeason: Int,
+    sizing: SeriesContentSizing,
+    onSelect: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(sizing.seasonChipGap),
+    ) {
+        seasons.forEach { season ->
+            val isSelected = season == currentSeason
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(sizing.seasonChipRadius))
+                    .background(
+                        if (isSelected) {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                        } else {
+                            Color.Transparent
+                        },
+                    )
+                    .clickable { onSelect(season) }
+                    .padding(
+                        horizontal = sizing.seasonChipHorizontalPadding,
+                        vertical = sizing.seasonChipVerticalPadding,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = season.label(),
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = sizing.seasonChipTextSize,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                    ),
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.onBackground
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SeasonPosterScrollRow(
+    seasons: List<Int>,
+    groupedEpisodes: Map<Int, List<MetaVideo>>,
+    meta: MetaDetails,
+    currentSeason: Int,
+    sizing: SeriesContentSizing,
+    onSelect: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(sizing.seasonChipGap),
+    ) {
+        seasons.forEach { season ->
+            SeasonPosterButton(
+                label = season.label(),
+                imageUrl = groupedEpisodes[season]
+                    .orEmpty()
+                    .firstNotNullOfOrNull { episode -> episode.seasonPoster }
+                    ?: meta.poster
+                    ?: meta.background,
+                isSelected = season == currentSeason,
+                sizing = sizing,
+                onClick = { onSelect(season) },
+            )
         }
     }
 }
@@ -495,6 +630,7 @@ private fun EpisodeCard(
 
 private data class SeriesContentSizing(
     val seasonHeaderSize: androidx.compose.ui.unit.TextUnit,
+    val seasonToggleTextSize: androidx.compose.ui.unit.TextUnit,
     val seasonChipGap: Dp,
     val seasonChipRadius: Dp,
     val seasonChipHorizontalPadding: Dp,
@@ -527,6 +663,7 @@ private fun seriesContentSizing(maxWidthDp: Float): SeriesContentSizing =
     when {
         maxWidthDp >= 1440f -> SeriesContentSizing(
             seasonHeaderSize = 28.sp,
+            seasonToggleTextSize = 16.sp,
             seasonChipGap = 20.dp,
             seasonChipRadius = 16.dp,
             seasonChipHorizontalPadding = 20.dp,
@@ -556,6 +693,7 @@ private fun seriesContentSizing(maxWidthDp: Float): SeriesContentSizing =
         )
         maxWidthDp >= 1024f -> SeriesContentSizing(
             seasonHeaderSize = 26.sp,
+            seasonToggleTextSize = 15.sp,
             seasonChipGap = 18.dp,
             seasonChipRadius = 14.dp,
             seasonChipHorizontalPadding = 18.dp,
@@ -585,6 +723,7 @@ private fun seriesContentSizing(maxWidthDp: Float): SeriesContentSizing =
         )
         maxWidthDp >= 768f -> SeriesContentSizing(
             seasonHeaderSize = 24.sp,
+            seasonToggleTextSize = 14.sp,
             seasonChipGap = 16.dp,
             seasonChipRadius = 12.dp,
             seasonChipHorizontalPadding = 16.dp,
@@ -614,6 +753,7 @@ private fun seriesContentSizing(maxWidthDp: Float): SeriesContentSizing =
         )
         else -> SeriesContentSizing(
             seasonHeaderSize = 18.sp,
+            seasonToggleTextSize = 12.sp,
             seasonChipGap = 16.dp,
             seasonChipRadius = 12.dp,
             seasonChipHorizontalPadding = 16.dp,

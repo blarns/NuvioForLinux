@@ -12,6 +12,7 @@ import com.nuvio.app.features.library.LibraryStorage
 import com.nuvio.app.features.home.HomeCatalogSettingsStorage
 import com.nuvio.app.features.player.PlayerSettingsStorage
 import com.nuvio.app.features.profiles.ProfileStorage
+import com.nuvio.app.features.details.SeasonViewModeStorage
 import com.nuvio.app.features.search.SearchHistoryStorage
 import com.nuvio.app.features.settings.ThemeSettingsStorage
 import com.nuvio.app.features.tmdb.TmdbSettingsStorage
@@ -39,6 +40,7 @@ class MainActivity : ComponentActivity() {
         PlayerSettingsStorage.initialize(applicationContext)
         ProfileStorage.initialize(applicationContext)
         SearchHistoryStorage.initialize(applicationContext)
+        SeasonViewModeStorage.initialize(applicationContext)
         ThemeSettingsStorage.initialize(applicationContext)
         TmdbSettingsStorage.initialize(applicationContext)
         ContinueWatchingPreferencesStorage.initialize(applicationContext)
