@@ -36,6 +36,7 @@ interface NuvioPlayerBridge {
     fun applySubtitleStyle(
         textColor: String,
         outlineSize: Float,
+        fontSize: Float,
         subPos: Int,
     )
     fun getIsLoading(): Boolean

@@ -75,10 +75,11 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
     func setSubtitleUrl(url: String) { playerVC?.addSubtitleUrl(url) }
     func clearExternalSubtitle() { playerVC?.removeExternalSubtitles() }
     func clearExternalSubtitleAndSelect(trackId: Int32) { playerVC?.removeExternalSubtitlesAndSelect(Int(trackId)) }
-    func applySubtitleStyle(textColor: String, outlineSize: Float, subPos: Int32) {
+    func applySubtitleStyle(textColor: String, outlineSize: Float, fontSize: Float, subPos: Int32) {
         playerVC?.applySubtitleStyle(
             textColor: textColor,
             outlineSize: outlineSize,
+            fontSize: fontSize,
             subPos: Int(subPos)
         )
     }
@@ -337,7 +338,7 @@ final class MPVPlayerViewController: UIViewController {
         }
     }
 
-    func applySubtitleStyle(textColor: String, outlineSize: Float, subPos: Int) {
+    func applySubtitleStyle(textColor: String, outlineSize: Float, fontSize: Float, subPos: Int) {
         guard mpv != nil else { return }
 
         checkError(mpv_set_property_string(mpv, "sub-ass-override", "force"))
@@ -346,6 +347,9 @@ final class MPVPlayerViewController: UIViewController {
 
         var outline = Double(outlineSize)
         checkError(mpv_set_property(mpv, "sub-outline-size", MPV_FORMAT_DOUBLE, &outline))
+
+        var size = Double(fontSize)
+        checkError(mpv_set_property(mpv, "sub-font-size", MPV_FORMAT_DOUBLE, &size))
 
         var position = Int64(subPos)
         checkError(mpv_set_property(mpv, "sub-pos", MPV_FORMAT_INT64, &position))

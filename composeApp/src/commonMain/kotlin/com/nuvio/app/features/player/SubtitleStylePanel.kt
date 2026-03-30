@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -19,7 +18,7 @@ import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.FormatSize
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -27,13 +26,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.math.min
 
 @Composable
 fun SubtitleStylePanel(
@@ -48,13 +43,6 @@ fun SubtitleStylePanel(
     Column(
         verticalArrangement = Arrangement.spacedBy(gap),
     ) {
-        LivePreviewCard(
-            style = style,
-            isCompact = isCompact,
-            sectionPadding = sectionPadding,
-            colorScheme = colorScheme,
-        )
-
         StyleControlsCard(
             style = style,
             isCompact = isCompact,
@@ -62,64 +50,6 @@ fun SubtitleStylePanel(
             colorScheme = colorScheme,
             onStyleChanged = onStyleChanged,
         )
-    }
-}
-
-@Composable
-private fun LivePreviewCard(
-    style: SubtitleStyleState,
-    isCompact: Boolean,
-    sectionPadding: androidx.compose.ui.unit.Dp,
-    colorScheme: androidx.compose.material3.ColorScheme,
-) {
-    val previewHeight = if (isCompact) 90.dp else 120.dp
-    val previewFontSize = if (isCompact) 18.sp else 22.sp
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(colorScheme.surfaceVariant.copy(alpha = 0.45f))
-            .padding(sectionPadding),
-    ) {
-        SectionHeader(
-            icon = Icons.Rounded.Visibility,
-            label = "Preview",
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(previewHeight)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color.Black),
-            contentAlignment = Alignment.BottomCenter,
-        ) {
-            Box(
-                modifier = Modifier
-                    .padding(bottom = min(80, style.bottomOffset).dp, start = 10.dp, end = 10.dp),
-            ) {
-                if (style.outlineEnabled) {
-                    Text(
-                        text = "The quick brown fox jumps over the lazy dog.",
-                        color = Color.Black,
-                        fontSize = previewFontSize,
-                        style = TextStyle(
-                            shadow = Shadow(
-                                color = Color.Black,
-                                blurRadius = 6f,
-                            ),
-                        ),
-                    )
-                }
-
-                Text(
-                    text = "The quick brown fox jumps over the lazy dog.",
-                    color = style.textColor,
-                    fontSize = previewFontSize,
-                )
-            }
-        }
     }
 }
 
@@ -146,6 +76,33 @@ private fun StyleControlsCard(
             icon = Icons.Rounded.Tune,
             label = "Style",
         )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Font Size",
+                color = colorScheme.onSurfaceVariant,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            StepperControl(
+                value = "${style.fontSizeSp}sp",
+                onMinus = {
+                    onStyleChanged(style.copy(fontSizeSp = (style.fontSizeSp - 2).coerceAtLeast(12)))
+                },
+                onPlus = {
+                    onStyleChanged(style.copy(fontSizeSp = (style.fontSizeSp + 2).coerceAtMost(40)))
+                },
+                buttonSize = btnSize,
+                buttonRadius = btnRadius,
+                minWidth = 58.dp,
+                minusIcon = Icons.Rounded.Remove,
+                plusIcon = Icons.Rounded.FormatSize,
+            )
+        }
 
         Row(
             modifier = Modifier.fillMaxWidth(),

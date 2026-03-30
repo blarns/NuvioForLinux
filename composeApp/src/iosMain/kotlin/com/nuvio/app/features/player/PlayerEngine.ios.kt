@@ -194,6 +194,7 @@ actual fun PlatformPlayerSurface(
                     bridge.applySubtitleStyle(
                         textColor = style.textColor.toMpvColorString(),
                         outlineSize = if (style.outlineEnabled) 1.65f else 0f,
+                        fontSize = style.toMpvSubtitleFontSize(),
                         subPos = style.toMpvSubtitlePosition(),
                     )
                 }
@@ -279,6 +280,9 @@ private fun Color.toMpvColorString(): String {
 
 private fun SubtitleStyleState.toMpvSubtitlePosition(): Int =
     (100 - (bottomOffset / 2)).coerceIn(0, 150)
+
+private fun SubtitleStyleState.toMpvSubtitleFontSize(): Float =
+    (fontSizeSp * 3f).coerceIn(24f, 96f)
 
 private fun Int.toHexByte(): String {
     val digits = "0123456789ABCDEF"

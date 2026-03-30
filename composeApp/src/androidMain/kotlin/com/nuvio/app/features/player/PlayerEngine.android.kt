@@ -2,6 +2,7 @@ package com.nuvio.app.features.player
 
 import android.net.Uri
 import android.util.Log
+import android.util.TypedValue
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -379,7 +380,7 @@ private fun PlayerView.applySubtitleStyle(style: SubtitleStyleState) {
                 null,
             )
         )
-        setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION)
+        setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, style.fontSizeSp.toFloat())
     }
 }
 
