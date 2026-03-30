@@ -221,6 +221,7 @@ internal object MetaDetailsParser {
                 title = title,
                 released = video.string("released"),
                 thumbnail = video.string("thumbnail"),
+                seasonPoster = video.string("seasonPoster") ?: video.string("season_poster_path"),
                 season = video.int("season"),
                 episode = video.int("episode"),
                 overview = video.string("overview") ?: video.string("description"),

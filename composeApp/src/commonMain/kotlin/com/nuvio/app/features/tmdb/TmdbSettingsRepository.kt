@@ -19,6 +19,7 @@ object TmdbSettingsRepository {
     private var useProductions = true
     private var useNetworks = true
     private var useEpisodes = true
+    private var useSeasonPosters = true
     private var useMoreLikeThis = true
     private var useCollections = true
 
@@ -102,6 +103,13 @@ object TmdbSettingsRepository {
         persist = TmdbSettingsStorage::saveUseEpisodes,
     )
 
+    fun setUseSeasonPosters(value: Boolean) = setBoolean(
+        current = useSeasonPosters,
+        next = value,
+        update = { useSeasonPosters = it },
+        persist = TmdbSettingsStorage::saveUseSeasonPosters,
+    )
+
     fun setUseMoreLikeThis(value: Boolean) = setBoolean(
         current = useMoreLikeThis,
         next = value,
@@ -140,6 +148,7 @@ object TmdbSettingsRepository {
         useProductions = TmdbSettingsStorage.loadUseProductions() ?: true
         useNetworks = TmdbSettingsStorage.loadUseNetworks() ?: true
         useEpisodes = TmdbSettingsStorage.loadUseEpisodes() ?: true
+        useSeasonPosters = TmdbSettingsStorage.loadUseSeasonPosters() ?: true
         useMoreLikeThis = TmdbSettingsStorage.loadUseMoreLikeThis() ?: true
         useCollections = TmdbSettingsStorage.loadUseCollections() ?: true
         publish()
@@ -156,6 +165,7 @@ object TmdbSettingsRepository {
             useProductions = useProductions,
             useNetworks = useNetworks,
             useEpisodes = useEpisodes,
+            useSeasonPosters = useSeasonPosters,
             useMoreLikeThis = useMoreLikeThis,
             useCollections = useCollections,
         )

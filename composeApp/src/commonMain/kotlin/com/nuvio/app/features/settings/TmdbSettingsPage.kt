@@ -129,6 +129,15 @@ internal fun LazyListScope.tmdbSettingsContent(
                 SettingsGroupDivider(isTablet = isTablet)
                 TmdbToggleRow(
                     isTablet = isTablet,
+                    title = "Season posters",
+                    description = "Use TMDB season posters in the metadata screen season selector for series.",
+                    checked = settings.useSeasonPosters,
+                    enabled = settings.enabled,
+                    onCheckedChange = TmdbSettingsRepository::setUseSeasonPosters,
+                )
+                SettingsGroupDivider(isTablet = isTablet)
+                TmdbToggleRow(
+                    isTablet = isTablet,
                     title = "More like this",
                     description = "Show TMDB recommendations at the bottom of detail pages.",
                     checked = settings.useMoreLikeThis,

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -132,6 +134,11 @@ fun DetailSeriesContent(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             if (seasons.size > 1) {
+                val hasSeasonPosters = seasons.any { season ->
+                    groupedEpisodes[season]
+                        .orEmpty()
+                        .any { !it.seasonPoster.isNullOrBlank() }
+                }
                 Column(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
@@ -144,43 +151,66 @@ fun DetailSeriesContent(
                         color = MaterialTheme.colorScheme.onBackground,
                     )
 
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(sizing.seasonChipGap),
-                    ) {
-                        seasons.forEach { season ->
-                            val isSelected = season == currentSeason
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(sizing.seasonChipRadius))
-                                    .background(
-                                        if (isSelected) {
-                                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                    if (hasSeasonPosters) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(sizing.seasonChipGap),
+                        ) {
+                            seasons.forEach { season ->
+                                SeasonPosterButton(
+                                    label = season.label(),
+                                    imageUrl = groupedEpisodes[season]
+                                        .orEmpty()
+                                        .firstNotNullOfOrNull { episode -> episode.seasonPoster }
+                                        ?: meta.poster
+                                        ?: meta.background,
+                                    isSelected = season == currentSeason,
+                                    sizing = sizing,
+                                    onClick = { selectedSeason = season },
+                                )
+                            }
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(sizing.seasonChipGap),
+                        ) {
+                            seasons.forEach { season ->
+                                val isSelected = season == currentSeason
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(sizing.seasonChipRadius))
+                                        .background(
+                                            if (isSelected) {
+                                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                                            } else {
+                                                Color.Transparent
+                                            },
+                                        )
+                                        .clickable { selectedSeason = season }
+                                        .padding(
+                                            horizontal = sizing.seasonChipHorizontalPadding,
+                                            vertical = sizing.seasonChipVerticalPadding,
+                                        ),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = season.label(),
+                                        style = MaterialTheme.typography.bodyLarge.copy(
+                                            fontSize = sizing.seasonChipTextSize,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                        ),
+                                        color = if (isSelected) {
+                                            MaterialTheme.colorScheme.onBackground
                                         } else {
-                                            Color.Transparent
+                                            MaterialTheme.colorScheme.onSurfaceVariant
                                         },
                                     )
-                                    .clickable { selectedSeason = season }
-                                    .padding(
-                                        horizontal = sizing.seasonChipHorizontalPadding,
-                                        vertical = sizing.seasonChipVerticalPadding,
-                                    ),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = season.label(),
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontSize = sizing.seasonChipTextSize,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
-                                    ),
-                                    color = if (isSelected) {
-                                        MaterialTheme.colorScheme.onBackground
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                )
+                                }
                             }
                         }
                     }
@@ -224,6 +254,81 @@ fun DetailSeriesContent(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SeasonPosterButton(
+    label: String,
+    imageUrl: String?,
+    isSelected: Boolean,
+    sizing: SeriesContentSizing,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .width(sizing.seasonPosterWidth)
+            .clickable(onClick = onClick),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(sizing.seasonPosterHeight)
+                .clip(RoundedCornerShape(sizing.seasonPosterRadius))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                .border(
+                    width = if (isSelected) 2.dp else 1.dp,
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        Color.White.copy(alpha = 0.1f)
+                    },
+                    shape = RoundedCornerShape(sizing.seasonPosterRadius),
+                ),
+        ) {
+            if (imageUrl != null) {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = label,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surface),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = label,
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = sizing.seasonChipTextSize,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+            ),
+            color = if (isSelected) {
+                MaterialTheme.colorScheme.onBackground
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
@@ -395,6 +500,9 @@ private data class SeriesContentSizing(
     val seasonChipHorizontalPadding: Dp,
     val seasonChipVerticalPadding: Dp,
     val seasonChipTextSize: androidx.compose.ui.unit.TextUnit,
+    val seasonPosterWidth: Dp,
+    val seasonPosterHeight: Dp,
+    val seasonPosterRadius: Dp,
     val cardHeight: Dp,
     val imageWidth: Dp,
     val cardRadius: Dp,
@@ -424,6 +532,9 @@ private fun seriesContentSizing(maxWidthDp: Float): SeriesContentSizing =
             seasonChipHorizontalPadding = 20.dp,
             seasonChipVerticalPadding = 16.dp,
             seasonChipTextSize = 16.sp,
+            seasonPosterWidth = 140.dp,
+            seasonPosterHeight = 210.dp,
+            seasonPosterRadius = 16.dp,
             cardHeight = 200.dp,
             imageWidth = 200.dp,
             cardRadius = 20.dp,
@@ -450,6 +561,9 @@ private fun seriesContentSizing(maxWidthDp: Float): SeriesContentSizing =
             seasonChipHorizontalPadding = 18.dp,
             seasonChipVerticalPadding = 14.dp,
             seasonChipTextSize = 15.sp,
+            seasonPosterWidth = 130.dp,
+            seasonPosterHeight = 195.dp,
+            seasonPosterRadius = 14.dp,
             cardHeight = 180.dp,
             imageWidth = 180.dp,
             cardRadius = 18.dp,
@@ -476,6 +590,9 @@ private fun seriesContentSizing(maxWidthDp: Float): SeriesContentSizing =
             seasonChipHorizontalPadding = 16.dp,
             seasonChipVerticalPadding = 12.dp,
             seasonChipTextSize = 17.sp,
+            seasonPosterWidth = 120.dp,
+            seasonPosterHeight = 180.dp,
+            seasonPosterRadius = 12.dp,
             cardHeight = 160.dp,
             imageWidth = 160.dp,
             cardRadius = 16.dp,
@@ -502,6 +619,9 @@ private fun seriesContentSizing(maxWidthDp: Float): SeriesContentSizing =
             seasonChipHorizontalPadding = 16.dp,
             seasonChipVerticalPadding = 12.dp,
             seasonChipTextSize = 15.sp,
+            seasonPosterWidth = 100.dp,
+            seasonPosterHeight = 150.dp,
+            seasonPosterRadius = 8.dp,
             cardHeight = 120.dp,
             imageWidth = 120.dp,
             cardRadius = 16.dp,

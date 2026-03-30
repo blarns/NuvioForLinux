@@ -15,6 +15,7 @@ actual object TmdbSettingsStorage {
     private const val useProductionsKey = "tmdb_use_productions"
     private const val useNetworksKey = "tmdb_use_networks"
     private const val useEpisodesKey = "tmdb_use_episodes"
+    private const val useSeasonPostersKey = "tmdb_use_season_posters"
     private const val useMoreLikeThisKey = "tmdb_use_more_like_this"
     private const val useCollectionsKey = "tmdb_use_collections"
 
@@ -80,6 +81,12 @@ actual object TmdbSettingsStorage {
 
     actual fun saveUseEpisodes(enabled: Boolean) {
         saveBoolean(useEpisodesKey, enabled)
+    }
+
+    actual fun loadUseSeasonPosters(): Boolean? = loadBoolean(useSeasonPostersKey)
+
+    actual fun saveUseSeasonPosters(enabled: Boolean) {
+        saveBoolean(useSeasonPostersKey, enabled)
     }
 
     actual fun loadUseMoreLikeThis(): Boolean? = loadBoolean(useMoreLikeThisKey)

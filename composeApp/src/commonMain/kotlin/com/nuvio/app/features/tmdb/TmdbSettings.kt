@@ -10,6 +10,7 @@ data class TmdbSettings(
     val useProductions: Boolean = true,
     val useNetworks: Boolean = true,
     val useEpisodes: Boolean = true,
+    val useSeasonPosters: Boolean = true,
     val useMoreLikeThis: Boolean = true,
     val useCollections: Boolean = true,
 )

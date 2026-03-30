@@ -38,7 +38,7 @@ object TmdbMetadataService {
             ?: TmdbService.ensureTmdbId(fallbackItemId, tmdbType)
             ?: return meta
 
-        val needsEpisodes = settings.useEpisodes && tmdbType == "tv"
+        val needsEpisodes = (settings.useEpisodes || settings.useSeasonPosters) && tmdbType == "tv"
         val (enrichment, episodeMap) = coroutineScope {
             val enrichmentDeferred = async {
                 fetchEnrichment(
@@ -136,11 +136,36 @@ object TmdbMetadataService {
                         video
                     } else {
                         video.copy(
-                            title = enrichmentForEpisode.title ?: video.title,
-                            overview = enrichmentForEpisode.overview ?: video.overview,
-                            released = enrichmentForEpisode.airDate ?: video.released,
-                            thumbnail = enrichmentForEpisode.thumbnail ?: video.thumbnail,
-                            runtime = enrichmentForEpisode.runtimeMinutes ?: video.runtime,
+                            title = if (settings.useEpisodes) {
+                                enrichmentForEpisode.title ?: video.title
+                            } else {
+                                video.title
+                            },
+                            overview = if (settings.useEpisodes) {
+                                enrichmentForEpisode.overview ?: video.overview
+                            } else {
+                                video.overview
+                            },
+                            released = if (settings.useEpisodes) {
+                                enrichmentForEpisode.airDate ?: video.released
+                            } else {
+                                video.released
+                            },
+                            thumbnail = if (settings.useEpisodes) {
+                                enrichmentForEpisode.thumbnail ?: video.thumbnail
+                            } else {
+                                video.thumbnail
+                            },
+                            seasonPoster = if (settings.useSeasonPosters) {
+                                enrichmentForEpisode.seasonPoster ?: video.seasonPoster
+                            } else {
+                                video.seasonPoster
+                            },
+                            runtime = if (settings.useEpisodes) {
+                                enrichmentForEpisode.runtimeMinutes ?: video.runtime
+                            } else {
+                                video.runtime
+                            },
                         )
                     }
                 },
@@ -304,6 +329,7 @@ object TmdbMetadataService {
                                 title = episode.name?.trim()?.takeIf(String::isNotBlank),
                                 overview = episode.overview?.trim()?.takeIf(String::isNotBlank),
                                 thumbnail = buildImageUrl(episode.stillPath, "w500"),
+                                seasonPoster = buildImageUrl(details.posterPath, "w500"),
                                 airDate = episode.airDate?.trim()?.takeIf(String::isNotBlank),
                                 runtimeMinutes = episode.runtime,
                             )
@@ -466,6 +492,7 @@ internal data class TmdbEpisodeEnrichment(
     val title: String?,
     val overview: String?,
     val thumbnail: String?,
+    val seasonPoster: String? = null,
     val airDate: String?,
     val runtimeMinutes: Int?,
 )
@@ -845,6 +872,7 @@ private data class TmdbCollectionPart(
 
 @Serializable
 private data class TmdbSeasonDetailsResponse(
+    @SerialName("poster_path") val posterPath: String? = null,
     val episodes: List<TmdbEpisodeResponse> = emptyList(),
 )
 
