@@ -2,8 +2,19 @@ package com.nuvio.app.features.details
 
 import com.nuvio.app.features.watched.WatchedItem
 import com.nuvio.app.features.watchprogress.WatchProgressEntry
-import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
-import com.nuvio.app.features.watchprogress.resumeEntryForSeries
+import com.nuvio.app.features.watching.domain.WatchingCompletedEpisode
+import com.nuvio.app.features.watching.domain.WatchingContentRef
+import com.nuvio.app.features.watching.domain.WatchingProgressRecord
+import com.nuvio.app.features.watching.domain.WatchingReleasedEpisode
+import com.nuvio.app.features.watching.domain.WatchingSeriesPrimaryAction
+import com.nuvio.app.features.watching.domain.WatchingWatchedRecord
+import com.nuvio.app.features.watching.domain.buildPlaybackVideoId
+import com.nuvio.app.features.watching.domain.decideSeriesPrimaryAction
+import com.nuvio.app.features.watching.domain.isReleasedBy
+import com.nuvio.app.features.watching.domain.latestCompletedSeriesEpisode
+import com.nuvio.app.features.watching.domain.playLabel
+import com.nuvio.app.features.watching.domain.resumeLabel
+import com.nuvio.app.features.watching.domain.upNextLabel
 
 internal fun MetaDetails.sortedPlayableEpisodes(): List<MetaVideo> =
     videos
@@ -14,18 +25,19 @@ internal fun MetaDetails.firstPlayableEpisode(): MetaVideo? =
     sortedPlayableEpisodes().firstOrNull()
 
 internal fun MetaDetails.firstReleasedPlayableEpisode(todayIsoDate: String): MetaVideo? =
-    sortedPlayableEpisodes().firstOrNull { it.isReleasedBy(todayIsoDate) }
+    sortedPlayableEpisodes().firstOrNull { video ->
+        isReleasedBy(todayIsoDate = todayIsoDate, releasedDate = video.released)
+    }
 
 internal fun MetaDetails.nextReleasedEpisodeAfter(
     completedEntry: WatchProgressEntry,
     todayIsoDate: String,
-): MetaVideo? {
-    return nextReleasedEpisodeAfter(
+): MetaVideo? =
+    nextReleasedEpisodeAfter(
         seasonNumber = completedEntry.seasonNumber,
         episodeNumber = completedEntry.episodeNumber,
         todayIsoDate = todayIsoDate,
     )
-}
 
 internal fun MetaDetails.nextReleasedEpisodeAfter(
     seasonNumber: Int?,
@@ -34,21 +46,23 @@ internal fun MetaDetails.nextReleasedEpisodeAfter(
 ): MetaVideo? {
     val sortedEpisodes = sortedPlayableEpisodes()
     val watchedVideoId = buildPlaybackVideoId(
-        parentMetaId = id,
+        content = WatchingContentRef(type = type, id = id),
         seasonNumber = seasonNumber,
         episodeNumber = episodeNumber,
     )
     return sortedEpisodes
         .dropWhile { episode ->
             buildPlaybackVideoId(
-                parentMetaId = id,
+                content = WatchingContentRef(type = type, id = id),
                 seasonNumber = episode.season,
                 episodeNumber = episode.episode,
                 fallbackVideoId = episode.id,
             ) != watchedVideoId
         }
         .drop(1)
-        .firstOrNull { it.isReleasedBy(todayIsoDate) }
+        .firstOrNull { episode ->
+            isReleasedBy(todayIsoDate = todayIsoDate, releasedDate = episode.released)
+        }
 }
 
 internal data class SeriesPrimaryAction(
@@ -65,86 +79,26 @@ internal fun MetaDetails.seriesPrimaryAction(
     entries: List<WatchProgressEntry>,
     watchedItems: List<WatchedItem>,
     todayIsoDate: String,
-): SeriesPrimaryAction? {
-    val resumeEntry = entries.resumeEntryForSeries(id)
-    val latestCompleted = latestCompletedSeriesEpisode(
-        parentMetaId = id,
-        parentMetaType = type,
-        progressEntries = entries,
-        watchedItems = watchedItems,
-    )
-
-    val shouldPreferResume = resumeEntry != null &&
-        (latestCompleted == null || resumeEntry.lastUpdatedEpochMs > latestCompleted.markedAtEpochMs)
-
-    if (shouldPreferResume) {
-        return SeriesPrimaryAction(
-            label = resumeEntry.resumeLabel(),
-            videoId = resumeEntry.videoId,
-            seasonNumber = resumeEntry.seasonNumber,
-            episodeNumber = resumeEntry.episodeNumber,
-            episodeTitle = resumeEntry.episodeTitle,
-            episodeThumbnail = resumeEntry.episodeThumbnail,
-            resumePositionMs = resumeEntry.lastPositionMs,
-        )
-    }
-
-    val nextEpisode = if (latestCompleted != null) {
-        nextReleasedEpisodeAfter(
-            seasonNumber = latestCompleted.seasonNumber,
-            episodeNumber = latestCompleted.episodeNumber,
-            todayIsoDate = todayIsoDate,
-        )
-    } else {
-        firstReleasedPlayableEpisode(todayIsoDate)
-    }
-
-    return nextEpisode?.let { episode ->
-        SeriesPrimaryAction(
-            label = if (latestCompleted != null) episode.upNextLabel() else episode.playLabel(),
-            videoId = buildPlaybackVideoId(
-                parentMetaId = id,
-                seasonNumber = episode.season,
-                episodeNumber = episode.episode,
-                fallbackVideoId = episode.id,
-            ),
-            seasonNumber = episode.season,
-            episodeNumber = episode.episode,
-            episodeTitle = episode.title,
-            episodeThumbnail = episode.thumbnail,
-            resumePositionMs = null,
-        )
-    }
-}
+): SeriesPrimaryAction? =
+    decideSeriesPrimaryAction(
+        content = WatchingContentRef(type = type, id = id),
+        episodes = videos.map(MetaVideo::toDomainReleasedEpisode),
+        progressRecords = entries.map(WatchProgressEntry::toDomainProgressRecord),
+        watchedRecords = watchedItems.map(WatchedItem::toDomainWatchedRecord),
+        todayIsoDate = todayIsoDate,
+    )?.toLegacySeriesPrimaryAction()
 
 internal fun MetaVideo.playLabel(): String =
-    if (season != null && episode != null) {
-        "Play S${season}E${episode}"
-    } else {
-        "Play"
-    }
+    playLabel(seasonNumber = season, episodeNumber = episode)
 
 internal fun MetaVideo.upNextLabel(): String =
-    if (season != null && episode != null) {
-        "Up Next S${season}E${episode}"
-    } else {
-        "Up Next"
-    }
+    upNextLabel(seasonNumber = season, episodeNumber = episode)
 
 internal fun WatchProgressEntry.resumeLabel(): String =
-    if (seasonNumber != null && episodeNumber != null) {
-        "Resume S${seasonNumber}E${episodeNumber}"
-    } else {
-        "Resume"
-    }
+    resumeLabel(seasonNumber = seasonNumber, episodeNumber = episodeNumber)
 
-internal fun MetaVideo.isReleasedBy(todayIsoDate: String): Boolean {
-    val releaseDate = released
-        ?.substringBefore('T')
-        ?.takeIf { it.length == 10 }
-        ?: return true
-    return releaseDate <= todayIsoDate
-}
+internal fun MetaVideo.isReleasedBy(todayIsoDate: String): Boolean =
+    isReleasedBy(todayIsoDate = todayIsoDate, releasedDate = released)
 
 internal data class CompletedSeriesEpisode(
     val seasonNumber: Int,
@@ -157,43 +111,58 @@ internal fun latestCompletedSeriesEpisode(
     parentMetaType: String,
     progressEntries: List<WatchProgressEntry>,
     watchedItems: List<WatchedItem>,
-): CompletedSeriesEpisode? {
-    val progressMarker = progressEntries
-        .asSequence()
-        .filter { entry ->
-            entry.parentMetaId == parentMetaId &&
-                entry.isCompleted &&
-                entry.seasonNumber != null &&
-                entry.episodeNumber != null
-        }
-        .map { entry ->
-            CompletedSeriesEpisode(
-                seasonNumber = entry.seasonNumber ?: return@map null,
-                episodeNumber = entry.episodeNumber ?: return@map null,
-                markedAtEpochMs = entry.lastUpdatedEpochMs,
-            )
-        }
-        .filterNotNull()
-        .maxByOrNull { marker -> marker.markedAtEpochMs }
+): CompletedSeriesEpisode? =
+    latestCompletedSeriesEpisode(
+        content = WatchingContentRef(type = parentMetaType, id = parentMetaId),
+        progressRecords = progressEntries.map(WatchProgressEntry::toDomainProgressRecord),
+        watchedRecords = watchedItems.map(WatchedItem::toDomainWatchedRecord),
+    )?.toLegacyCompletedEpisode()
 
-    val watchedMarker = watchedItems
-        .asSequence()
-        .filter { item ->
-            item.id == parentMetaId &&
-                item.type == parentMetaType &&
-                item.season != null &&
-                item.episode != null
-        }
-        .map { item ->
-            CompletedSeriesEpisode(
-                seasonNumber = item.season ?: return@map null,
-                episodeNumber = item.episode ?: return@map null,
-                markedAtEpochMs = item.markedAtEpochMs,
-            )
-        }
-        .filterNotNull()
-        .maxByOrNull { marker -> marker.markedAtEpochMs }
+private fun MetaVideo.toDomainReleasedEpisode(): WatchingReleasedEpisode =
+    WatchingReleasedEpisode(
+        videoId = id,
+        seasonNumber = season,
+        episodeNumber = episode,
+        title = title,
+        thumbnail = thumbnail,
+        releasedDate = released,
+    )
 
-    return listOfNotNull(progressMarker, watchedMarker)
-        .maxByOrNull { marker -> marker.markedAtEpochMs }
-}
+private fun WatchProgressEntry.toDomainProgressRecord(): WatchingProgressRecord =
+    WatchingProgressRecord(
+        content = WatchingContentRef(type = parentMetaType, id = parentMetaId),
+        videoId = videoId,
+        seasonNumber = seasonNumber,
+        episodeNumber = episodeNumber,
+        lastUpdatedEpochMs = lastUpdatedEpochMs,
+        lastPositionMs = lastPositionMs,
+        isCompleted = isCompleted,
+        episodeTitle = episodeTitle,
+        episodeThumbnail = episodeThumbnail,
+    )
+
+private fun WatchedItem.toDomainWatchedRecord(): WatchingWatchedRecord =
+    WatchingWatchedRecord(
+        content = WatchingContentRef(type = type, id = id),
+        seasonNumber = season,
+        episodeNumber = episode,
+        markedAtEpochMs = markedAtEpochMs,
+    )
+
+private fun WatchingSeriesPrimaryAction.toLegacySeriesPrimaryAction(): SeriesPrimaryAction =
+    SeriesPrimaryAction(
+        label = label,
+        videoId = videoId,
+        seasonNumber = seasonNumber,
+        episodeNumber = episodeNumber,
+        episodeTitle = episodeTitle,
+        episodeThumbnail = episodeThumbnail,
+        resumePositionMs = resumePositionMs,
+    )
+
+private fun WatchingCompletedEpisode.toLegacyCompletedEpisode(): CompletedSeriesEpisode =
+    CompletedSeriesEpisode(
+        seasonNumber = seasonNumber,
+        episodeNumber = episodeNumber,
+        markedAtEpochMs = markedAtEpochMs,
+    )

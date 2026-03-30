@@ -49,6 +49,7 @@ import com.nuvio.app.features.details.normalizeSeasonNumber
 import com.nuvio.app.features.details.seasonSortKey
 import com.nuvio.app.features.watchprogress.WatchProgressEntry
 import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
+import com.nuvio.app.features.watching.application.WatchingState
 
 private val log = Logger.withTag("SeriesContent")
 
@@ -210,13 +211,11 @@ fun DetailSeriesContent(
                         fallbackImage = meta.background ?: meta.poster,
                         progressEntry = progressByVideoId[episodeVideoId],
                         isWatched = progressByVideoId[episodeVideoId]?.isCompleted == true ||
-                            watchedKeys.contains(
-                                com.nuvio.app.features.watched.watchedItemKey(
-                                    type = meta.type,
-                                    id = meta.id,
-                                    season = episode.season,
-                                    episode = episode.episode,
-                                ),
+                            WatchingState.isEpisodeWatched(
+                                watchedKeys = watchedKeys,
+                                metaType = meta.type,
+                                metaId = meta.id,
+                                episode = episode,
                             ),
                         sizing = sizing,
                         onClick = { onEpisodeClick?.invoke(episode) },

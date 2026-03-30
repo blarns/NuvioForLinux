@@ -1,6 +1,7 @@
 package com.nuvio.app.features.watchprogress
 
 import com.nuvio.app.features.details.MetaVideo
+import com.nuvio.app.features.watching.domain.WatchingContentRef
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -189,9 +190,9 @@ fun buildPlaybackVideoId(
     seasonNumber: Int?,
     episodeNumber: Int?,
     fallbackVideoId: String? = null,
-): String =
-    if (seasonNumber != null && episodeNumber != null) {
-        "$parentMetaId:$seasonNumber:$episodeNumber"
-    } else {
-        fallbackVideoId?.takeIf { it.isNotBlank() } ?: parentMetaId
-    }
+): String = com.nuvio.app.features.watching.domain.buildPlaybackVideoId(
+    content = WatchingContentRef(type = "", id = parentMetaId),
+    seasonNumber = seasonNumber,
+    episodeNumber = episodeNumber,
+    fallbackVideoId = fallbackVideoId,
+)

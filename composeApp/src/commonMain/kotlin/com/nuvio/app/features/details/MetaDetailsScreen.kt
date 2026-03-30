@@ -46,13 +46,13 @@ import com.nuvio.app.features.details.components.EpisodeWatchedActionSheet
 import com.nuvio.app.features.library.LibraryRepository
 import com.nuvio.app.features.library.toLibraryItem
 import com.nuvio.app.features.watched.WatchedRepository
-import com.nuvio.app.features.watched.episodePlaybackId
 import com.nuvio.app.features.watched.previousReleasedEpisodesBefore
 import com.nuvio.app.features.watched.releasedEpisodesForSeason
-import com.nuvio.app.features.watched.toEpisodeWatchedItem
 import com.nuvio.app.features.watchprogress.CurrentDateProvider
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
+import com.nuvio.app.features.watching.application.WatchingActions
+import com.nuvio.app.features.watching.application.WatchingState
 
 @Composable
 fun MetaDetailsScreen(
@@ -162,17 +162,6 @@ fun MetaDetailsScreen(
                     }?.overview
                 }
                 val hasEpisodes = meta.videos.any { it.season != null || it.episode != null }
-                val syncSeriesWatchedState = remember(meta, todayIsoDate) {
-                    {
-                        WatchedRepository.reconcileSeriesWatchedState(
-                            meta = meta,
-                            todayIsoDate = todayIsoDate,
-                            isEpisodeCompleted = { episode ->
-                                WatchProgressRepository.progressForVideo(meta.episodePlaybackId(episode))?.isCompleted == true
-                            },
-                        )
-                    }
-                }
                 val playButtonLabel = remember(movieProgress, seriesAction, meta.type, hasEpisodes) {
                     when {
                         (meta.type == "series" || hasEpisodes) && seriesAction != null ->
@@ -334,28 +323,13 @@ fun MetaDetailsScreen(
                     )
 
                     selectedEpisodeForActions?.let { selectedEpisode ->
-                        val isEpisodeWatched: (com.nuvio.app.features.details.MetaVideo) -> Boolean = remember(meta, watchedUiState.watchedKeys) {
-                            { episode ->
-                                watchedUiState.watchedKeys.contains(
-                                    com.nuvio.app.features.watched.watchedItemKey(
-                                        type = meta.type,
-                                        id = meta.id,
-                                        season = episode.season,
-                                        episode = episode.episode,
-                                    ),
-                                )
-                            }
-                        }
-                        val selectedEpisodeWatchedKey = remember(meta, selectedEpisode) {
-                            com.nuvio.app.features.watched.watchedItemKey(
-                                type = meta.type,
-                                id = meta.id,
-                                season = selectedEpisode.season,
-                                episode = selectedEpisode.episode,
+                        val isSelectedEpisodeWatched = remember(meta, selectedEpisode, watchedUiState.watchedKeys) {
+                            WatchingState.isEpisodeWatched(
+                                watchedKeys = watchedUiState.watchedKeys,
+                                metaType = meta.type,
+                                metaId = meta.id,
+                                episode = selectedEpisode,
                             )
-                        }
-                        val isSelectedEpisodeWatched = remember(watchedUiState.watchedKeys, selectedEpisodeWatchedKey) {
-                            watchedUiState.watchedKeys.contains(selectedEpisodeWatchedKey)
                         }
                         val previousEpisodes = remember(meta, selectedEpisode, todayIsoDate) {
                             meta.previousReleasedEpisodesBefore(
@@ -370,10 +344,20 @@ fun MetaDetailsScreen(
                             )
                         }
                         val arePreviousEpisodesWatched = remember(previousEpisodes, watchedUiState.watchedKeys) {
-                            previousEpisodes.isNotEmpty() && previousEpisodes.all(isEpisodeWatched)
+                            WatchingState.areEpisodesWatched(
+                                watchedKeys = watchedUiState.watchedKeys,
+                                metaType = meta.type,
+                                metaId = meta.id,
+                                episodes = previousEpisodes,
+                            )
                         }
                         val isSeasonWatched = remember(seasonEpisodes, watchedUiState.watchedKeys) {
-                            seasonEpisodes.isNotEmpty() && seasonEpisodes.all(isEpisodeWatched)
+                            WatchingState.areEpisodesWatched(
+                                watchedKeys = watchedUiState.watchedKeys,
+                                metaType = meta.type,
+                                metaId = meta.id,
+                                episodes = seasonEpisodes,
+                            )
                         }
                         EpisodeWatchedActionSheet(
                             episode = selectedEpisode,
@@ -384,38 +368,25 @@ fun MetaDetailsScreen(
                             isSeasonWatched = isSeasonWatched,
                             onDismiss = { selectedEpisodeForActions = null },
                             onToggleWatched = {
-                                val watchedItem = meta.toEpisodeWatchedItem(selectedEpisode)
-                                if (isSelectedEpisodeWatched) {
-                                    WatchedRepository.unmarkWatched(watchedItem)
-                                } else {
-                                    WatchedRepository.markWatched(watchedItem)
-                                    WatchProgressRepository.clearProgress(meta.episodePlaybackId(selectedEpisode))
-                                }
-                                syncSeriesWatchedState()
+                                WatchingActions.toggleEpisodeWatched(
+                                    meta = meta,
+                                    episode = selectedEpisode,
+                                    isCurrentlyWatched = isSelectedEpisodeWatched,
+                                )
                             },
                             onTogglePreviousWatched = {
-                                val watchedItems = previousEpisodes.map(meta::toEpisodeWatchedItem)
-                                if (arePreviousEpisodesWatched) {
-                                    WatchedRepository.unmarkWatched(watchedItems)
-                                } else {
-                                    WatchedRepository.markWatched(watchedItems)
-                                    WatchProgressRepository.clearProgress(
-                                        previousEpisodes.map(meta::episodePlaybackId),
-                                    )
-                                }
-                                syncSeriesWatchedState()
+                                WatchingActions.togglePreviousEpisodesWatched(
+                                    meta = meta,
+                                    episodes = previousEpisodes,
+                                    areCurrentlyWatched = arePreviousEpisodesWatched,
+                                )
                             },
                             onToggleSeasonWatched = {
-                                val watchedItems = seasonEpisodes.map(meta::toEpisodeWatchedItem)
-                                if (isSeasonWatched) {
-                                    WatchedRepository.unmarkWatched(watchedItems)
-                                } else {
-                                    WatchedRepository.markWatched(watchedItems)
-                                    WatchProgressRepository.clearProgress(
-                                        seasonEpisodes.map(meta::episodePlaybackId),
-                                    )
-                                }
-                                syncSeriesWatchedState()
+                                WatchingActions.toggleSeasonWatched(
+                                    meta = meta,
+                                    episodes = seasonEpisodes,
+                                    areCurrentlyWatched = isSeasonWatched,
+                                )
                             },
                         )
                     }

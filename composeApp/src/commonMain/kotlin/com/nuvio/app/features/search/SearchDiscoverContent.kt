@@ -46,7 +46,7 @@ import com.nuvio.app.core.ui.posterCardClickable
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.PosterShape
 import com.nuvio.app.features.home.components.HomeEmptyStateCard
-import com.nuvio.app.features.watched.watchedItemKey
+import com.nuvio.app.features.watching.application.WatchingState
 
 internal fun LazyListScope.discoverContent(
     state: DiscoverUiState,
@@ -247,7 +247,10 @@ private fun DiscoverGridRow(
             DiscoverPosterTile(
                 item = item,
                 modifier = Modifier.weight(1f),
-                isWatched = watchedKeys.contains(watchedItemKey(item.type, item.id)),
+                isWatched = WatchingState.isPosterWatched(
+                    watchedKeys = watchedKeys,
+                    item = item,
+                ),
                 onClick = onPosterClick?.let { { it(item) } },
                 onLongClick = onPosterLongClick?.let { { it(item) } },
             )

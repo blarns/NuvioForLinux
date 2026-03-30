@@ -1,15 +1,13 @@
 package com.nuvio.app.features.watchprogress
 
 import co.touchlab.kermit.Logger
-import com.nuvio.app.core.network.SupabaseProvider
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.player.PlayerPlaybackSnapshot
 import com.nuvio.app.features.profiles.ProfileRepository
-import com.nuvio.app.features.watched.WatchedRepository
-import com.nuvio.app.features.watched.episodePlaybackId
-import io.github.jan.supabase.postgrest.postgrest
-import io.github.jan.supabase.postgrest.rpc
+import com.nuvio.app.features.watching.application.WatchingActions
+import com.nuvio.app.features.watching.sync.ProgressSyncAdapter
+import com.nuvio.app.features.watching.sync.SupabaseProgressSyncAdapter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -18,30 +16,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.encodeToJsonElement
-import kotlinx.serialization.json.put
-
-@Serializable
-private data class WatchProgressSyncEntry(
-    @SerialName("content_id") val contentId: String,
-    @SerialName("content_type") val contentType: String,
-    @SerialName("video_id") val videoId: String,
-    val season: Int? = null,
-    val episode: Int? = null,
-    val position: Long = 0,
-    val duration: Long = 0,
-    @SerialName("last_watched") val lastWatched: Long = 0,
-    @SerialName("progress_key") val progressKey: String = "",
-)
 
 object WatchProgressRepository {
     private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val log = Logger.withTag("WatchProgressRepository")
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     private val _uiState = MutableStateFlow(WatchProgressUiState())
     val uiState: StateFlow<WatchProgressUiState> = _uiState.asStateFlow()
@@ -49,6 +27,7 @@ object WatchProgressRepository {
     private var hasLoaded = false
     private var currentProfileId: Int = 1
     private var entriesByVideoId: MutableMap<String, WatchProgressEntry> = mutableMapOf()
+    internal var syncAdapter: ProgressSyncAdapter = SupabaseProgressSyncAdapter
 
     fun ensureLoaded() {
         if (hasLoaded) return
@@ -84,9 +63,7 @@ object WatchProgressRepository {
     suspend fun pullFromServer(profileId: Int) {
         currentProfileId = profileId
         runCatching {
-            val params = buildJsonObject { put("p_profile_id", profileId) }
-            val result = SupabaseProvider.client.postgrest.rpc("sync_pull_watch_progress", params)
-            val serverEntries = result.decodeList<WatchProgressSyncEntry>()
+            val serverEntries = syncAdapter.pull(profileId = profileId)
 
             val oldLocal = entriesByVideoId.toMap()
             val newMap = mutableMapOf<String, WatchProgressEntry>()
@@ -271,30 +248,14 @@ object WatchProgressRepository {
         publish()
         if (persist) persist()
         pushScrobbleToServer(entry)
-        if (entry.isCompleted && entry.isEpisode) {
-            reconcileCompletedSeriesWatchedState(entry)
-        }
+        WatchingActions.onProgressEntryUpdated(entry)
     }
 
     private fun pushScrobbleToServer(entry: WatchProgressEntry) {
         syncScope.launch {
             runCatching {
                 val profileId = ProfileRepository.activeProfileId
-                val syncEntry = WatchProgressSyncEntry(
-                    contentId = entry.parentMetaId,
-                    contentType = entry.contentType,
-                    videoId = entry.videoId,
-                    season = entry.seasonNumber,
-                    episode = entry.episodeNumber,
-                    position = entry.lastPositionMs,
-                    duration = entry.durationMs,
-                    lastWatched = entry.lastUpdatedEpochMs,
-                )
-                val params = buildJsonObject {
-                    put("p_profile_id", profileId)
-                    put("p_entries", json.encodeToJsonElement(listOf(syncEntry)))
-                }
-                SupabaseProvider.client.postgrest.rpc("sync_push_watch_progress", params)
+                syncAdapter.push(profileId = profileId, entries = listOf(entry))
             }.onFailure { e ->
                 log.e(e) { "Failed to push watch progress scrobble" }
             }
@@ -306,12 +267,7 @@ object WatchProgressRepository {
             runCatching {
                 if (entries.isEmpty()) return@runCatching
                 val profileId = ProfileRepository.activeProfileId
-                val progressKeys = entries.map(::progressKeyForEntry)
-                val params = buildJsonObject {
-                    put("p_profile_id", profileId)
-                    put("p_keys", json.encodeToJsonElement(progressKeys))
-                }
-                SupabaseProvider.client.postgrest.rpc("sync_delete_watch_progress", params)
+                syncAdapter.delete(profileId = profileId, entries = entries)
             }.onFailure { e ->
                 log.e(e) { "Failed to push watch progress delete" }
             }
@@ -331,29 +287,4 @@ object WatchProgressRepository {
         )
     }
 
-    private fun reconcileCompletedSeriesWatchedState(entry: WatchProgressEntry) {
-        syncScope.launch {
-            val meta = runCatching {
-                MetaDetailsRepository.fetch(
-                    type = entry.parentMetaType,
-                    id = entry.parentMetaId,
-                )
-            }.getOrNull() ?: return@launch
-
-            WatchedRepository.reconcileSeriesWatchedState(
-                meta = meta,
-                todayIsoDate = CurrentDateProvider.todayIsoDate(),
-                isEpisodeCompleted = { episode ->
-                    progressForVideo(meta.episodePlaybackId(episode))?.isCompleted == true
-                },
-            )
-        }
-    }
-
-    private fun progressKeyForEntry(entry: WatchProgressEntry): String =
-        if (entry.seasonNumber != null && entry.episodeNumber != null) {
-            "${entry.parentMetaId}_s${entry.seasonNumber}e${entry.episodeNumber}"
-        } else {
-            entry.parentMetaId
-        }
 }

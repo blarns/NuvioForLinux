@@ -1,6 +1,8 @@
 package com.nuvio.app.features.watched
 
 import com.nuvio.app.features.home.MetaPreview
+import com.nuvio.app.features.watching.domain.WatchingContentRef
+import com.nuvio.app.features.watching.domain.watchedKey
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -39,5 +41,9 @@ fun watchedItemKey(
     id: String,
     season: Int? = null,
     episode: Int? = null,
-): String = "${type.trim()}:${id.trim()}:${season ?: -1}:${episode ?: -1}"
+): String = watchedKey(
+    content = WatchingContentRef(type = type, id = id),
+    seasonNumber = season,
+    episodeNumber = episode,
+)
 

@@ -1,13 +1,18 @@
 package com.nuvio.app.features.watchprogress
 
+import com.nuvio.app.features.watching.domain.DefaultContinueWatchingLimit
+import com.nuvio.app.features.watching.domain.WatchingContentRef
+import com.nuvio.app.features.watching.domain.WatchingProgressRecord
+import com.nuvio.app.features.watching.domain.continueWatchingProgressEntries
+import com.nuvio.app.features.watching.domain.isProgressComplete
+import com.nuvio.app.features.watching.domain.resumeProgressForSeries
+import com.nuvio.app.features.watching.domain.shouldStoreProgress
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-internal const val ContinueWatchingLimit = 20
-private const val InProgressStartThresholdFraction = 0.02f
-private const val CompletionThresholdFraction = 0.85
+internal const val ContinueWatchingLimit = DefaultContinueWatchingLimit
 
 @Serializable
 private data class StoredWatchProgressPayload(
@@ -36,40 +41,52 @@ internal object WatchProgressCodec {
 internal fun shouldStoreWatchProgress(
     positionMs: Long,
     durationMs: Long,
-): Boolean {
-    val thresholdMs = if (durationMs > 0L) {
-        (durationMs * InProgressStartThresholdFraction).toLong()
-    } else {
-        1L
-    }
-    return positionMs >= thresholdMs
-}
+): Boolean = shouldStoreProgress(positionMs = positionMs, durationMs = durationMs)
 
 internal fun isWatchProgressComplete(
     positionMs: Long,
     durationMs: Long,
     isEnded: Boolean,
-): Boolean {
-    if (isEnded) return true
-    if (durationMs <= 0L) return false
-
-    val watchedFraction = positionMs.toDouble() / durationMs.toDouble()
-    return watchedFraction >= CompletionThresholdFraction
-}
+): Boolean = isProgressComplete(
+    positionMs = positionMs,
+    durationMs = durationMs,
+    isEnded = isEnded,
+)
 
 internal fun List<WatchProgressEntry>.resumeEntryForSeries(metaId: String): WatchProgressEntry? =
-    filter { it.parentMetaId == metaId && !it.isCompleted }
-        .maxByOrNull { it.lastUpdatedEpochMs }
+    firstOrNull { entry -> entry.parentMetaId == metaId }?.let { seed ->
+        resumeProgressForSeries(
+            content = WatchingContentRef(type = seed.parentMetaType, id = metaId),
+            progressRecords = map(WatchProgressEntry::toDomainProgressRecord),
+        )?.let { record ->
+            firstOrNull { entry -> entry.videoId == record.videoId }
+        }
+    }
 
 internal fun List<WatchProgressEntry>.continueWatchingEntries(
     limit: Int = ContinueWatchingLimit,
 ): List<WatchProgressEntry> {
-    val inProgress = filterNot { it.isCompleted }
-    val (episodes, nonEpisodes) = inProgress.partition { it.isEpisode }
-    val latestPerSeries = episodes
+    val domainEntries = continueWatchingProgressEntries(
+        progressRecords = map(WatchProgressEntry::toDomainProgressRecord),
+        limit = limit,
+    )
+    val ids = domainEntries.map { record -> record.videoId }.toSet()
+    return filter { entry -> entry.videoId in ids }
         .sortedByDescending { it.lastUpdatedEpochMs }
-        .distinctBy { it.parentMetaId }
-    return (nonEpisodes + latestPerSeries)
-        .sortedByDescending { it.lastUpdatedEpochMs }
-        .take(limit)
 }
+
+private fun WatchProgressEntry.toDomainProgressRecord(): WatchingProgressRecord =
+    WatchingProgressRecord(
+        content = WatchingContentRef(
+            type = parentMetaType,
+            id = parentMetaId,
+        ),
+        videoId = videoId,
+        seasonNumber = seasonNumber,
+        episodeNumber = episodeNumber,
+        lastUpdatedEpochMs = lastUpdatedEpochMs,
+        lastPositionMs = lastPositionMs,
+        isCompleted = isCompleted,
+        episodeTitle = episodeTitle,
+        episodeThumbnail = episodeThumbnail,
+    )

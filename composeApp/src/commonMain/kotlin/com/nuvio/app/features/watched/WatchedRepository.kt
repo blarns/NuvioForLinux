@@ -1,11 +1,10 @@
 package com.nuvio.app.features.watched
 
 import co.touchlab.kermit.Logger
-import com.nuvio.app.core.network.SupabaseProvider
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.profiles.ProfileRepository
-import io.github.jan.supabase.postgrest.postgrest
-import io.github.jan.supabase.postgrest.rpc
+import com.nuvio.app.features.watching.sync.SupabaseWatchedSyncAdapter
+import com.nuvio.app.features.watching.sync.WatchedSyncAdapter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -13,35 +12,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.encodeToJsonElement
-import kotlinx.serialization.json.put
 
 @Serializable
 private data class StoredWatchedPayload(
     val items: List<WatchedItem> = emptyList(),
-)
-
-@Serializable
-private data class WatchedSyncItem(
-    @SerialName("content_id") val contentId: String,
-    @SerialName("content_type") val contentType: String,
-    val title: String = "",
-    val season: Int? = null,
-    val episode: Int? = null,
-    @SerialName("watched_at") val watchedAt: Long = 0,
-)
-
-@Serializable
-private data class WatchedDeleteKey(
-    @SerialName("content_id") val contentId: String,
-    val season: Int? = null,
-    val episode: Int? = null,
 )
 
 object WatchedRepository {
@@ -60,6 +38,7 @@ object WatchedRepository {
     private var hasLoaded = false
     private var currentProfileId: Int = 1
     private var itemsByKey: MutableMap<String, WatchedItem> = mutableMapOf()
+    internal var syncAdapter: WatchedSyncAdapter = SupabaseWatchedSyncAdapter
 
     fun ensureLoaded() {
         if (hasLoaded) return
@@ -97,33 +76,14 @@ object WatchedRepository {
     suspend fun pullFromServer(profileId: Int) {
         currentProfileId = profileId
         runCatching {
-            val serverItems = mutableListOf<WatchedSyncItem>()
-            var page = 1
+            val serverItems = syncAdapter.pull(
+                profileId = profileId,
+                pageSize = watchedItemsPageSize,
+            )
 
-            while (true) {
-                val params = buildJsonObject {
-                    put("p_profile_id", profileId)
-                    put("p_page", page)
-                    put("p_page_size", watchedItemsPageSize)
-                }
-                val result = SupabaseProvider.client.postgrest.rpc("sync_pull_watched_items", params)
-                val pageItems = result.decodeList<WatchedSyncItem>()
-                serverItems += pageItems
-
-                if (pageItems.size < watchedItemsPageSize) break
-                page += 1
-            }
-
-            itemsByKey = serverItems.map { syncItem ->
-                WatchedItem(
-                    id = syncItem.contentId,
-                    type = syncItem.contentType,
-                    name = syncItem.title,
-                    season = syncItem.season,
-                    episode = syncItem.episode,
-                    markedAtEpochMs = syncItem.watchedAt,
-                )
-            }.associateBy { watchedItemKey(it.type, it.id, it.season, it.episode) }.toMutableMap()
+            itemsByKey = serverItems
+                .associateBy { watchedItemKey(it.type, it.id, it.season, it.episode) }
+                .toMutableMap()
             hasLoaded = true
             publish()
             persist()
@@ -238,21 +198,7 @@ object WatchedRepository {
             runCatching {
                 if (items.isEmpty()) return@runCatching
                 val profileId = ProfileRepository.activeProfileId
-                val syncItems = items.map { item ->
-                    WatchedSyncItem(
-                        contentId = item.id,
-                        contentType = item.type,
-                        title = item.name,
-                        season = item.season,
-                        episode = item.episode,
-                        watchedAt = item.markedAtEpochMs,
-                    )
-                }
-                val params = buildJsonObject {
-                    put("p_profile_id", profileId)
-                    put("p_items", json.encodeToJsonElement(syncItems))
-                }
-                SupabaseProvider.client.postgrest.rpc("sync_push_watched_items", params)
+                syncAdapter.push(profileId = profileId, items = items)
             }.onFailure { e ->
                 log.e(e) { "Failed to push watched items" }
             }
@@ -264,18 +210,7 @@ object WatchedRepository {
             runCatching {
                 if (items.isEmpty()) return@runCatching
                 val profileId = ProfileRepository.activeProfileId
-                val keys = items.map { item ->
-                    WatchedDeleteKey(
-                        contentId = item.id,
-                        season = item.season,
-                        episode = item.episode,
-                    )
-                }
-                val params = buildJsonObject {
-                    put("p_profile_id", profileId)
-                    put("p_keys", json.encodeToJsonElement(keys))
-                }
-                SupabaseProvider.client.postgrest.rpc("sync_delete_watched_items", params)
+                syncAdapter.delete(profileId = profileId, items = items)
             }.onFailure { e ->
                 log.e(e) { "Failed to push watched item delete" }
             }

@@ -2,10 +2,14 @@ package com.nuvio.app.features.watched
 
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.MetaVideo
-import com.nuvio.app.features.details.isReleasedBy
 import com.nuvio.app.features.details.normalizeSeasonNumber
 import com.nuvio.app.features.details.sortedPlayableEpisodes
-import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
+import com.nuvio.app.features.watching.domain.WatchingContentRef
+import com.nuvio.app.features.watching.domain.WatchingReleasedEpisode
+import com.nuvio.app.features.watching.domain.buildPlaybackVideoId
+import com.nuvio.app.features.watching.domain.hasWatchedAllMainSeasonEpisodes as domainHasWatchedAllMainSeasonEpisodes
+import com.nuvio.app.features.watching.domain.releasedEpisodes
+import com.nuvio.app.features.watching.domain.releasedMainSeasonEpisodes as domainReleasedMainSeasonEpisodes
 
 fun MetaDetails.toSeriesWatchedItem(markedAtEpochMs: Long = 0L): WatchedItem =
     WatchedItem(
@@ -32,12 +36,24 @@ fun MetaDetails.toEpisodeWatchedItem(
         markedAtEpochMs = markedAtEpochMs,
     )
 
-fun MetaDetails.releasedPlayableEpisodes(todayIsoDate: String): List<MetaVideo> =
-    sortedPlayableEpisodes().filter { episode -> episode.isReleasedBy(todayIsoDate) }
+fun MetaDetails.releasedPlayableEpisodes(todayIsoDate: String): List<MetaVideo> {
+    val domainEpisodes = releasedEpisodes(
+        episodes = sortedPlayableEpisodes().map(MetaVideo::toDomainReleasedEpisode),
+        todayIsoDate = todayIsoDate,
+    )
+    val releasedIds = domainEpisodes.mapTo(linkedSetOf()) { episode -> episode.videoId }
+    return sortedPlayableEpisodes().filter { episode -> episode.id in releasedIds }
+}
 
 fun MetaDetails.releasedMainSeasonEpisodes(todayIsoDate: String): List<MetaVideo> =
-    releasedPlayableEpisodes(todayIsoDate)
-        .filter { episode -> normalizeSeasonNumber(episode.season) > 0 }
+    run {
+        val domainEpisodes = domainReleasedMainSeasonEpisodes(
+            episodes = sortedPlayableEpisodes().map(MetaVideo::toDomainReleasedEpisode),
+            todayIsoDate = todayIsoDate,
+        )
+        val releasedIds = domainEpisodes.mapTo(linkedSetOf()) { episode -> episode.videoId }
+        sortedPlayableEpisodes().filter { episode -> episode.id in releasedIds }
+    }
 
 fun MetaDetails.previousReleasedEpisodesBefore(
     target: MetaVideo,
@@ -60,15 +76,28 @@ fun MetaDetails.releasedEpisodesForSeason(
 fun MetaDetails.hasWatchedAllMainSeasonEpisodes(
     todayIsoDate: String,
     isEpisodeWatched: (MetaVideo) -> Boolean,
-): Boolean {
-    val mainSeasonEpisodes = releasedMainSeasonEpisodes(todayIsoDate)
-    return mainSeasonEpisodes.isNotEmpty() && mainSeasonEpisodes.all(isEpisodeWatched)
-}
+): Boolean = domainHasWatchedAllMainSeasonEpisodes(
+    episodes = sortedPlayableEpisodes().map(MetaVideo::toDomainReleasedEpisode),
+    todayIsoDate = todayIsoDate,
+    isEpisodeWatched = { domainEpisode ->
+        sortedPlayableEpisodes().firstOrNull { episode -> episode.id == domainEpisode.videoId }?.let(isEpisodeWatched) == true
+    },
+)
 
 fun MetaDetails.episodePlaybackId(video: MetaVideo): String =
     buildPlaybackVideoId(
-        parentMetaId = id,
+        content = WatchingContentRef(type = type, id = id),
         seasonNumber = video.season,
         episodeNumber = video.episode,
         fallbackVideoId = video.id,
+    )
+
+private fun MetaVideo.toDomainReleasedEpisode(): WatchingReleasedEpisode =
+    WatchingReleasedEpisode(
+        videoId = id,
+        seasonNumber = season,
+        episodeNumber = episode,
+        title = title,
+        thumbnail = thumbnail,
+        releasedDate = released,
     )

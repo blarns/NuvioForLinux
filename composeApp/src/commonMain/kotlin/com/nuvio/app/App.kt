@@ -98,15 +98,10 @@ import com.nuvio.app.features.streams.StreamsRepository
 import com.nuvio.app.features.streams.StreamsScreen
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.watched.WatchedRepository
-import com.nuvio.app.features.watched.releasedPlayableEpisodes
-import com.nuvio.app.features.watched.toEpisodeWatchedItem
-import com.nuvio.app.features.watched.toSeriesWatchedItem
-import com.nuvio.app.features.watched.episodePlaybackId
-import com.nuvio.app.features.watched.toWatchedItem
-import com.nuvio.app.features.watched.watchedItemKey
 import com.nuvio.app.features.watchprogress.ContinueWatchingItem
-import com.nuvio.app.features.watchprogress.CurrentDateProvider
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
+import com.nuvio.app.features.watching.application.WatchingActions
+import com.nuvio.app.features.watching.application.WatchingState
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import nuvio.composeapp.generated.resources.Res
@@ -693,7 +688,10 @@ private fun MainAppContent(
                     LibraryRepository.isSaved(preview.id)
                 } == true,
                 isWatched = selectedPosterForActions?.let { preview ->
-                    watchedUiState.watchedKeys.contains(watchedItemKey(preview.type, preview.id))
+                    WatchingState.isPosterWatched(
+                        watchedKeys = watchedUiState.watchedKeys,
+                        item = preview,
+                    )
                 } == true,
                 onDismiss = { selectedPosterForActions = null },
                 onToggleLibrary = {
@@ -704,7 +702,7 @@ private fun MainAppContent(
                 onToggleWatched = {
                     selectedPosterForActions?.let { preview ->
                         coroutineScope.launch {
-                            togglePosterWatched(preview)
+                            WatchingActions.togglePosterWatched(preview)
                         }
                     }
                 },
@@ -837,37 +835,5 @@ private fun BoxScope.keepAliveTab(
             .zIndex(if (selected) 1f else 0f),
     ) {
         content()
-    }
-}
-
-private suspend fun togglePosterWatched(preview: MetaPreview) {
-    if (preview.type != "series") {
-        WatchedRepository.toggleWatched(preview.toWatchedItem(markedAtEpochMs = 0L))
-        return
-    }
-
-    val isCurrentlyWatched = WatchedRepository.isWatched(
-        id = preview.id,
-        type = preview.type,
-    )
-    val meta = MetaDetailsRepository.fetch(type = preview.type, id = preview.id)
-    if (meta == null) {
-        WatchedRepository.toggleWatched(preview.toWatchedItem(markedAtEpochMs = 0L))
-        return
-    }
-
-    val todayIsoDate = CurrentDateProvider.todayIsoDate()
-    val seriesItems = buildList {
-        add(meta.toSeriesWatchedItem())
-        addAll(meta.releasedPlayableEpisodes(todayIsoDate).map(meta::toEpisodeWatchedItem))
-    }
-
-    if (isCurrentlyWatched) {
-        WatchedRepository.unmarkWatched(seriesItems)
-    } else {
-        WatchedRepository.markWatched(seriesItems)
-        WatchProgressRepository.clearProgress(
-            meta.releasedPlayableEpisodes(todayIsoDate).map(meta::episodePlaybackId),
-        )
     }
 }
