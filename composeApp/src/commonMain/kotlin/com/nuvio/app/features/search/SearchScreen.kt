@@ -1,16 +1,9 @@
 package com.nuvio.app.features.search
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
@@ -18,19 +11,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.ui.NuvioInputField
+import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioScreenHeader
-import com.nuvio.app.core.ui.nuvioPlatformExtraBottomPadding
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.components.HomeCatalogRowSection
@@ -58,18 +49,13 @@ fun SearchScreen(
     val discoverUiState by SearchRepository.discoverUiState.collectAsStateWithLifecycle()
     val watchedUiState by WatchedRepository.uiState.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
-    var headerHeightPx by remember { mutableIntStateOf(0) }
     val listState = rememberLazyListState()
-    val headerTitle by remember(query, listState, headerHeightPx) {
+    val headerTitle by remember(query, listState) {
         derivedStateOf {
             if (query.isNotBlank()) {
                 "Search"
             } else {
-                val discoverInFocus = when {
-                    listState.firstVisibleItemIndex > 0 -> true
-                    headerHeightPx > 0 -> listState.firstVisibleItemScrollOffset >= (headerHeightPx * 0.65f).toInt()
-                    else -> false
-                }
+                val discoverInFocus = listState.firstVisibleItemIndex > 0
                 if (discoverInFocus) "Discover" else "Search"
             }
         }
@@ -129,82 +115,76 @@ fun SearchScreen(
             }
     }
 
-    Box(
+    NuvioScreen(
+        horizontalPadding = 0.dp,
+        listState = listState,
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
     ) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 18.dp + nuvioPlatformExtraBottomPadding),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item {
-                Spacer(modifier = Modifier.height(with(androidx.compose.ui.platform.LocalDensity.current) { headerHeightPx.toDp() }))
-            }
-
-            if (query.isBlank()) {
-                discoverContent(
-                    state = discoverUiState,
-                    onTypeSelected = SearchRepository::selectDiscoverType,
-                    onCatalogSelected = SearchRepository::selectDiscoverCatalog,
-                    onGenreSelected = SearchRepository::selectDiscoverGenre,
-                    watchedKeys = watchedUiState.watchedKeys,
-                    onPosterClick = onPosterClick,
-                    onPosterLongClick = onPosterLongClick,
+        stickyHeader {
+            androidx.compose.foundation.layout.Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background),
+            ) {
+                NuvioScreenHeader(
+                    title = headerTitle,
+                    modifier = Modifier.padding(horizontal = 16.dp),
                 )
-            } else {
-                when {
-                    uiState.isLoading && uiState.sections.isEmpty() -> {
-                        items(2) {
-                            HomeSkeletonRow(modifier = Modifier.padding(horizontal = 16.dp))
-                        }
-                    }
-
-                    uiState.sections.isEmpty() -> {
-                        item {
-                            SearchEmptyStateCard(
-                                reason = uiState.emptyStateReason,
-                                errorMessage = uiState.errorMessage,
-                                modifier = Modifier.padding(horizontal = 16.dp),
-                            )
-                        }
-                    }
-
-                    else -> {
-                        items(
-                            items = uiState.sections,
-                            key = { section -> section.key },
-                        ) { section ->
-                            HomeCatalogRowSection(
-                                section = section,
-                                modifier = Modifier.padding(bottom = 12.dp),
-                                watchedKeys = watchedUiState.watchedKeys,
-                                onPosterClick = onPosterClick,
-                                onPosterLongClick = onPosterLongClick,
-                            )
-                        }
-                    }
+                androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(6.dp))
+                androidx.compose.foundation.layout.Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    NuvioInputField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = "Search movies, shows...",
+                    )
                 }
             }
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.background)
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 12.dp)
-                .onSizeChanged { headerHeightPx = it.height },
-        ) {
-            NuvioScreenHeader(title = headerTitle)
-            Spacer(modifier = Modifier.height(12.dp))
-            NuvioInputField(
-                value = query,
-                onValueChange = { query = it },
-                placeholder = "Search movies, shows...",
+        if (query.isBlank()) {
+            discoverContent(
+                state = discoverUiState,
+                onTypeSelected = SearchRepository::selectDiscoverType,
+                onCatalogSelected = SearchRepository::selectDiscoverCatalog,
+                onGenreSelected = SearchRepository::selectDiscoverGenre,
+                watchedKeys = watchedUiState.watchedKeys,
+                onPosterClick = onPosterClick,
+                onPosterLongClick = onPosterLongClick,
             )
+        } else {
+            when {
+                uiState.isLoading && uiState.sections.isEmpty() -> {
+                    items(2) {
+                        HomeSkeletonRow(modifier = Modifier.padding(horizontal = 0.dp))
+                    }
+                }
+
+                uiState.sections.isEmpty() -> {
+                    item {
+                        SearchEmptyStateCard(
+                            reason = uiState.emptyStateReason,
+                            errorMessage = uiState.errorMessage,
+                        )
+                    }
+                }
+
+                else -> {
+                    items(
+                        items = uiState.sections,
+                        key = { section -> section.key },
+                    ) { section ->
+                        HomeCatalogRowSection(
+                            section = section,
+                            modifier = Modifier.padding(bottom = 12.dp),
+                            watchedKeys = watchedUiState.watchedKeys,
+                            onPosterClick = onPosterClick,
+                            onPosterLongClick = onPosterLongClick,
+                        )
+                    }
+                }
+            }
         }
     }
 }

@@ -24,7 +24,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BasicAlertDialog
@@ -58,10 +60,12 @@ fun NuvioScreen(
     modifier: Modifier = Modifier,
     horizontalPadding: Dp = 16.dp,
     topPadding: Dp? = null,
+    listState: LazyListState = rememberLazyListState(),
     content: LazyListScope.() -> Unit,
 ) {
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     LazyColumn(
+        state = listState,
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
