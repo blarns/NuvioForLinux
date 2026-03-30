@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.format.formatReleaseDateForDisplay
 import com.nuvio.app.core.ui.NuvioAnimatedWatchedBadge
 import com.nuvio.app.core.ui.posterCardClickable
 import com.nuvio.app.features.home.MetaPreview
@@ -304,7 +305,7 @@ private fun DiscoverPosterTile(
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
-        val detail = item.releaseInfo
+        val detail = item.releaseInfo?.let { formatReleaseDateForDisplay(it) }
         if (detail != null) {
             Text(
                 text = detail,

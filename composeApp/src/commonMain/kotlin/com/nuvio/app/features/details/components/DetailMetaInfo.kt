@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nuvio.app.core.format.formatReleaseDateForDisplay
 import com.nuvio.app.features.details.MetaDetails
 
 @Composable
@@ -37,7 +38,7 @@ fun DetailMetaInfo(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         val infoParts = buildList {
-            meta.releaseInfo?.let { add(it) }
+            meta.releaseInfo?.let { add(formatReleaseDateForDisplay(it)) }
             meta.ageRating?.let { add(it) }
             meta.runtime?.let { add(it.uppercase()) }
         }

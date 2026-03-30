@@ -2,6 +2,7 @@ package com.nuvio.app.features.home.components
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import com.nuvio.app.core.format.formatReleaseDateForDisplay
 import com.nuvio.app.core.ui.NuvioPosterCard
 import com.nuvio.app.core.ui.NuvioPosterShape
 import com.nuvio.app.features.home.MetaPreview
@@ -20,7 +21,7 @@ fun HomePosterCard(
         imageUrl = item.poster,
         modifier = modifier,
         shape = item.posterShape.toNuvioPosterShape(),
-        detailLine = item.releaseInfo,
+        detailLine = item.releaseInfo?.let { formatReleaseDateForDisplay(it) },
         isWatched = isWatched,
         onClick = onClick,
         onLongClick = onLongClick,

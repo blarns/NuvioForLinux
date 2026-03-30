@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.nuvio.app.core.format.formatReleaseDateForDisplay
 import com.nuvio.app.features.details.MetaDetails
 
 @Composable
@@ -27,7 +28,7 @@ fun DetailAdditionalInfoSection(
     val title = if (isSeriesLike) "Show Details" else "Movie Details"
     val rows = buildList {
         meta.status?.let { add("Status" to it) }
-        meta.releaseInfo?.let { add("Release Info" to it) }
+        meta.releaseInfo?.let { add("Release Info" to formatReleaseDateForDisplay(it)) }
         meta.runtime?.let { add("Runtime" to it.uppercase()) }
         meta.ageRating?.let { add("Certification" to it) }
         meta.country?.let { add("Origin Country" to it) }

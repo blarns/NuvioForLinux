@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.format.formatReleaseDateForDisplay
 import com.nuvio.app.features.home.MetaPreview
 import kotlinx.coroutines.launch
 
@@ -212,7 +213,7 @@ private fun PosterSheetHeader(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = item.releaseInfo?.takeIf { it.isNotBlank() }
+                text = item.releaseInfo?.takeIf { it.isNotBlank() }?.let { formatReleaseDateForDisplay(it) }
                     ?: item.type.replaceFirstChar { char ->
                         if (char.isLowerCase()) char.titlecase() else char.toString()
                     },

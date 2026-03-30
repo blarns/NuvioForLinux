@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.format.formatReleaseDateForDisplay
 import com.nuvio.app.core.ui.NuvioAnimatedWatchedBadge
 import com.nuvio.app.core.ui.NuvioProgressBar
 import com.nuvio.app.features.details.MetaDetails
@@ -583,7 +584,7 @@ private fun EpisodeCard(
                     overflow = TextOverflow.Ellipsis,
                 )
 
-                video.released?.formattedDate()?.let { formattedDate ->
+                video.released?.let { formatReleaseDateForDisplay(it) }?.let { formattedDate ->
                     Text(
                         text = formattedDate,
                         style = MaterialTheme.typography.labelMedium.copy(
@@ -796,8 +797,3 @@ private fun MetaVideo.episodeBadge(): String =
         season != null -> "S${season.toString().padStart(2, '0')}"
         else -> "FILE"
     }
-
-private fun String.formattedDate(): String {
-    val isoDate = substringBefore('T')
-    return if (isoDate.length == 10) isoDate else this
-}

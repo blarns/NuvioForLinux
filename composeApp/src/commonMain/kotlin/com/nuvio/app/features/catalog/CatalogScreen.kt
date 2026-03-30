@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.format.formatReleaseDateForDisplay
 import com.nuvio.app.core.ui.NuvioBackButton
 import com.nuvio.app.core.ui.posterCardClickable
 import com.nuvio.app.core.ui.nuvioPlatformExtraBottomPadding
@@ -217,7 +218,7 @@ private fun CatalogPosterTile(
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
-        val detail = item.releaseInfo
+        val detail = item.releaseInfo?.let { formatReleaseDateForDisplay(it) }
         if (detail != null) {
             Text(
                 text = detail,
