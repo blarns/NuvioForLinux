@@ -8,6 +8,7 @@ import com.nuvio.app.core.ui.NuvioViewAllPillSize
 import com.nuvio.app.features.home.HomeCatalogSection
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.stableKey
+import com.nuvio.app.features.watched.watchedItemKey
 
 @Composable
 fun HomeCatalogRowSection(
@@ -31,7 +32,7 @@ fun HomeCatalogRowSection(
     ) { item ->
         HomePosterCard(
             item = item,
-            isWatched = watchedKeys.contains("${item.type}:${item.id}"),
+            isWatched = watchedKeys.contains(watchedItemKey(item.type, item.id)),
             onClick = onPosterClick?.let { { it(item) } },
             onLongClick = onPosterLongClick?.let { { it(item) } },
         )

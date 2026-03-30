@@ -42,10 +42,12 @@ fun EpisodeWatchedActionSheet(
     seasonLabel: String,
     isEpisodeWatched: Boolean,
     canMarkPreviousEpisodes: Boolean,
+    arePreviousEpisodesWatched: Boolean,
+    isSeasonWatched: Boolean,
     onDismiss: () -> Unit,
     onToggleWatched: () -> Unit,
-    onMarkPreviousWatched: () -> Unit,
-    onMarkSeasonWatched: () -> Unit,
+    onTogglePreviousWatched: () -> Unit,
+    onToggleSeasonWatched: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
@@ -94,9 +96,13 @@ fun EpisodeWatchedActionSheet(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
                 EpisodeActionSheetRow(
                     icon = Icons.Default.DoneAll,
-                    title = "Mark previous as watched",
+                    title = if (arePreviousEpisodesWatched) {
+                        "Mark previous as unwatched"
+                    } else {
+                        "Mark previous as watched"
+                    },
                     onClick = {
-                        onMarkPreviousWatched()
+                        onTogglePreviousWatched()
                         coroutineScope.launch {
                             dismissEpisodeActionSheet(sheetState = sheetState, onDismiss = onDismiss)
                         }
@@ -106,9 +112,13 @@ fun EpisodeWatchedActionSheet(
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
             EpisodeActionSheetRow(
                 icon = Icons.Default.PlaylistAddCheckCircle,
-                title = "Mark $seasonLabel as watched",
+                title = if (isSeasonWatched) {
+                    "Mark $seasonLabel as unwatched"
+                } else {
+                    "Mark $seasonLabel as watched"
+                },
                 onClick = {
-                    onMarkSeasonWatched()
+                    onToggleSeasonWatched()
                     coroutineScope.launch {
                         dismissEpisodeActionSheet(sheetState = sheetState, onDismiss = onDismiss)
                     }

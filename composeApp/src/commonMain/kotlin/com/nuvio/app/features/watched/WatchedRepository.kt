@@ -2,6 +2,7 @@ package com.nuvio.app.features.watched
 
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.network.SupabaseProvider
+import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.profiles.ProfileRepository
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
@@ -206,6 +207,30 @@ object WatchedRepository {
     ): Boolean {
         ensureLoaded()
         return itemsByKey.containsKey(watchedItemKey(type, id, season, episode))
+    }
+
+    fun reconcileSeriesWatchedState(
+        meta: MetaDetails,
+        todayIsoDate: String,
+        isEpisodeCompleted: (com.nuvio.app.features.details.MetaVideo) -> Boolean = { false },
+    ) {
+        ensureLoaded()
+        val shouldMarkSeriesWatched = meta.hasWatchedAllMainSeasonEpisodes(todayIsoDate) { episode ->
+            isWatched(
+                id = meta.id,
+                type = meta.type,
+                season = episode.season,
+                episode = episode.episode,
+            ) || isEpisodeCompleted(episode)
+        }
+        val seriesWatchedItem = meta.toSeriesWatchedItem()
+        if (shouldMarkSeriesWatched) {
+            if (!isWatched(id = meta.id, type = meta.type)) {
+                markWatched(seriesWatchedItem)
+            }
+        } else if (isWatched(id = meta.id, type = meta.type)) {
+            unmarkWatched(seriesWatchedItem)
+        }
     }
 
     private fun pushMarksToServer(items: Collection<WatchedItem>) {

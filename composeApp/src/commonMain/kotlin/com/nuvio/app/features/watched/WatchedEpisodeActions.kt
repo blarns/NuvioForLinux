@@ -35,6 +35,10 @@ fun MetaDetails.toEpisodeWatchedItem(
 fun MetaDetails.releasedPlayableEpisodes(todayIsoDate: String): List<MetaVideo> =
     sortedPlayableEpisodes().filter { episode -> episode.isReleasedBy(todayIsoDate) }
 
+fun MetaDetails.releasedMainSeasonEpisodes(todayIsoDate: String): List<MetaVideo> =
+    releasedPlayableEpisodes(todayIsoDate)
+        .filter { episode -> normalizeSeasonNumber(episode.season) > 0 }
+
 fun MetaDetails.previousReleasedEpisodesBefore(
     target: MetaVideo,
     todayIsoDate: String,
@@ -51,6 +55,14 @@ fun MetaDetails.releasedEpisodesForSeason(
     val normalizedSeason = normalizeSeasonNumber(seasonNumber)
     return releasedPlayableEpisodes(todayIsoDate)
         .filter { episode -> normalizeSeasonNumber(episode.season) == normalizedSeason }
+}
+
+fun MetaDetails.hasWatchedAllMainSeasonEpisodes(
+    todayIsoDate: String,
+    isEpisodeWatched: (MetaVideo) -> Boolean,
+): Boolean {
+    val mainSeasonEpisodes = releasedMainSeasonEpisodes(todayIsoDate)
+    return mainSeasonEpisodes.isNotEmpty() && mainSeasonEpisodes.all(isEpisodeWatched)
 }
 
 fun MetaDetails.episodePlaybackId(video: MetaVideo): String =

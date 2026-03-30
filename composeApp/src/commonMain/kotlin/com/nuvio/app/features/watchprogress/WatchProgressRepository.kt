@@ -6,6 +6,8 @@ import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.player.PlayerPlaybackSnapshot
 import com.nuvio.app.features.profiles.ProfileRepository
+import com.nuvio.app.features.watched.WatchedRepository
+import com.nuvio.app.features.watched.episodePlaybackId
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
 import kotlinx.coroutines.CoroutineScope
@@ -269,6 +271,9 @@ object WatchProgressRepository {
         publish()
         if (persist) persist()
         pushScrobbleToServer(entry)
+        if (entry.isCompleted && entry.isEpisode) {
+            reconcileCompletedSeriesWatchedState(entry)
+        }
     }
 
     private fun pushScrobbleToServer(entry: WatchProgressEntry) {
@@ -324,6 +329,25 @@ object WatchProgressRepository {
             currentProfileId,
             WatchProgressCodec.encodeEntries(entriesByVideoId.values),
         )
+    }
+
+    private fun reconcileCompletedSeriesWatchedState(entry: WatchProgressEntry) {
+        syncScope.launch {
+            val meta = runCatching {
+                MetaDetailsRepository.fetch(
+                    type = entry.parentMetaType,
+                    id = entry.parentMetaId,
+                )
+            }.getOrNull() ?: return@launch
+
+            WatchedRepository.reconcileSeriesWatchedState(
+                meta = meta,
+                todayIsoDate = CurrentDateProvider.todayIsoDate(),
+                isEpisodeCompleted = { episode ->
+                    progressForVideo(meta.episodePlaybackId(episode))?.isCompleted == true
+                },
+            )
+        }
     }
 
     private fun progressKeyForEntry(entry: WatchProgressEntry): String =
