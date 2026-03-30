@@ -1,7 +1,10 @@
 package com.nuvio.app.features.details.components
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -37,23 +40,36 @@ fun DetailMetaInfo(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        val infoParts = buildList {
-            formatMetaReleaseLineForDetails(meta)?.let { add(it) }
-            meta.ageRating?.let { add(it) }
-            meta.runtime?.let { add(it.uppercase()) }
-        }
-        if (infoParts.isNotEmpty() || meta.imdbRating != null) {
+        val releaseLine = formatMetaReleaseLineForDetails(meta)
+        val runtimeText = meta.runtime?.trim()?.takeIf { it.isNotBlank() }?.uppercase()
+        val ageBadge = meta.ageRating?.trim()?.takeIf { it.isNotBlank() }
+        val hasMetaRow = releaseLine != null ||
+            runtimeText != null ||
+            ageBadge != null ||
+            meta.imdbRating != null
+        if (hasMetaRow) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                infoParts.forEach { part ->
+                releaseLine?.let { line ->
                     Text(
-                        text = part,
+                        text = line,
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onBackground,
                         fontWeight = FontWeight.Bold,
                     )
+                }
+                runtimeText?.let { rt ->
+                    Text(
+                        text = rt,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                ageBadge?.let { badge ->
+                    DetailHeroMetaBadge(text = badge)
                 }
                 if (meta.imdbRating != null) {
                     Row(
@@ -139,6 +155,30 @@ private fun MetaLabelValueRow(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+@Composable
+private fun DetailHeroMetaBadge(
+    text: String,
+    contentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+) {
+    Box(
+        modifier = Modifier
+            .border(
+                border = BorderStroke(1.dp, contentColor.copy(alpha = 0.55f)),
+                shape = RoundedCornerShape(6.dp),
+            )
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = contentColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

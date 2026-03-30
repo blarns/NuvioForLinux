@@ -140,7 +140,8 @@ object TmdbSettingsRepository {
     private fun loadFromDisk() {
         hasLoaded = true
         enabled = TmdbSettingsStorage.loadEnabled() ?: false
-        language = normalizeLanguage(TmdbSettingsStorage.loadLanguage())
+        val storedLanguage = TmdbSettingsStorage.loadLanguage()
+        language = if (storedLanguage == null) "en" else normalizeLanguage(storedLanguage)
         useArtwork = TmdbSettingsStorage.loadUseArtwork() ?: true
         useBasicInfo = TmdbSettingsStorage.loadUseBasicInfo() ?: true
         useDetails = TmdbSettingsStorage.loadUseDetails() ?: true
@@ -172,9 +173,7 @@ object TmdbSettingsRepository {
     }
 }
 
-internal fun normalizeLanguage(value: String?): String =
-    value
-        ?.trim()
-        ?.replace('_', '-')
-        ?.takeIf { it.isNotBlank() }
-        ?: "en"
+internal fun normalizeLanguage(value: String?): String {
+    val trimmed = value?.trim()?.replace('_', '-') ?: return ""
+    return trimmed.takeIf { it.isNotBlank() } ?: ""
+}
