@@ -8,6 +8,7 @@ import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.postgrest.rpc
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,6 +50,7 @@ object AddonRepository {
     private var initialized = false
     private var pulledFromServer = false
     private var currentProfileId: Int = 1
+    private val activeRefreshJobs = mutableMapOf<String, Job>()
 
     fun initialize() {
         if (initialized) return
@@ -60,20 +62,24 @@ object AddonRepository {
         log.d { "initialize() — local addon count: ${storedUrls.size}" }
         if (storedUrls.isEmpty()) return
 
+        val existingByUrl = _uiState.value.addons.associateBy(ManagedAddon::manifestUrl)
         _uiState.value = AddonsUiState(
             addons = storedUrls.map { manifestUrl ->
-                ManagedAddon(
-                    manifestUrl = manifestUrl,
-                    isRefreshing = true,
-                )
+                existingByUrl[manifestUrl].toPendingAddon(manifestUrl)
             },
         )
 
-        storedUrls.forEach(::refreshAddon)
+        storedUrls.forEach { manifestUrl ->
+            val existing = existingByUrl[manifestUrl]
+            if (existing == null || (existing.manifest == null && !existing.isRefreshing)) {
+                refreshAddon(manifestUrl)
+            }
+        }
     }
 
     fun onProfileChanged(profileId: Int) {
         if (profileId == currentProfileId && initialized) return
+        cancelActiveRefreshes()
         currentProfileId = profileId
         initialized = false
         pulledFromServer = false
@@ -81,6 +87,7 @@ object AddonRepository {
     }
 
     fun clearLocalState() {
+        cancelActiveRefreshes()
         currentProfileId = 1
         initialized = false
         pulledFromServer = false
@@ -129,13 +136,19 @@ object AddonRepository {
                 }
             }
 
+            val existingByUrl = _uiState.value.addons.associateBy(ManagedAddon::manifestUrl)
             _uiState.value = AddonsUiState(
                 addons = urls.map { url ->
-                    ManagedAddon(manifestUrl = url, isRefreshing = true)
+                    existingByUrl[url].toPendingAddon(url)
                 },
             )
             persist()
-            urls.forEach(::refreshAddon)
+            urls.forEach { url ->
+                val existing = existingByUrl[url]
+                if (existing == null || (existing.manifest == null && !existing.isRefreshing)) {
+                    refreshAddon(url)
+                }
+            }
             pulledFromServer = true
             initialized = true
             log.i { "pullFromServer() — applied ${urls.size} addons to state" }
@@ -208,42 +221,53 @@ object AddonRepository {
     }
 
     fun refreshAddon(manifestUrl: String) {
-        markRefreshing(manifestUrl)
-        scope.launch {
-            val result = runCatching {
-                val payload = httpGetText(manifestUrl)
-                AddonManifestParser.parse(
-                    manifestUrl = manifestUrl,
-                    payload = payload,
-                )
-            }
+        val existingJob = activeRefreshJobs[manifestUrl]
+        if (existingJob?.isActive == true) return
 
-            _uiState.update { current ->
-                current.copy(
-                    addons = current.addons.map { addon ->
-                        if (addon.manifestUrl != manifestUrl) {
-                            addon
-                        } else {
-                            result.fold(
-                                onSuccess = { manifest ->
-                                    addon.copy(
-                                        manifest = manifest,
-                                        isRefreshing = false,
-                                        errorMessage = null,
-                                    )
-                                },
-                                onFailure = { error ->
-                                    addon.copy(
-                                        isRefreshing = false,
-                                        errorMessage = error.message ?: "Unable to load manifest",
-                                    )
-                                },
-                            )
-                        }
-                    },
-                )
+        markRefreshing(manifestUrl)
+        var refreshJob: Job? = null
+        refreshJob = scope.launch {
+            try {
+                val result = runCatching {
+                    val payload = httpGetText(manifestUrl)
+                    AddonManifestParser.parse(
+                        manifestUrl = manifestUrl,
+                        payload = payload,
+                    )
+                }
+
+                _uiState.update { current ->
+                    current.copy(
+                        addons = current.addons.map { addon ->
+                            if (addon.manifestUrl != manifestUrl) {
+                                addon
+                            } else {
+                                result.fold(
+                                    onSuccess = { manifest ->
+                                        addon.copy(
+                                            manifest = manifest,
+                                            isRefreshing = false,
+                                            errorMessage = null,
+                                        )
+                                    },
+                                    onFailure = { error ->
+                                        addon.copy(
+                                            isRefreshing = false,
+                                            errorMessage = error.message ?: "Unable to load manifest",
+                                        )
+                                    },
+                                )
+                            }
+                        },
+                    )
+                }
+            } finally {
+                if (activeRefreshJobs[manifestUrl] === refreshJob) {
+                    activeRefreshJobs.remove(manifestUrl)
+                }
             }
         }
+        activeRefreshJobs[manifestUrl] = refreshJob
     }
 
     private fun pushToServer() {
@@ -296,7 +320,30 @@ object AddonRepository {
             dedupeManifestUrls(_uiState.value.addons.map { it.manifestUrl }),
         )
     }
+
+    private fun cancelActiveRefreshes() {
+        activeRefreshJobs.values.forEach(Job::cancel)
+        activeRefreshJobs.clear()
+    }
 }
+
+private fun ManagedAddon?.toPendingAddon(manifestUrl: String): ManagedAddon =
+    when {
+        this == null -> ManagedAddon(
+            manifestUrl = manifestUrl,
+            isRefreshing = true,
+        )
+        manifest != null -> copy(
+            manifestUrl = manifestUrl,
+            isRefreshing = false,
+        )
+        isRefreshing -> copy(manifestUrl = manifestUrl)
+        else -> copy(
+            manifestUrl = manifestUrl,
+            isRefreshing = true,
+            errorMessage = null,
+        )
+    }
 
 private fun dedupeManifestUrls(urls: List<String>): List<String> =
     urls.map(::ensureManifestSuffix).distinct()

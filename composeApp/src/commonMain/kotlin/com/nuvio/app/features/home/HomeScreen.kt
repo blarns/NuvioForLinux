@@ -3,7 +3,6 @@ package com.nuvio.app.features.home
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MonotonicFrameClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
@@ -53,6 +52,7 @@ fun HomeScreen(
     val continueWatchingPreferences by ContinueWatchingPreferencesRepository.uiState.collectAsStateWithLifecycle()
     val watchedUiState by WatchedRepository.uiState.collectAsStateWithLifecycle()
     val watchProgressUiState by WatchProgressRepository.uiState.collectAsStateWithLifecycle()
+
     val completedSeriesCandidates = remember(watchProgressUiState.entries) {
         watchProgressUiState.entries
             .filter { it.isCompleted && it.isEpisode }
@@ -84,8 +84,22 @@ fun HomeScreen(
             .sortedByDescending { it.first }
             .map { it.second }
     }
+    val allManifestsSettled = addonsUiState.addons.isNotEmpty() &&
+        addonsUiState.addons.none { it.isRefreshing }
 
-    val catalogRefreshKey = remember(addonsUiState.addons) {
+    val metaProviderKey = remember(addonsUiState.addons, allManifestsSettled) {
+        if (!allManifestsSettled) return@remember emptyList<String>()
+        addonsUiState.addons
+            .mapNotNull { addon ->
+                addon.manifest?.takeIf { manifest ->
+                    manifest.resources.any { resource -> resource.name == "meta" }
+                }?.transportUrl
+            }
+            .sorted()
+    }
+
+    val catalogRefreshKey = remember(addonsUiState.addons, allManifestsSettled) {
+        if (!allManifestsSettled) return@remember emptyList<String>()
         addonsUiState.addons.mapNotNull { addon ->
             val manifest = addon.manifest ?: return@mapNotNull null
             buildString {
@@ -99,19 +113,18 @@ fun HomeScreen(
     }
 
     LaunchedEffect(catalogRefreshKey) {
+        if (catalogRefreshKey.isEmpty()) return@LaunchedEffect
         HomeCatalogSettingsRepository.syncCatalogs(addonsUiState.addons)
         HomeRepository.refresh(addonsUiState.addons)
     }
 
-    LaunchedEffect(completedSeriesCandidates, catalogRefreshKey) {
+    LaunchedEffect(completedSeriesCandidates, metaProviderKey) {
         if (completedSeriesCandidates.isEmpty()) {
             nextUpItemsBySeries = emptyMap()
             return@LaunchedEffect
         }
 
-        if (addonsUiState.addons.none { it.manifest != null }) {
-            return@LaunchedEffect
-        }
+        if (metaProviderKey.isEmpty()) return@LaunchedEffect
 
         val todayIsoDate = CurrentDateProvider.todayIsoDate()
         val resolvedItems = mutableMapOf<String, Pair<Long, ContinueWatchingItem>>()
@@ -140,7 +153,6 @@ fun HomeScreen(
 
     LaunchedEffect(homeUiState.sections.firstOrNull()?.key, onFirstCatalogRendered) {
         if (firstCatalogReported || homeUiState.sections.isEmpty()) return@LaunchedEffect
-        coroutineContext[MonotonicFrameClock]?.withFrameNanos { }
         firstCatalogReported = true
         onFirstCatalogRendered?.invoke()
     }

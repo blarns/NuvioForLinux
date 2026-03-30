@@ -5,6 +5,9 @@ import com.nuvio.app.features.addons.httpGetText
 import com.nuvio.app.features.home.HomeCatalogParser
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.stableKey
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 const val CATALOG_PAGE_SIZE = 100
 
@@ -13,6 +16,32 @@ data class CatalogPage(
     val rawItemCount: Int,
     val nextSkip: Int?,
 )
+
+private val inflightMutex = Mutex()
+private val inflightRequests = mutableMapOf<String, CompletableDeferred<String>>()
+
+private suspend fun deduplicatedHttpGetText(url: String): String {
+    val existing = inflightMutex.withLock { inflightRequests[url] }
+    if (existing != null) return existing.await()
+    val deferred = CompletableDeferred<String>()
+    val isOwner = inflightMutex.withLock {
+        val race = inflightRequests[url]
+        if (race != null) return@withLock false
+        inflightRequests[url] = deferred
+        true
+    }
+    if (!isOwner) return inflightMutex.withLock { inflightRequests[url]!! }.await()
+    return try {
+        val result = httpGetText(url)
+        deferred.complete(result)
+        result
+    } catch (e: Throwable) {
+        deferred.completeExceptionally(e)
+        throw e
+    } finally {
+        inflightMutex.withLock { inflightRequests.remove(url) }
+    }
+}
 
 suspend fun fetchCatalogPage(
     manifestUrl: String,
@@ -23,16 +52,15 @@ suspend fun fetchCatalogPage(
     skip: Int? = null,
     maxItems: Int? = null,
 ): CatalogPage {
-    val payload = httpGetText(
-        buildCatalogUrl(
-            manifestUrl = manifestUrl,
-            type = type,
-            catalogId = catalogId,
-            genre = genre,
-            search = search,
-            skip = skip,
-        ),
+    val url = buildCatalogUrl(
+        manifestUrl = manifestUrl,
+        type = type,
+        catalogId = catalogId,
+        genre = genre,
+        search = search,
+        skip = skip,
     )
+    val payload = deduplicatedHttpGetText(url)
     val parsed = HomeCatalogParser.parseCatalogResponse(
         payload = payload,
         maxItems = maxItems,

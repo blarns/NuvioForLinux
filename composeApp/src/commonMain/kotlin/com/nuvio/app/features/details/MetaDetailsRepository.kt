@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 object MetaDetailsRepository {
     private val log = Logger.withTag("MetaDetailsRepo")
@@ -103,7 +104,9 @@ object MetaDetailsRepository {
             }
 
         for (manifest in manifests) {
-            val result = tryFetchMeta(manifest, type, id)
+            val result = withTimeoutOrNull(FETCH_TIMEOUT_MS) {
+                tryFetchMeta(manifest, type, id)
+            }
             if (result != null) {
                 cachedMetaByRequestKey[requestKey] = result
                 return result
@@ -112,6 +115,8 @@ object MetaDetailsRepository {
 
         return null
     }
+
+    private const val FETCH_TIMEOUT_MS = 5_000L
 
     private suspend fun tryFetchMeta(
         manifest: AddonManifest,

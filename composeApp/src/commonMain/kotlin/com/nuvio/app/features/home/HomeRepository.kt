@@ -31,15 +31,15 @@ object HomeRepository {
     fun refresh(addons: List<ManagedAddon>, force: Boolean = false) {
         val requests = buildHomeCatalogDefinitions(addons)
         currentDefinitions = requests
+        val requestKeys = requests.mapTo(mutableSetOf(), HomeCatalogDefinition::key)
+        cachedSections = cachedSections.filterKeys(requestKeys::contains)
         val requestKey = requests.joinToString(separator = "|") { request ->
             "${request.manifestUrl}:${request.type}:${request.catalogId}"
         }
 
-        if (!force && activeRequestKey == requestKey && _uiState.value.isLoading) {
-            return
-        }
+        if (!force && activeRequestKey == requestKey && _uiState.value.isLoading) return
 
-        if (!force && requestKey == lastRequestKey && cachedSections.isNotEmpty()) {
+        if (!force && requestKey == lastRequestKey && requestKeys.all(cachedSections::containsKey)) {
             if (_uiState.value.sections.isEmpty() || _uiState.value.heroItems.isEmpty()) {
                 applyCurrentSettings()
             }
@@ -69,15 +69,26 @@ object HomeRepository {
                 definitions = requests,
                 snapshot = HomeCatalogSettingsRepository.snapshot(),
             )
-            val loadedSections = linkedMapOf<String, HomeCatalogSection>()
+            val pendingRequests = prioritizedRequests.filter { definition ->
+                force || cachedSections[definition.key] == null
+            }
+            if (pendingRequests.isEmpty()) {
+                publishCurrentState(
+                    isLoading = false,
+                    requestKey = requestKey,
+                )
+                return@launch
+            }
+            val loadedSections = linkedMapOf<String, HomeCatalogSection>().apply {
+                putAll(cachedSections)
+            }
             var firstErrorMessage: String? = null
+            var batchIndex = 0
 
-            prioritizedRequests.chunked(HOME_CATALOG_FETCH_BATCH_SIZE).forEach { batch ->
+            pendingRequests.chunked(HOME_CATALOG_FETCH_BATCH_SIZE).forEach { batch ->
                 if (activeRequestKey != requestKey) return@launch
                 val results = batch.map { request ->
-                    async {
-                        runCatching { request.toSection() }
-                    }
+                    async { runCatching { request.toSection() } }
                 }.awaitAll()
 
                 if (activeRequestKey != requestKey) return@launch
@@ -90,10 +101,13 @@ object HomeRepository {
                 }
                 cachedSections = loadedSections.toMap()
                 lastErrorMessage = firstErrorMessage
-                publishCurrentState(
-                    isLoading = true,
-                    requestKey = requestKey,
-                )
+                if (batchIndex == 0 || (batchIndex + 1) % HOME_CATALOG_PUBLISH_INTERVAL == 0) {
+                    publishCurrentState(
+                        isLoading = true,
+                        requestKey = requestKey,
+                    )
+                }
+                batchIndex++
             }
 
             if (activeRequestKey != requestKey) return@launch
@@ -138,6 +152,7 @@ object HomeRepository {
                 if (preference?.enabled == false) return@mapNotNull null
 
                 val section = cachedSections[definition.key] ?: return@mapNotNull null
+                if (section.items.isEmpty()) return@mapNotNull null
                 val customTitle = preference?.customTitle.orEmpty()
                 section.copy(
                     title = customTitle.ifBlank { section.title },
@@ -173,7 +188,20 @@ object HomeRepository {
             maxItems = HOME_CATALOG_PREVIEW_FETCH_LIMIT,
         )
         val items = page.items
-        require(items.isNotEmpty()) { "No feed items returned for $defaultTitle." }
+        if (items.isEmpty()) {
+            return HomeCatalogSection(
+                key = key,
+                title = defaultTitle,
+                subtitle = addonName,
+                addonName = addonName,
+                type = type,
+                manifestUrl = manifestUrl,
+                catalogId = catalogId,
+                items = emptyList(),
+                availableItemCount = 0,
+                supportsPagination = supportsPagination,
+            )
+        }
 
         return HomeCatalogSection(
             key = key,
@@ -191,8 +219,9 @@ object HomeRepository {
 }
 
 private const val HOME_HERO_ITEM_LIMIT = 8
-private const val HOME_CATALOG_FETCH_BATCH_SIZE = 2
+private const val HOME_CATALOG_FETCH_BATCH_SIZE = 4
 private const val HOME_CATALOG_PREVIEW_FETCH_LIMIT = 18
+private const val HOME_CATALOG_PUBLISH_INTERVAL = 2
 
 private fun prioritizeDefinitions(
     definitions: List<HomeCatalogDefinition>,
