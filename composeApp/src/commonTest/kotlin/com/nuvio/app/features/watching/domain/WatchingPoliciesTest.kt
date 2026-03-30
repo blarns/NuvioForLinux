@@ -84,4 +84,63 @@ class WatchingPoliciesTest {
         assertEquals(3, latestCompleted.episodeNumber)
         assertEquals(300L, latestCompleted.markedAtEpochMs)
     }
+
+    @Test
+    fun latestCompletedSeriesEpisode_picks_furthest_episode_even_with_older_timestamp() {
+        val latestCompleted = latestCompletedSeriesEpisode(
+            content = show,
+            progressRecords = listOf(
+                WatchingProgressRecord(
+                    content = show,
+                    videoId = "show:1:5",
+                    seasonNumber = 1,
+                    episodeNumber = 5,
+                    lastUpdatedEpochMs = 100L,
+                    isCompleted = true,
+                ),
+                WatchingProgressRecord(
+                    content = show,
+                    videoId = "show:1:1",
+                    seasonNumber = 1,
+                    episodeNumber = 1,
+                    lastUpdatedEpochMs = 600L,
+                    isCompleted = true,
+                ),
+            ),
+            watchedRecords = emptyList(),
+        )
+
+        assertNotNull(latestCompleted)
+        assertEquals(1, latestCompleted.seasonNumber)
+        assertEquals(5, latestCompleted.episodeNumber)
+    }
+
+    @Test
+    fun latestCompletedSeriesEpisode_picks_furthest_season_over_recent_rewatch() {
+        val latestCompleted = latestCompletedSeriesEpisode(
+            content = show,
+            progressRecords = listOf(
+                WatchingProgressRecord(
+                    content = show,
+                    videoId = "show:2:3",
+                    seasonNumber = 2,
+                    episodeNumber = 3,
+                    lastUpdatedEpochMs = 200L,
+                    isCompleted = true,
+                ),
+            ),
+            watchedRecords = listOf(
+                WatchingWatchedRecord(
+                    content = show,
+                    seasonNumber = 1,
+                    episodeNumber = 1,
+                    markedAtEpochMs = 500L,
+                ),
+            ),
+        )
+
+        assertNotNull(latestCompleted)
+        assertEquals(2, latestCompleted.seasonNumber)
+        assertEquals(3, latestCompleted.episodeNumber)
+    }
 }

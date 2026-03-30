@@ -42,10 +42,11 @@ fun nextReleasedEpisodeAfter(
         compareBy<WatchingReleasedEpisode>({ normalizeSeasonNumber(it.seasonNumber) }, { it.episodeNumber ?: 0 }),
     )
     val watchedVideoId = buildPlaybackVideoId(content, seasonNumber, episodeNumber)
-    return sortedEpisodes
+    val candidates = sortedEpisodes
         .dropWhile { episode -> buildPlaybackVideoId(content, episode.seasonNumber, episode.episodeNumber, episode.videoId) != watchedVideoId }
         .drop(1)
-        .firstOrNull { episode -> isReleasedBy(todayIsoDate = todayIsoDate, releasedDate = episode.releasedDate) }
+        .filter { episode -> isReleasedBy(todayIsoDate = todayIsoDate, releasedDate = episode.releasedDate) }
+    return candidates.firstOrNull { normalizeSeasonNumber(it.seasonNumber) > 0 }
 }
 
 fun decideSeriesPrimaryAction(
@@ -54,6 +55,7 @@ fun decideSeriesPrimaryAction(
     progressRecords: List<WatchingProgressRecord>,
     watchedRecords: List<WatchingWatchedRecord>,
     todayIsoDate: String,
+    preferFurthestEpisode: Boolean = true,
 ): WatchingSeriesPrimaryAction? {
     val resumeRecord = resumeProgressForSeries(
         content = content,
@@ -63,6 +65,7 @@ fun decideSeriesPrimaryAction(
         content = content,
         progressRecords = progressRecords,
         watchedRecords = watchedRecords,
+        preferFurthestEpisode = preferFurthestEpisode,
     )
 
     if (shouldPreferResume(resumeRecord = resumeRecord, latestCompletedEpisode = latestCompletedEpisode)) {
@@ -78,9 +81,10 @@ fun decideSeriesPrimaryAction(
             todayIsoDate = todayIsoDate,
         )
     } else {
-        episodes
+        val sorted = episodes
             .sortedWith(compareBy<WatchingReleasedEpisode>({ normalizeSeasonNumber(it.seasonNumber) }, { it.episodeNumber ?: 0 }))
-            .firstOrNull { episode -> isReleasedBy(todayIsoDate = todayIsoDate, releasedDate = episode.releasedDate) }
+        val released = sorted.filter { episode -> isReleasedBy(todayIsoDate = todayIsoDate, releasedDate = episode.releasedDate) }
+        released.firstOrNull { normalizeSeasonNumber(it.seasonNumber) > 0 } ?: released.firstOrNull()
     }
 
     return nextEpisode?.let { episode ->

@@ -81,46 +81,53 @@ fun latestCompletedSeriesEpisode(
     content: WatchingContentRef,
     progressRecords: List<WatchingProgressRecord>,
     watchedRecords: List<WatchingWatchedRecord>,
+    preferFurthestEpisode: Boolean = true,
 ): WatchingCompletedEpisode? {
-    val progressMarker = progressRecords
-        .asSequence()
-        .filter { record ->
-            record.content == content &&
-                record.isCompleted &&
-                record.seasonNumber != null &&
-                record.episodeNumber != null
-        }
-        .mapNotNull { record ->
-            val seasonNumber = record.seasonNumber ?: return@mapNotNull null
-            val episodeNumber = record.episodeNumber ?: return@mapNotNull null
-            WatchingCompletedEpisode(
-                seasonNumber = seasonNumber,
-                episodeNumber = episodeNumber,
-                markedAtEpochMs = record.lastUpdatedEpochMs,
-            )
-        }
-        .maxByOrNull { marker -> marker.markedAtEpochMs }
-
-    val watchedMarker = watchedRecords
-        .asSequence()
-        .filter { record ->
-            record.content == content &&
-                record.seasonNumber != null &&
-                record.episodeNumber != null
-        }
-        .mapNotNull { record ->
-            val seasonNumber = record.seasonNumber ?: return@mapNotNull null
-            val episodeNumber = record.episodeNumber ?: return@mapNotNull null
-            WatchingCompletedEpisode(
-                seasonNumber = seasonNumber,
-                episodeNumber = episodeNumber,
-                markedAtEpochMs = record.markedAtEpochMs,
-            )
-        }
-        .maxByOrNull { marker -> marker.markedAtEpochMs }
-
-    return listOfNotNull(progressMarker, watchedMarker)
-        .maxByOrNull { marker -> marker.markedAtEpochMs }
+    val ordering = if (preferFurthestEpisode) {
+        compareBy<WatchingCompletedEpisode>(
+            { normalizeSeasonNumber(it.seasonNumber) },
+            { it.episodeNumber },
+            { it.markedAtEpochMs },
+        )
+    } else {
+        compareBy<WatchingCompletedEpisode> { it.markedAtEpochMs }
+    }
+    val allMarkers = buildList {
+        progressRecords
+            .asSequence()
+            .filter { record ->
+                record.content == content &&
+                    record.isCompleted &&
+                    record.seasonNumber != null &&
+                    record.episodeNumber != null
+            }
+            .mapNotNullTo(this) { record ->
+                val seasonNumber = record.seasonNumber ?: return@mapNotNullTo null
+                val episodeNumber = record.episodeNumber ?: return@mapNotNullTo null
+                WatchingCompletedEpisode(
+                    seasonNumber = seasonNumber,
+                    episodeNumber = episodeNumber,
+                    markedAtEpochMs = record.lastUpdatedEpochMs,
+                )
+            }
+        watchedRecords
+            .asSequence()
+            .filter { record ->
+                record.content == content &&
+                    record.seasonNumber != null &&
+                    record.episodeNumber != null
+            }
+            .mapNotNullTo(this) { record ->
+                val seasonNumber = record.seasonNumber ?: return@mapNotNullTo null
+                val episodeNumber = record.episodeNumber ?: return@mapNotNullTo null
+                WatchingCompletedEpisode(
+                    seasonNumber = seasonNumber,
+                    episodeNumber = episodeNumber,
+                    markedAtEpochMs = record.markedAtEpochMs,
+                )
+            }
+    }
+    return allMarkers.maxWithOrNull(ordering)
 }
 
 fun normalizeSeasonNumber(seasonNumber: Int?): Int = seasonNumber?.coerceAtLeast(0) ?: 0

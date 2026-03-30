@@ -12,6 +12,7 @@ import kotlinx.serialization.json.Json
 private data class StoredContinueWatchingPreferences(
     val isVisible: Boolean = true,
     val style: ContinueWatchingSectionStyle = ContinueWatchingSectionStyle.Wide,
+    val upNextFromFurthestEpisode: Boolean = true,
 )
 
 object ContinueWatchingPreferencesRepository {
@@ -56,6 +57,7 @@ object ContinueWatchingPreferencesRepository {
             ContinueWatchingPreferencesUiState(
                 isVisible = stored.isVisible,
                 style = stored.style,
+                upNextFromFurthestEpisode = stored.upNextFromFurthestEpisode,
             )
         } else {
             ContinueWatchingPreferencesUiState()
@@ -74,12 +76,19 @@ object ContinueWatchingPreferencesRepository {
         persist()
     }
 
+    fun setUpNextFromFurthestEpisode(enabled: Boolean) {
+        ensureLoaded()
+        _uiState.value = _uiState.value.copy(upNextFromFurthestEpisode = enabled)
+        persist()
+    }
+
     private fun persist() {
         ContinueWatchingPreferencesStorage.savePayload(
             json.encodeToString(
                 StoredContinueWatchingPreferences(
                     isVisible = _uiState.value.isVisible,
                     style = _uiState.value.style,
+                    upNextFromFurthestEpisode = _uiState.value.upNextFromFurthestEpisode,
                 ),
             ),
         )

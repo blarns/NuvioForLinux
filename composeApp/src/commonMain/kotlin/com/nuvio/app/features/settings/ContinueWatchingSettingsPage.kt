@@ -29,6 +29,7 @@ internal fun LazyListScope.continueWatchingSettingsContent(
     isTablet: Boolean,
     isVisible: Boolean,
     style: ContinueWatchingSectionStyle,
+    upNextFromFurthestEpisode: Boolean,
 ) {
     item {
         SettingsSection(
@@ -56,6 +57,22 @@ internal fun LazyListScope.continueWatchingSettingsContent(
                 selectedStyle = style,
                 onStyleSelected = ContinueWatchingPreferencesRepository::setStyle,
             )
+        }
+    }
+    item {
+        SettingsSection(
+            title = "UP NEXT BEHAVIOR",
+            isTablet = isTablet,
+        ) {
+            SettingsGroup(isTablet = isTablet) {
+                SettingsSwitchRow(
+                    title = "Up Next from furthest episode",
+                    description = "When enabled, Up Next always continues from the furthest watched episode. When disabled, it follows from the most recently watched episode — useful if you rewatch earlier episodes.",
+                    checked = upNextFromFurthestEpisode,
+                    isTablet = isTablet,
+                    onCheckedChange = ContinueWatchingPreferencesRepository::setUpNextFromFurthestEpisode,
+                )
+            }
         }
     }
 }

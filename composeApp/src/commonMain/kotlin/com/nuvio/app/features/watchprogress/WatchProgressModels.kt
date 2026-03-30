@@ -103,6 +103,7 @@ data class ContinueWatchingItem(
 data class ContinueWatchingPreferencesUiState(
     val isVisible: Boolean = true,
     val style: ContinueWatchingSectionStyle = ContinueWatchingSectionStyle.Wide,
+    val upNextFromFurthestEpisode: Boolean = true,
 )
 
 internal fun WatchProgressEntry.toContinueWatchingItem(): ContinueWatchingItem {

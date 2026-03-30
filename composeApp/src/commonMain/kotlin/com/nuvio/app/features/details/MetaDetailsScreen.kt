@@ -55,6 +55,7 @@ import com.nuvio.app.features.watched.releasedEpisodesForSeason
 import com.nuvio.app.features.watchprogress.CurrentDateProvider
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
+import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepository
 import com.nuvio.app.features.watching.application.WatchingActions
 import com.nuvio.app.features.watching.application.WatchingState
 
@@ -148,11 +149,13 @@ fun MetaDetailsScreen(
                 }
                 val movieProgress = watchProgressUiState.byVideoId[meta.id]
                     ?.takeUnless { it.isCompleted }
-                val seriesAction = remember(watchProgressUiState.entries, watchedUiState.items, meta, todayIsoDate) {
+                val cwPrefs by ContinueWatchingPreferencesRepository.uiState.collectAsStateWithLifecycle()
+                val seriesAction = remember(watchProgressUiState.entries, watchedUiState.items, meta, todayIsoDate, cwPrefs.upNextFromFurthestEpisode) {
                     meta.seriesPrimaryAction(
                         entries = watchProgressUiState.entries,
                         watchedItems = watchedUiState.items,
                         todayIsoDate = todayIsoDate,
+                        preferFurthestEpisode = cwPrefs.upNextFromFurthestEpisode,
                     )
                 }
                 val seriesPauseDescription = remember(seriesAction, meta.id, meta.videos) {

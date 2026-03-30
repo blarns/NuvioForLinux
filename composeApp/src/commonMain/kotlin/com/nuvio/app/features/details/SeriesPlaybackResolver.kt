@@ -50,7 +50,7 @@ internal fun MetaDetails.nextReleasedEpisodeAfter(
         seasonNumber = seasonNumber,
         episodeNumber = episodeNumber,
     )
-    return sortedEpisodes
+    val candidates = sortedEpisodes
         .dropWhile { episode ->
             buildPlaybackVideoId(
                 content = WatchingContentRef(type = type, id = id),
@@ -60,9 +60,10 @@ internal fun MetaDetails.nextReleasedEpisodeAfter(
             ) != watchedVideoId
         }
         .drop(1)
-        .firstOrNull { episode ->
+        .filter { episode ->
             isReleasedBy(todayIsoDate = todayIsoDate, releasedDate = episode.released)
         }
+    return candidates.firstOrNull { normalizeSeasonNumber(it.season) > 0 }
 }
 
 internal data class SeriesPrimaryAction(
@@ -79,6 +80,7 @@ internal fun MetaDetails.seriesPrimaryAction(
     entries: List<WatchProgressEntry>,
     watchedItems: List<WatchedItem>,
     todayIsoDate: String,
+    preferFurthestEpisode: Boolean = true,
 ): SeriesPrimaryAction? =
     decideSeriesPrimaryAction(
         content = WatchingContentRef(type = type, id = id),
@@ -86,6 +88,7 @@ internal fun MetaDetails.seriesPrimaryAction(
         progressRecords = entries.map(WatchProgressEntry::toDomainProgressRecord),
         watchedRecords = watchedItems.map(WatchedItem::toDomainWatchedRecord),
         todayIsoDate = todayIsoDate,
+        preferFurthestEpisode = preferFurthestEpisode,
     )?.toLegacySeriesPrimaryAction()
 
 internal fun MetaVideo.playLabel(): String =

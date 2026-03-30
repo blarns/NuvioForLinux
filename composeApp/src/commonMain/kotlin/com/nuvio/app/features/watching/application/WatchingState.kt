@@ -49,6 +49,7 @@ object WatchingState {
     fun latestCompletedBySeries(
         progressEntries: List<WatchProgressEntry>,
         watchedItems: List<WatchedItem>,
+        preferFurthestEpisode: Boolean = true,
     ): Map<WatchingContentRef, WatchingCompletedEpisode> {
         val contentRefs = buildSet {
             progressEntries.forEach { entry ->
@@ -65,6 +66,7 @@ object WatchingState {
                 content = content,
                 progressRecords = progressRecords,
                 watchedRecords = watchedRecords,
+                preferFurthestEpisode = preferFurthestEpisode,
             )?.let { completed -> content to completed }
         }.toMap()
     }

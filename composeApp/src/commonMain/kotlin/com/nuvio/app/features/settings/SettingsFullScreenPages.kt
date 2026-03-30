@@ -74,6 +74,7 @@ fun ContinueWatchingSettingsScreen(
             isTablet = false,
             isVisible = continueWatchingPreferencesUiState.isVisible,
             style = continueWatchingPreferencesUiState.style,
+            upNextFromFurthestEpisode = continueWatchingPreferencesUiState.upNextFromFurthestEpisode,
         )
     }
 }

@@ -56,10 +56,11 @@ fun HomeScreen(
     val watchedUiState by WatchedRepository.uiState.collectAsStateWithLifecycle()
     val watchProgressUiState by WatchProgressRepository.uiState.collectAsStateWithLifecycle()
 
-    val latestCompletedBySeries = remember(watchProgressUiState.entries, watchedUiState.items) {
+    val latestCompletedBySeries = remember(watchProgressUiState.entries, watchedUiState.items, continueWatchingPreferences.upNextFromFurthestEpisode) {
         WatchingState.latestCompletedBySeries(
             progressEntries = watchProgressUiState.entries,
             watchedItems = watchedUiState.items,
+            preferFurthestEpisode = continueWatchingPreferences.upNextFromFurthestEpisode,
         )
     }
     val completedSeriesCandidates = remember(latestCompletedBySeries) {
