@@ -18,7 +18,6 @@ import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material.icons.rounded.FormatSize
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -99,8 +98,8 @@ private fun StyleControlsCard(
                 buttonSize = btnSize,
                 buttonRadius = btnRadius,
                 minWidth = 58.dp,
-                minusIcon = Icons.Rounded.Remove,
-                plusIcon = Icons.Rounded.FormatSize,
+                minusIcon = Icons.Rounded.KeyboardArrowDown,
+                plusIcon = Icons.Rounded.KeyboardArrowUp,
             )
         }
 
