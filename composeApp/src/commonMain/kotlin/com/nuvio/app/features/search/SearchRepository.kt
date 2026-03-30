@@ -84,7 +84,6 @@ object SearchRepository {
 
             val sections = results
                 .mapNotNull { it.getOrNull() }
-                .sortedBy { it.title.lowercase() }
             val firstFailure = results.firstNotNullOfOrNull { it.exceptionOrNull()?.message }
             val allFailed = results.isNotEmpty() && results.all { it.isFailure }
 
@@ -138,7 +137,7 @@ object SearchRepository {
         }
 
         val current = _discoverUiState.value
-        val typeOptions = sources.map { it.type }.distinct().sortedBy { it.typeSortKey() }
+        val typeOptions = sources.map { it.type }.distinct()
         val selectedType = current.selectedType
             ?.takeIf { type -> typeOptions.contains(type) }
             ?: typeOptions.first()
@@ -279,9 +278,7 @@ object SearchRepository {
                         supportsPagination = catalog.supportsPagination(),
                     )
                 }
-        }.sortedWith(
-            compareBy<DiscoverCatalogOption>({ it.type.typeSortKey() }, { it.addonName.lowercase() }, { it.catalogName.lowercase() }),
-        )
+        }
 
     private suspend fun SearchCatalogRequest.toSection(): HomeCatalogSection {
         val manifest = requireNotNull(addon.manifest)

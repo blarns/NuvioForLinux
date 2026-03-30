@@ -140,6 +140,7 @@ fun SearchScreen(
                         placeholder = "Search movies, shows...",
                     )
                 }
+                    androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(14.dp))
             }
         }
 
