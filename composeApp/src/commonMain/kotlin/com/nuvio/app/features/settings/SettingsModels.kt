@@ -1,8 +1,6 @@
 package com.nuvio.app.features.settings
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.Style
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -20,6 +18,7 @@ internal enum class SettingsPage(
     Playback("Playback"),
     Appearance("Appearance"),
     ContentDiscovery("Content & Discovery"),
+    TmdbEnrichment("TMDB Enrichment"),
 }
 
 internal fun SettingsPage.previousPage(): SettingsPage? =
@@ -28,4 +27,5 @@ internal fun SettingsPage.previousPage(): SettingsPage? =
         SettingsPage.Playback -> SettingsPage.Root
         SettingsPage.Appearance -> SettingsPage.Root
         SettingsPage.ContentDiscovery -> SettingsPage.Root
+        SettingsPage.TmdbEnrichment -> SettingsPage.ContentDiscovery
     }

@@ -4,6 +4,8 @@ import co.touchlab.kermit.Logger
 import com.nuvio.app.features.addons.AddonManifest
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.httpGetText
+import com.nuvio.app.features.tmdb.TmdbMetadataService
+import com.nuvio.app.features.tmdb.TmdbSettingsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -117,6 +119,7 @@ object MetaDetailsRepository {
     }
 
     private const val FETCH_TIMEOUT_MS = 5_000L
+    private const val TMDB_ENRICH_TIMEOUT_MS = 5_000L
 
     private suspend fun tryFetchMeta(
         manifest: AddonManifest,
@@ -124,6 +127,7 @@ object MetaDetailsRepository {
         id: String,
     ): MetaDetails? {
         return try {
+            TmdbSettingsRepository.ensureLoaded()
             val baseUrl = manifest.transportUrl
                 .substringBefore("?")
                 .removeSuffix("/manifest.json")
@@ -132,12 +136,19 @@ object MetaDetailsRepository {
             val payload = httpGetText(url)
             log.d { "Raw payload length=${payload.length}, first 500 chars: ${payload.take(500)}" }
             val result = MetaDetailsParser.parse(payload)
-            log.d { "Parsed meta: type=${result.type}, name=${result.name}, videos=${result.videos.size}" }
-            if (result.videos.isNotEmpty()) {
-                val first = result.videos.first()
+            val enriched = withTimeoutOrNull(TMDB_ENRICH_TIMEOUT_MS) {
+                TmdbMetadataService.enrichMeta(
+                    meta = result,
+                    fallbackItemId = id,
+                    settings = TmdbSettingsRepository.snapshot(),
+                )
+            } ?: result
+            log.d { "Parsed meta: type=${enriched.type}, name=${enriched.name}, videos=${enriched.videos.size}" }
+            if (enriched.videos.isNotEmpty()) {
+                val first = enriched.videos.first()
                 log.d { "First video: id=${first.id} title=${first.title} s=${first.season} e=${first.episode} embeddedStreams=${first.streams.size}" }
             }
-            result
+            enriched
         } catch (e: Throwable) {
             log.e(e) { "Failed to fetch/parse meta from ${manifest.transportUrl}" }
             null

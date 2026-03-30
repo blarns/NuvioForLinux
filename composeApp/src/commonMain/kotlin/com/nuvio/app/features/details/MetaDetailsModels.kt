@@ -13,10 +13,14 @@ data class MetaDetails(
     val releaseInfo: String? = null,
     val status: String? = null,
     val imdbRating: String? = null,
+    val ageRating: String? = null,
     val runtime: String? = null,
     val genres: List<String> = emptyList(),
     val director: List<String> = emptyList(),
+    val writer: List<String> = emptyList(),
     val cast: List<MetaPerson> = emptyList(),
+    val productionCompanies: List<MetaCompany> = emptyList(),
+    val networks: List<MetaCompany> = emptyList(),
     val country: String? = null,
     val awards: String? = null,
     val language: String? = null,
@@ -30,6 +34,12 @@ data class MetaPerson(
     val name: String,
     val role: String? = null,
     val photo: String? = null,
+)
+
+data class MetaCompany(
+    val name: String,
+    val logo: String? = null,
+    val tmdbId: Int? = null,
 )
 
 data class MetaLink(
@@ -46,6 +56,7 @@ data class MetaVideo(
     val season: Int? = null,
     val episode: Int? = null,
     val overview: String? = null,
+    val runtime: Int? = null,
     val streams: List<StreamItem> = emptyList(),
 )
 

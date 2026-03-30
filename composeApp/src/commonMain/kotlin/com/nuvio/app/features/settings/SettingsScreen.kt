@@ -37,6 +37,8 @@ import com.nuvio.app.core.ui.PlatformBackHandler
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioScreenHeader
 import com.nuvio.app.features.player.PlayerSettingsRepository
+import com.nuvio.app.features.tmdb.TmdbSettings
+import com.nuvio.app.features.tmdb.TmdbSettingsRepository
 
 @Composable
 fun SettingsScreen(
@@ -62,6 +64,10 @@ fun SettingsScreen(
             ThemeSettingsRepository.selectedTheme
         }.collectAsStateWithLifecycle()
         val amoledEnabled by remember { ThemeSettingsRepository.amoledEnabled }.collectAsStateWithLifecycle()
+        val tmdbSettings by remember {
+            TmdbSettingsRepository.ensureLoaded()
+            TmdbSettingsRepository.uiState
+        }.collectAsStateWithLifecycle()
 
         var currentPage by rememberSaveable { mutableStateOf(SettingsPage.Root.name) }
         val page = remember(currentPage) { SettingsPage.valueOf(currentPage) }
@@ -90,6 +96,7 @@ fun SettingsScreen(
                 onThemeSelected = ThemeSettingsRepository::setTheme,
                 amoledEnabled = amoledEnabled,
                 onAmoledToggle = ThemeSettingsRepository::setAmoled,
+                tmdbSettings = tmdbSettings,
                 onSwitchProfile = onSwitchProfile,
                 onHomescreenClick = onHomescreenClick,
                 onContinueWatchingClick = onContinueWatchingClick,
@@ -114,6 +121,7 @@ fun SettingsScreen(
                 onThemeSelected = ThemeSettingsRepository::setTheme,
                 amoledEnabled = amoledEnabled,
                 onAmoledToggle = ThemeSettingsRepository::setAmoled,
+                tmdbSettings = tmdbSettings,
                 onSwitchProfile = onSwitchProfile,
                 onHomescreenClick = onHomescreenClick,
                 onContinueWatchingClick = onContinueWatchingClick,
@@ -142,6 +150,7 @@ private fun MobileSettingsScreen(
     onThemeSelected: (AppTheme) -> Unit,
     amoledEnabled: Boolean,
     onAmoledToggle: (Boolean) -> Unit,
+    tmdbSettings: TmdbSettings,
     onSwitchProfile: (() -> Unit)? = null,
     onHomescreenClick: () -> Unit = {},
     onContinueWatchingClick: () -> Unit = {},
@@ -191,6 +200,11 @@ private fun MobileSettingsScreen(
                 isTablet = false,
                 onAddonsClick = onAddonsClick,
                 onHomescreenClick = onHomescreenClick,
+                onTmdbClick = { onPageChange(SettingsPage.TmdbEnrichment) },
+            )
+            SettingsPage.TmdbEnrichment -> tmdbSettingsContent(
+                isTablet = false,
+                settings = tmdbSettings,
             )
         }
     }
@@ -214,6 +228,7 @@ private fun TabletSettingsScreen(
     onThemeSelected: (AppTheme) -> Unit,
     amoledEnabled: Boolean,
     onAmoledToggle: (Boolean) -> Unit,
+    tmdbSettings: TmdbSettings,
     onSwitchProfile: (() -> Unit)? = null,
     onHomescreenClick: () -> Unit = {},
     onContinueWatchingClick: () -> Unit = {},
@@ -312,6 +327,11 @@ private fun TabletSettingsScreen(
                     isTablet = true,
                     onAddonsClick = onAddonsClick,
                     onHomescreenClick = onHomescreenClick,
+                    onTmdbClick = { onPageChange(SettingsPage.TmdbEnrichment) },
+                )
+                SettingsPage.TmdbEnrichment -> tmdbSettingsContent(
+                    isTablet = true,
+                    settings = tmdbSettings,
                 )
             }
         }

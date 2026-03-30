@@ -9,6 +9,7 @@ import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.library.LibraryRepository
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.settings.ThemeSettingsRepository
+import com.nuvio.app.features.tmdb.TmdbSettingsRepository
 import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepository
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
@@ -122,6 +123,7 @@ object ProfileRepository {
         PlayerSettingsRepository.onProfileChanged()
         HomeCatalogSettingsRepository.onProfileChanged()
         ContinueWatchingPreferencesRepository.onProfileChanged()
+        TmdbSettingsRepository.onProfileChanged()
     }
 
     suspend fun pushProfiles(profiles: List<ProfilePushPayload>) {

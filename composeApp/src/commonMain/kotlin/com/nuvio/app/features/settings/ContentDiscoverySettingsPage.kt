@@ -3,12 +3,14 @@ package com.nuvio.app.features.settings
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.MovieFilter
 import androidx.compose.material.icons.rounded.Tune
 
 internal fun LazyListScope.contentDiscoveryContent(
     isTablet: Boolean,
     onAddonsClick: () -> Unit,
     onHomescreenClick: () -> Unit,
+    onTmdbClick: () -> Unit,
 ) {
     item {
         SettingsSection(
@@ -22,6 +24,22 @@ internal fun LazyListScope.contentDiscoveryContent(
                     icon = Icons.Rounded.Extension,
                     isTablet = isTablet,
                     onClick = onAddonsClick,
+                )
+            }
+        }
+    }
+    item {
+        SettingsSection(
+            title = "ENRICHMENT",
+            isTablet = isTablet,
+        ) {
+            SettingsGroup(isTablet = isTablet) {
+                SettingsNavigationRow(
+                    title = "TMDB Enrichment",
+                    description = "Enhance detail pages with TMDB artwork, credits, episode metadata, and more.",
+                    icon = Icons.Rounded.MovieFilter,
+                    isTablet = isTablet,
+                    onClick = onTmdbClick,
                 )
             }
         }

@@ -39,9 +39,9 @@ fun DetailMetaInfo(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // Year, Runtime, IMDb rating row
         val infoParts = buildList {
             meta.releaseInfo?.let { add(it) }
+            meta.ageRating?.let { add(it) }
             meta.runtime?.let { add(it.uppercase()) }
         }
         if (infoParts.isNotEmpty() || meta.imdbRating != null) {
@@ -88,24 +88,50 @@ fun DetailMetaInfo(
             }
         }
 
-        // Director
-        if (meta.director.isNotEmpty()) {
-            Row {
-                Text(
-                    text = "Director:  ",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = meta.director.joinToString(", "),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
+        val detailChips = buildList {
+            meta.status?.let { add(it) }
+            meta.country?.let { add(it) }
+            meta.language?.let { add(it.uppercase()) }
+        }
+        if (detailChips.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                detailChips.forEach { chip ->
+                    DetailChip(label = chip)
+                }
             }
         }
 
-        // Description
+        if (meta.director.isNotEmpty()) {
+            MetaLabelValueRow(
+                label = "Director",
+                value = meta.director.joinToString(", "),
+            )
+        }
+
+        if (meta.writer.isNotEmpty()) {
+            MetaLabelValueRow(
+                label = "Writer",
+                value = meta.writer.joinToString(", "),
+            )
+        }
+
+        if (meta.productionCompanies.isNotEmpty()) {
+            MetaLabelValueRow(
+                label = "Production",
+                value = meta.productionCompanies.joinToString(", ") { it.name },
+            )
+        }
+
+        if (meta.networks.isNotEmpty()) {
+            MetaLabelValueRow(
+                label = "Network",
+                value = meta.networks.joinToString(", ") { it.name },
+            )
+        }
+
         if (!meta.description.isNullOrBlank()) {
             var expanded by remember { mutableStateOf(false) }
             Column {
@@ -126,6 +152,42 @@ fun DetailMetaInfo(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun MetaLabelValueRow(
+    label: String,
+    value: String,
+) {
+    Row {
+        Text(
+            text = "$label:  ",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+@Composable
+private fun DetailChip(label: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+        shape = RoundedCornerShape(999.dp),
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 

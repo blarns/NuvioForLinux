@@ -33,6 +33,18 @@ generatedDir.resolve("com/nuvio/app/core/network").apply {
         """.trimMargin()
     )
 }
+generatedDir.resolve("com/nuvio/app/features/tmdb").apply {
+    mkdirs()
+    resolve("TmdbConfig.kt").writeText(
+        """
+        |package com.nuvio.app.features.tmdb
+        |
+        |object TmdbConfig {
+        |    const val API_KEY = "${supabaseProps.getProperty("TMDB_API_KEY", "")}"
+        |}
+        """.trimMargin()
+    )
+}
 
 kotlin {
     androidTarget {

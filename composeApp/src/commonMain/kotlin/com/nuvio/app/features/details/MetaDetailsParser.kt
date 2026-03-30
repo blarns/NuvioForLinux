@@ -34,9 +34,11 @@ internal object MetaDetailsParser {
             releaseInfo = meta.string("releaseInfo"),
             status = meta.string("status"),
             imdbRating = meta.string("imdbRating"),
+            ageRating = meta.string("ageRating"),
             runtime = meta.string("runtime"),
             genres = meta.stringList("genres"),
             director = meta.directors(links),
+            writer = meta.writers(links),
             cast = meta.cast(links),
             country = meta.string("country"),
             awards = meta.string("awards"),
@@ -137,6 +139,22 @@ internal object MetaDetailsParser {
         return mergePeople(appExtraCast, topLevelCast, linkedCast)
     }
 
+    private fun JsonObject.writers(links: List<MetaLink>): List<String> {
+        val appExtras = this["app_extras"] as? JsonObject
+        val topLevel = stringListOrCsv("writer")
+        val extraWriters = appExtras.personNameList("writers")
+        val linkWriters = links.filter { link ->
+            link.category.equals("writer", ignoreCase = true) ||
+                link.category.equals("writers", ignoreCase = true) ||
+                link.category.equals("screenplay", ignoreCase = true)
+        }.map(MetaLink::name)
+
+        return (topLevel + extraWriters + linkWriters)
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .distinct()
+    }
+
     private fun JsonObject?.personNameList(name: String): List<String> =
         people(name).map(MetaPerson::name)
 
@@ -206,6 +224,7 @@ internal object MetaDetailsParser {
                 season = video.int("season"),
                 episode = video.int("episode"),
                 overview = video.string("overview") ?: video.string("description"),
+                runtime = video.int("runtime"),
                 streams = video.embeddedStreams(),
             )
         }
