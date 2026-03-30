@@ -66,6 +66,8 @@ private data class StoredHomeCatalogSettingsPayload(
 )
 
 object HomeCatalogSettingsRepository {
+    const val HERO_SOURCE_SELECTION_LIMIT = 2
+
     private val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
@@ -128,7 +130,13 @@ object HomeCatalogSettingsRepository {
 
     fun setHeroSourceEnabled(key: String, enabled: Boolean) {
         updatePreference(key) { preference ->
-            preference.copy(heroSourceEnabled = enabled)
+            if (!enabled) {
+                preference.copy(heroSourceEnabled = false)
+            } else if (selectedHeroSourceCount(excludingKey = key) >= HERO_SOURCE_SELECTION_LIMIT) {
+                preference
+            } else {
+                preference.copy(heroSourceEnabled = true)
+            }
         }
     }
 
@@ -192,13 +200,19 @@ object HomeCatalogSettingsRepository {
         ).map { it.first }
 
         val normalized = mutableMapOf<String, StoredHomeCatalogPreference>()
+        var enabledHeroSourceCount = 0
         orderedDefinitions.forEachIndexed { index, definition ->
             val stored = current[definition.key]
+            val heroSourceEnabled = (stored?.heroSourceEnabled ?: true) &&
+                enabledHeroSourceCount < HERO_SOURCE_SELECTION_LIMIT
+            if (heroSourceEnabled) {
+                enabledHeroSourceCount += 1
+            }
             normalized[definition.key] = StoredHomeCatalogPreference(
                 key = definition.key,
                 customTitle = stored?.customTitle.orEmpty(),
                 enabled = stored?.enabled ?: true,
-                heroSourceEnabled = stored?.heroSourceEnabled ?: true,
+                heroSourceEnabled = heroSourceEnabled,
                 order = index,
             )
         }
@@ -249,6 +263,11 @@ object HomeCatalogSettingsRepository {
         persist()
         HomeRepository.applyCurrentSettings()
     }
+
+    private fun selectedHeroSourceCount(excludingKey: String? = null): Int =
+        preferences.count { (itemKey, preference) ->
+            itemKey != excludingKey && preference.heroSourceEnabled
+        }
 
     private fun move(
         key: String,

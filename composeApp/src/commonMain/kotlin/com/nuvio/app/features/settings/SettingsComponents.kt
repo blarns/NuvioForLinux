@@ -1,5 +1,6 @@
 package com.nuvio.app.features.settings
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -253,6 +254,7 @@ internal fun SettingsSwitchRow(
     title: String,
     description: String? = null,
     checked: Boolean,
+    enabled: Boolean = true,
     isTablet: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
@@ -262,7 +264,7 @@ internal fun SettingsSwitchRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onCheckedChange(!checked) }
+            .clickable(enabled = enabled) { onCheckedChange(!checked) }
             .padding(horizontal = horizontalPadding, vertical = verticalPadding),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
@@ -270,7 +272,8 @@ internal fun SettingsSwitchRow(
         Column(
             modifier = Modifier
                 .padding(end = 12.dp)
-                .widthIn(max = if (isTablet) 560.dp else 280.dp),
+                .widthIn(max = if (isTablet) 560.dp else 280.dp)
+                .alpha(if (enabled) 1f else 0.55f),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
@@ -290,6 +293,7 @@ internal fun SettingsSwitchRow(
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
+            enabled = enabled,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                 checkedTrackColor = MaterialTheme.colorScheme.primary,
@@ -304,8 +308,10 @@ internal fun SettingsSwitchRow(
 internal fun HomescreenCatalogRow(
     item: HomeCatalogSettingsItem,
     isTablet: Boolean,
+    expanded: Boolean,
     canMoveUp: Boolean,
     canMoveDown: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
     onTitleChange: (String) -> Unit,
     onEnabledChange: (Boolean) -> Unit,
     onMoveUp: () -> Unit,
@@ -317,8 +323,9 @@ internal fun HomescreenCatalogRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable { onExpandedChange(!expanded) }
             .padding(horizontal = horizontalPadding, vertical = verticalPadding),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -336,7 +343,7 @@ internal fun HomescreenCatalogRow(
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
@@ -344,51 +351,76 @@ internal fun HomescreenCatalogRow(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Text(
+                    text = buildString {
+                        append(if (item.enabled) "Visible" else "Hidden")
+                        append(" • ")
+                        append(if (item.heroSourceEnabled) "Hero source" else "Not in hero")
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            Switch(
-                checked = item.enabled,
-                onCheckedChange = onEnabledChange,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                    checkedTrackColor = MaterialTheme.colorScheme.primary,
-                    uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    uncheckedTrackColor = MaterialTheme.colorScheme.outlineVariant,
-                ),
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Switch(
+                    checked = item.enabled,
+                    onCheckedChange = onEnabledChange,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                        checkedTrackColor = MaterialTheme.colorScheme.primary,
+                        uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        uncheckedTrackColor = MaterialTheme.colorScheme.outlineVariant,
+                    ),
+                )
+                Icon(
+                    imageVector = if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
-        OutlinedTextField(
-            value = item.customTitle,
-            onValueChange = onTitleChange,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text("Display Name") },
-            placeholder = { Text(item.defaultTitle) },
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
-                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f),
-                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                disabledContainerColor = MaterialTheme.colorScheme.surface,
-            ),
-        )
+        AnimatedVisibility(visible = expanded) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedTextField(
+                    value = item.customTitle,
+                    onValueChange = onTitleChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("Display Name") },
+                    placeholder = { Text(item.defaultTitle) },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f),
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                        disabledContainerColor = MaterialTheme.colorScheme.surface,
+                    ),
+                )
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            MoveActionChip(
-                label = "Move Up",
-                icon = Icons.Rounded.KeyboardArrowUp,
-                enabled = canMoveUp,
-                onClick = onMoveUp,
-            )
-            MoveActionChip(
-                label = "Move Down",
-                icon = Icons.Rounded.KeyboardArrowDown,
-                enabled = canMoveDown,
-                onClick = onMoveDown,
-            )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    MoveActionChip(
+                        label = "Move Up",
+                        icon = Icons.Rounded.KeyboardArrowUp,
+                        enabled = canMoveUp,
+                        onClick = onMoveUp,
+                    )
+                    MoveActionChip(
+                        label = "Move Down",
+                        icon = Icons.Rounded.KeyboardArrowDown,
+                        enabled = canMoveDown,
+                        onClick = onMoveDown,
+                    )
+                }
+            }
         }
     }
 }

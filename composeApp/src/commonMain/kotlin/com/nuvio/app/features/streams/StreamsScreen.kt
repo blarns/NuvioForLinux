@@ -676,8 +676,6 @@ private fun StreamCard(
                     letterSpacing = 0.1.sp,
                 ),
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
             )
 
             val subtitle = stream.streamSubtitle
@@ -690,8 +688,6 @@ private fun StreamCard(
                         lineHeight = 18.sp,
                     ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
 
