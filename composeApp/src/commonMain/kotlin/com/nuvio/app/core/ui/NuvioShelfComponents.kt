@@ -52,6 +52,7 @@ fun <T> NuvioShelfSection(
     headerHorizontalPadding: Dp = 0.dp,
     rowContentPadding: PaddingValues = PaddingValues(0.dp),
     itemSpacing: Dp = 10.dp,
+    showHeaderAccent: Boolean = true,
     onViewAllClick: (() -> Unit)? = null,
     viewAllPillSize: NuvioViewAllPillSize = NuvioViewAllPillSize.Default,
     key: ((T) -> Any)? = null,
@@ -64,6 +65,7 @@ fun <T> NuvioShelfSection(
         NuvioShelfSectionHeader(
             title = title,
             modifier = Modifier.padding(horizontal = headerHorizontalPadding),
+            showAccent = showHeaderAccent,
             onViewAllClick = onViewAllClick,
             viewAllPillSize = viewAllPillSize,
         )
@@ -99,7 +101,7 @@ fun NuvioPosterCard(
     onLongClick: (() -> Unit)? = null,
 ) {
     Column(
-        modifier = modifier.width(110.dp),
+        modifier = modifier.width(shape.cardWidth),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Box(
@@ -161,6 +163,7 @@ fun NuvioPosterCard(
 private fun NuvioShelfSectionHeader(
     title: String,
     modifier: Modifier = Modifier,
+    showAccent: Boolean = true,
     onViewAllClick: (() -> Unit)? = null,
     viewAllPillSize: NuvioViewAllPillSize = NuvioViewAllPillSize.Default,
 ) {
@@ -179,16 +182,18 @@ private fun NuvioShelfSectionHeader(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Box(
-                modifier = Modifier
-                    .padding(top = 6.dp)
-                    .width(60.dp)
-                    .height(4.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.primary,
-                        shape = RoundedCornerShape(999.dp),
-                ),
-            )
+            if (showAccent) {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 6.dp)
+                        .width(60.dp)
+                        .height(4.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(999.dp),
+                    ),
+                )
+            }
         }
         if (onViewAllClick != null) {
             NuvioViewAllPill(
@@ -243,6 +248,13 @@ private val NuvioPosterShape.aspectRatio: Float
         NuvioPosterShape.Poster -> 0.675f
         NuvioPosterShape.Square -> 1f
         NuvioPosterShape.Landscape -> 1.77f
+    }
+
+private val NuvioPosterShape.cardWidth: Dp
+    get() = when (this) {
+        NuvioPosterShape.Poster -> 110.dp
+        NuvioPosterShape.Square -> 110.dp
+        NuvioPosterShape.Landscape -> 180.dp
     }
 
 @OptIn(ExperimentalFoundationApi::class)

@@ -1,5 +1,6 @@
 package com.nuvio.app.features.details
 
+import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.streams.StreamItem
 
 data class MetaDetails(
@@ -26,6 +27,9 @@ data class MetaDetails(
     val language: String? = null,
     val website: String? = null,
     val hasScheduledVideos: Boolean = false,
+    val moreLikeThis: List<MetaPreview> = emptyList(),
+    val collectionName: String? = null,
+    val collectionItems: List<MetaPreview> = emptyList(),
     val links: List<MetaLink> = emptyList(),
     val videos: List<MetaVideo> = emptyList(),
 )

@@ -130,7 +130,7 @@ internal fun LazyListScope.tmdbSettingsContent(
                 TmdbToggleRow(
                     isTablet = isTablet,
                     title = "More like this",
-                    description = "Reserved for the upcoming TMDB recommendation rail port.",
+                    description = "Show TMDB recommendations at the bottom of detail pages.",
                     checked = settings.useMoreLikeThis,
                     enabled = settings.enabled,
                     onCheckedChange = TmdbSettingsRepository::setUseMoreLikeThis,
@@ -139,7 +139,7 @@ internal fun LazyListScope.tmdbSettingsContent(
                 TmdbToggleRow(
                     isTablet = isTablet,
                     title = "Collections",
-                    description = "Reserved for the upcoming TMDB collection rail port.",
+                    description = "Show franchise and collection rails for movies when TMDB provides them.",
                     checked = settings.useCollections,
                     enabled = settings.enabled,
                     onCheckedChange = TmdbSettingsRepository::setUseCollections,

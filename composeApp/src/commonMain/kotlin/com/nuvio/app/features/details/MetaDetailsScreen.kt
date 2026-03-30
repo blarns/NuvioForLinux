@@ -42,9 +42,11 @@ import com.nuvio.app.features.details.components.DetailCastSection
 import com.nuvio.app.features.details.components.DetailFloatingHeader
 import com.nuvio.app.features.details.components.DetailHero
 import com.nuvio.app.features.details.components.DetailMetaInfo
+import com.nuvio.app.features.details.components.DetailPosterRailSection
 import com.nuvio.app.features.details.components.DetailProductionSection
 import com.nuvio.app.features.details.components.DetailSeriesContent
 import com.nuvio.app.features.details.components.EpisodeWatchedActionSheet
+import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.library.LibraryRepository
 import com.nuvio.app.features.library.toLibraryItem
 import com.nuvio.app.features.watched.WatchedRepository
@@ -62,6 +64,7 @@ fun MetaDetailsScreen(
     id: String,
     onBack: () -> Unit,
     onPlay: ((type: String, videoId: String, parentMetaId: String, parentMetaType: String, title: String, logo: String?, poster: String?, background: String?, seasonNumber: Int?, episodeNumber: Int?, episodeTitle: String?, episodeThumbnail: String?, pauseDescription: String?, resumePositionMs: Long?) -> Unit)? = null,
+    onOpenMeta: ((MetaPreview) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val uiState by MetaDetailsRepository.uiState.collectAsStateWithLifecycle()
@@ -174,6 +177,12 @@ fun MetaDetailsScreen(
                         meta.ageRating != null ||
                         meta.country != null ||
                         meta.language != null
+                }
+                val hasCollectionSection = remember(meta) {
+                    meta.collectionName != null && meta.collectionItems.isNotEmpty()
+                }
+                val hasMoreLikeThisSection = remember(meta) {
+                    meta.moreLikeThis.isNotEmpty()
                 }
                 val playButtonLabel = remember(movieProgress, seriesAction, meta.type, hasEpisodes) {
                     when {
@@ -325,6 +334,24 @@ fun MetaDetailsScreen(
 
                             if (!hasEpisodes && hasAdditionalInfoSection) {
                                 DetailAdditionalInfoSection(meta = meta)
+                            }
+
+                            if (!hasEpisodes && hasCollectionSection) {
+                                DetailPosterRailSection(
+                                    title = meta.collectionName.orEmpty(),
+                                    items = meta.collectionItems,
+                                    watchedKeys = watchedUiState.watchedKeys,
+                                    onPosterClick = onOpenMeta,
+                                )
+                            }
+
+                            if (hasMoreLikeThisSection) {
+                                DetailPosterRailSection(
+                                    title = "More Like This",
+                                    items = meta.moreLikeThis,
+                                    watchedKeys = watchedUiState.watchedKeys,
+                                    onPosterClick = onOpenMeta,
+                                )
                             }
 
                             Spacer(modifier = Modifier.height(32.dp + nuvioPlatformExtraBottomPadding))

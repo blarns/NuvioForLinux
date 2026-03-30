@@ -96,6 +96,7 @@ import com.nuvio.app.features.streams.StreamContextStore
 import com.nuvio.app.features.streams.StreamLinkCacheRepository
 import com.nuvio.app.features.streams.StreamsRepository
 import com.nuvio.app.features.streams.StreamsScreen
+import com.nuvio.app.features.tmdb.TmdbService
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watchprogress.ContinueWatchingItem
@@ -480,6 +481,27 @@ private fun MainAppContent(
                             navController.popBackStack()
                         },
                         onPlay = onPlay,
+                        onOpenMeta = { preview ->
+                            coroutineScope.launch {
+                                val resolvedId = if (preview.id.startsWith("tmdb:")) {
+                                    val tmdbId = preview.id.removePrefix("tmdb:").toIntOrNull()
+                                    tmdbId?.let {
+                                        TmdbService.tmdbToImdb(
+                                            tmdbId = it,
+                                            mediaType = preview.type,
+                                        )
+                                    } ?: preview.id
+                                } else {
+                                    preview.id
+                                }
+                                navController.navigate(
+                                    DetailRoute(
+                                        type = preview.type,
+                                        id = resolvedId,
+                                    ),
+                                )
+                            }
+                        },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
