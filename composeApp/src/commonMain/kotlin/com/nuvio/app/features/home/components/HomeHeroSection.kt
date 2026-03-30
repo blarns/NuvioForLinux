@@ -1,7 +1,5 @@
 package com.nuvio.app.features.home.components
 
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,10 +27,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -40,6 +40,11 @@ import coil3.compose.AsyncImage
 import com.nuvio.app.core.format.formatReleaseDateForDisplay
 import com.nuvio.app.features.home.MetaPreview
 import kotlinx.coroutines.launch
+import kotlin.math.abs
+
+private const val HERO_BACKGROUND_PARALLAX = 0.055f
+private const val HERO_BACKGROUND_SCALE = 1.14f
+private const val HERO_CONTENT_PARALLAX = 0.18f
 
 @Composable
 fun HomeHeroSection(
@@ -58,7 +63,32 @@ fun HomeHeroSection(
             .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)),
     ) {
         val heroHeight = (maxWidth.value * 1.22f).dp.coerceIn(440.dp, 800.dp)
-        val currentItem = items[pagerState.currentPage.coerceIn(items.indices)]
+        val heroWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
+        val currentPage = pagerState.currentPage.coerceIn(items.indices)
+        val visiblePages = listOf(
+            currentPage,
+            (currentPage - 1).coerceIn(items.indices),
+            (currentPage + 1).coerceIn(items.indices),
+        ).distinct()
+            .mapNotNull { index ->
+                val pageOffset = heroPageOffset(pagerState, index)
+                val visibility = (1f - abs(pageOffset)).coerceIn(0f, 1f)
+                if (visibility <= 0f) {
+                    null
+                } else {
+                    HeroPageLayer(
+                        page = index,
+                        visibility = visibility,
+                        offset = pageOffset,
+                    )
+                }
+            }
+            .sortedBy(HeroPageLayer::visibility)
+        val currentItem = visiblePages
+            .lastOrNull()
+            ?.page
+            ?.let(items::get)
+            ?: items[currentPage]
 
         Box(
             modifier = Modifier
@@ -69,7 +99,7 @@ fun HomeHeroSection(
                 state = pagerState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .alpha(0.01f),
+                    .graphicsLayer { alpha = 0.01f },
             ) {
                 Box(modifier = Modifier.fillMaxSize())
             }
@@ -77,15 +107,18 @@ fun HomeHeroSection(
             Box(
                 modifier = Modifier.fillMaxSize(),
             ) {
-                Crossfade(
-                    targetState = currentItem,
-                    animationSpec = tween(durationMillis = 320),
-                    label = "home-hero-background",
-                ) { item ->
+                visiblePages.forEach { layer ->
                     AsyncImage(
-                        model = item.banner ?: item.poster,
-                        contentDescription = item.name,
-                        modifier = Modifier.fillMaxSize(),
+                        model = items[layer.page].banner ?: items[layer.page].poster,
+                        contentDescription = items[layer.page].name,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                alpha = layer.visibility
+                                translationX = -layer.offset * heroWidthPx * HERO_BACKGROUND_PARALLAX
+                                scaleX = HERO_BACKGROUND_SCALE
+                                scaleY = HERO_BACKGROUND_SCALE
+                            },
                         contentScale = ContentScale.Crop,
                     )
                 }
@@ -127,15 +160,23 @@ fun HomeHeroSection(
                         .padding(horizontal = 24.dp, vertical = 16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Crossfade(
-                        targetState = currentItem,
-                        animationSpec = tween(durationMillis = 240),
-                        label = "home-hero-content",
-                    ) { item ->
-                        HeroContentBlock(
-                            item = item,
-                            onItemClick = onItemClick,
-                        )
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        visiblePages.forEach { layer ->
+                            Box(
+                                modifier = Modifier.graphicsLayer {
+                                    alpha = layer.visibility
+                                    translationX = -layer.offset * heroWidthPx * HERO_CONTENT_PARALLAX
+                                },
+                            ) {
+                                HeroContentBlock(
+                                    item = items[layer.page],
+                                    onItemClick = onItemClick,
+                                )
+                            }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -163,6 +204,7 @@ fun HomeHeroSection(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             items.forEachIndexed { index, _ ->
+                                val activeFraction = heroPageVisibility(pagerState, index)
                                 Box(
                                     modifier = Modifier
                                         .clickable {
@@ -172,14 +214,10 @@ fun HomeHeroSection(
                                         }
                                         .clip(CircleShape)
                                         .background(MaterialTheme.colorScheme.onBackground)
-                                        .alpha(if (pagerState.currentPage == index) 0.92f else 0.35f)
-                                        .then(
-                                            if (pagerState.currentPage == index) {
-                                                Modifier.width(32.dp)
-                                            } else {
-                                                Modifier.width(8.dp)
-                                            },
-                                        )
+                                        .graphicsLayer {
+                                            alpha = 0.35f + (0.57f * activeFraction)
+                                        }
+                                        .width(8.dp + (24.dp * activeFraction))
                                         .height(8.dp),
                                 )
                             }
@@ -189,6 +227,24 @@ fun HomeHeroSection(
             }
         }
     }
+}
+
+private data class HeroPageLayer(
+    val page: Int,
+    val visibility: Float,
+    val offset: Float,
+)
+
+private fun heroPageOffset(
+    pagerState: PagerState,
+    page: Int,
+): Float = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+
+private fun heroPageVisibility(
+    pagerState: PagerState,
+    page: Int,
+): Float {
+    return (1f - abs(heroPageOffset(pagerState, page))).coerceIn(0f, 1f)
 }
 
 @Composable

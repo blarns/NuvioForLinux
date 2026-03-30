@@ -87,16 +87,10 @@ fun HomeScreen(
         visibleContinueWatchingEntries,
         nextUpItemsBySeries,
     ) {
-        buildList {
-            addAll(
-                visibleContinueWatchingEntries.map { entry ->
-                    entry.lastUpdatedEpochMs to entry.toContinueWatchingItem()
-                },
-            )
-            addAll(nextUpItemsBySeries.values)
-        }
-            .sortedByDescending { it.first }
-            .map { it.second }
+        buildHomeContinueWatchingItems(
+            visibleEntries = visibleContinueWatchingEntries,
+            nextUpItemsBySeries = nextUpItemsBySeries,
+        )
     }
     val allManifestsSettled = addonsUiState.addons.isNotEmpty() &&
         addonsUiState.addons.none { it.isRefreshing }
@@ -284,11 +278,49 @@ fun HomeScreen(
 
 private const val HOME_CATALOG_PREVIEW_LIMIT = 18
 
+internal fun buildHomeContinueWatchingItems(
+    visibleEntries: List<WatchProgressEntry>,
+    nextUpItemsBySeries: Map<String, Pair<Long, ContinueWatchingItem>>,
+): List<ContinueWatchingItem> {
+    return buildList {
+        addAll(
+            visibleEntries.map { entry ->
+                HomeContinueWatchingCandidate(
+                    lastUpdatedEpochMs = entry.lastUpdatedEpochMs,
+                    item = entry.toContinueWatchingItem(),
+                    isProgressEntry = true,
+                )
+            },
+        )
+        addAll(
+            nextUpItemsBySeries.values.map { (lastUpdatedEpochMs, item) ->
+                HomeContinueWatchingCandidate(
+                    lastUpdatedEpochMs = lastUpdatedEpochMs,
+                    item = item,
+                    isProgressEntry = false,
+                )
+            },
+        )
+    }
+        .sortedWith(
+            compareByDescending<HomeContinueWatchingCandidate> { it.lastUpdatedEpochMs }
+                .thenByDescending { it.isProgressEntry },
+        )
+        .distinctBy { it.item.videoId }
+        .map(HomeContinueWatchingCandidate::item)
+}
+
 private data class CompletedSeriesCandidate(
     val content: WatchingContentRef,
     val seasonNumber: Int,
     val episodeNumber: Int,
     val markedAtEpochMs: Long,
+)
+
+private data class HomeContinueWatchingCandidate(
+    val lastUpdatedEpochMs: Long,
+    val item: ContinueWatchingItem,
+    val isProgressEntry: Boolean,
 )
 
 private fun CompletedSeriesCandidate.toContinueWatchingSeed(meta: com.nuvio.app.features.details.MetaDetails) =

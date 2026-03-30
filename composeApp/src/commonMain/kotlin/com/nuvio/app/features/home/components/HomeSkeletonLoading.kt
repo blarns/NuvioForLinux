@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -65,6 +66,7 @@ fun HomeSkeletonHero(modifier: Modifier = Modifier) {
             .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)),
     ) {
         val heroHeight = (maxWidth.value * 1.22f).dp.coerceIn(440.dp, 800.dp)
+        val containerWidth = maxWidth
 
         Box(
             modifier = Modifier
@@ -78,10 +80,25 @@ fun HomeSkeletonHero(modifier: Modifier = Modifier) {
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                MaterialTheme.colorScheme.background.copy(alpha = 0.04f),
-                                MaterialTheme.colorScheme.background.copy(alpha = 0.18f),
-                                MaterialTheme.colorScheme.background.copy(alpha = 0.42f),
-                                MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
+                                MaterialTheme.colorScheme.background.copy(alpha = 0.02f),
+                                MaterialTheme.colorScheme.background.copy(alpha = 0.12f),
+                                MaterialTheme.colorScheme.background.copy(alpha = 0.34f),
+                                MaterialTheme.colorScheme.background.copy(alpha = 0.78f),
+                            ),
+                        ),
+                    ),
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .align(Alignment.BottomCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.background.copy(alpha = 0f),
+                                MaterialTheme.colorScheme.background,
                             ),
                         ),
                     ),
@@ -89,48 +106,48 @@ fun HomeSkeletonHero(modifier: Modifier = Modifier) {
 
             Column(
                 modifier = Modifier
+                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 24.dp),
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Spacer(modifier = Modifier.weight(1f))
+                // Logo placeholder — matches fillMaxWidth(0.62f) + aspectRatio(2.6f)
                 SkeletonBlock(
                     brush = brush,
-                    width = 220.dp,
-                    height = 64.dp,
-                    cornerRadius = 20.dp,
+                    width = (containerWidth.value * 0.62f).dp,
+                    height = ((containerWidth.value * 0.62f) / 2.6f).dp,
+                    cornerRadius = 12.dp,
                 )
-                Spacer(modifier = Modifier.height(14.dp))
-                Row {
+                Spacer(modifier = Modifier.height(12.dp))
+                // Meta info row: type · genre · year
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SkeletonBlock(brush = brush, width = 52.dp, height = 14.dp, cornerRadius = 999.dp)
+                    SkeletonDot(brush = brush)
                     SkeletonBlock(brush = brush, width = 72.dp, height = 14.dp, cornerRadius = 999.dp)
-                    Spacer(modifier = Modifier.width(8.dp))
                     SkeletonDot(brush = brush)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    SkeletonBlock(brush = brush, width = 88.dp, height = 14.dp, cornerRadius = 999.dp)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    SkeletonDot(brush = brush)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    SkeletonBlock(brush = brush, width = 54.dp, height = 14.dp, cornerRadius = 999.dp)
+                    SkeletonBlock(brush = brush, width = 40.dp, height = 14.dp, cornerRadius = 999.dp)
                 }
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(14.dp))
+                // "View Details" button placeholder
                 SkeletonBlock(
                     brush = brush,
-                    width = 148.dp,
+                    width = 160.dp,
                     height = 48.dp,
                     cornerRadius = 40.dp,
                 )
-                Spacer(modifier = Modifier.height(16.dp))
-                Row {
-                    repeat(4) { index ->
-                        if (index > 0) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                        }
-                        SkeletonBlock(
-                            brush = brush,
-                            width = if (index == 0) 32.dp else 8.dp,
-                            height = 8.dp,
-                            cornerRadius = 999.dp,
-                        )
-                    }
+                Spacer(modifier = Modifier.height(12.dp))
+                // Pager dots
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SkeletonBlock(brush = brush, width = 32.dp, height = 8.dp, cornerRadius = 999.dp)
+                    SkeletonBlock(brush = brush, width = 8.dp, height = 8.dp, cornerRadius = 999.dp)
+                    SkeletonBlock(brush = brush, width = 8.dp, height = 8.dp, cornerRadius = 999.dp)
+                    SkeletonBlock(brush = brush, width = 8.dp, height = 8.dp, cornerRadius = 999.dp)
                 }
             }
         }
