@@ -23,6 +23,7 @@ actual fun PlatformPlayerSurface(
     modifier: Modifier,
     playWhenReady: Boolean,
     resizeMode: PlayerResizeMode,
+    useNativeController: Boolean,
     onControllerReady: (PlayerEngineController) -> Unit,
     onSnapshot: (PlayerPlaybackSnapshot) -> Unit,
     onError: (String?) -> Unit,

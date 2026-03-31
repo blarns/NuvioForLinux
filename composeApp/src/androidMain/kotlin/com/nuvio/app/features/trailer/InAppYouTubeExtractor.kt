@@ -3,6 +3,7 @@ package com.nuvio.app.features.trailer
 import android.net.Uri
 import android.util.Log
 import com.google.gson.Gson
+import com.nuvio.app.core.network.IPv4FirstDns
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -139,6 +140,7 @@ class InAppYouTubeExtractor {
     private val gson = Gson()
 
     private val httpClient = OkHttpClient.Builder()
+        .dns(IPv4FirstDns())
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .writeTimeout(20, TimeUnit.SECONDS)
@@ -331,8 +333,14 @@ class InAppYouTubeExtractor {
             bestProgressive?.url
         }
 
-        val videoUrl = resolveReachableUrl(bestVideo?.url ?: combinedUrl ?: return null)
-        val audioUrl = bestAudio?.url?.let { resolveReachableUrl(it) }
+        val separatedVideoUrl = bestVideo?.url?.let { resolveReachableUrlOrNull(it) }
+        val combinedCandidateUrl = combinedUrl?.let { resolveReachableUrlOrNull(it) }
+        val videoUrl = separatedVideoUrl ?: combinedCandidateUrl ?: return null
+        val audioUrl = if (!separatedVideoUrl.isNullOrBlank()) {
+            bestAudio?.url?.let { resolveReachableUrlOrNull(it) }
+        } else {
+            null
+        }
 
         if (VERBOSE_LOGS) {
             Log.d(
@@ -594,12 +602,14 @@ class InAppYouTubeExtractor {
         return sortCandidates(items).firstOrNull()
     }
 
-    private suspend fun resolveReachableUrl(url: String): String {
+    private suspend fun resolveReachableUrlOrNull(url: String): String? {
         if (!url.contains("googlevideo.com")) return url
         val uri = Uri.parse(url)
         val mnParam = uri.getQueryParameter("mn") ?: return url
         val servers = mnParam.split(",").map { it.trim() }.filter { it.isNotBlank() }
-        if (servers.size < 2) return url
+        if (servers.size < 2) {
+            return if (isUrlReachable(url)) url else null
+        }
 
         val candidates = mutableListOf(url)
         for (server in servers) {
@@ -615,7 +625,9 @@ class InAppYouTubeExtractor {
             candidates += url.replace(uri.host!!, altHost)
         }
 
-        if (candidates.size == 1) return candidates[0]
+        if (candidates.size == 1) {
+            return if (isUrlReachable(candidates[0])) candidates[0] else null
+        }
         val result = CompletableDeferred<String>()
         val probeScope = CoroutineScope(Dispatchers.IO)
         candidates.forEach { candidate ->
@@ -626,13 +638,14 @@ class InAppYouTubeExtractor {
             }
         }
         return try {
-            withTimeoutOrNull(2_000L) { result.await() } ?: url
+            withTimeoutOrNull(2_000L) { result.await() }
         } finally {
             probeScope.cancel()
         }
     }
 
     private val probeClient = OkHttpClient.Builder()
+        .dns(IPv4FirstDns())
         .connectTimeout(2, TimeUnit.SECONDS)
         .readTimeout(2, TimeUnit.SECONDS)
         .followRedirects(true)
@@ -647,7 +660,11 @@ class InAppYouTubeExtractor {
                 .header("Range", "bytes=0-0")
                 .headers(buildHeaders(DEFAULT_HEADERS))
                 .build()
-            probeClient.newCall(request).execute().use { val code = it.code; Log.d(TAG, "CDN probe code: ${Uri.parse(url).host} -> $code"); code == 200 }
+            probeClient.newCall(request).execute().use {
+                val code = it.code
+                Log.d(TAG, "CDN probe code: ${Uri.parse(url).host} -> $code")
+                code in 200..299
+            }
         }.getOrDefault(false)
     }
 

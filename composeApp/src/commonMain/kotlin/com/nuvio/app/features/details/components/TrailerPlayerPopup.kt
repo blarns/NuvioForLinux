@@ -9,8 +9,8 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.Icons
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -18,7 +18,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -26,17 +25,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import com.nuvio.app.core.ui.nuvioPlatformExtraBottomPadding
 import com.nuvio.app.features.player.PlatformPlayerSurface
 import com.nuvio.app.features.player.PlayerResizeMode
 import com.nuvio.app.features.trailer.TrailerPlaybackSource
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,15 +54,35 @@ fun TrailerPlayerPopup(
 ) {
     if (!visible) return
 
+    val headerType = trailerType.trim().ifBlank { "Trailer" }
+    val headerSubtitle = buildList {
+        if (trailerTitle.isNotBlank() && !trailerTitle.equals(headerType, ignoreCase = true)) {
+            add(trailerTitle)
+        }
+        if (contentTitle.isNotBlank()) {
+            add(contentTitle)
+        }
+    }.joinToString(separator = " • ")
+
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val coroutineScope = rememberCoroutineScope()
     var playerError by remember(playbackSource?.videoUrl, playbackSource?.audioUrl) {
         mutableStateOf<String?>(null)
     }
 
     val activeError = errorMessage ?: playerError
 
+    val dismissSheet: () -> Unit = {
+        coroutineScope.launch {
+            if (sheetState.isVisible) {
+                sheetState.hide()
+            }
+            onDismiss()
+        }
+    }
+
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = dismissSheet,
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
@@ -82,29 +103,15 @@ fun TrailerPlayerPopup(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text(
-                        text = trailerTitle,
+                        text = headerType,
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                        ) {
-                            Text(
-                                text = trailerType.ifBlank { "Trailer" },
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            )
-                        }
+                    if (headerSubtitle.isNotBlank()) {
                         Text(
-                            text = contentTitle,
+                            text = headerSubtitle,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -113,7 +120,7 @@ fun TrailerPlayerPopup(
                     }
                 }
 
-                IconButton(onClick = onDismiss) {
+                IconButton(onClick = dismissSheet) {
                     Icon(
                         imageVector = Icons.Rounded.Close,
                         contentDescription = "Close trailer",
@@ -170,6 +177,7 @@ fun TrailerPlayerPopup(
                             modifier = Modifier.fillMaxWidth(),
                             playWhenReady = true,
                             resizeMode = PlayerResizeMode.Fit,
+                            useNativeController = true,
                             onControllerReady = {},
                             onSnapshot = {},
                             onError = { playerError = it },

@@ -61,6 +61,7 @@ actual fun PlatformPlayerSurface(
     modifier: Modifier,
     playWhenReady: Boolean,
     resizeMode: PlayerResizeMode,
+    useNativeController: Boolean,
     onControllerReady: (PlayerEngineController) -> Unit,
     onSnapshot: (PlayerPlaybackSnapshot) -> Unit,
     onError: (String?) -> Unit,
@@ -362,7 +363,7 @@ actual fun PlatformPlayerSurface(
         modifier = modifier,
         factory = { viewContext ->
             PlayerView(viewContext).apply {
-                useController = false
+                useController = useNativeController
                 layoutParams = android.view.ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT)
                 player = exoPlayer
                 keepScreenOn = true
@@ -374,6 +375,7 @@ actual fun PlatformPlayerSurface(
         },
         update = { playerView ->
             playerView.player = exoPlayer
+            playerView.useController = useNativeController
             playerView.resizeMode = resizeMode.toExoResizeMode()
             playerViewRef = playerView
             playerView.applySubtitleStyle(currentSubtitleStyle)

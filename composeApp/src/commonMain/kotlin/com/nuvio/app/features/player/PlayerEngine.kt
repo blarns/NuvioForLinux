@@ -27,6 +27,7 @@ expect fun PlatformPlayerSurface(
     modifier: Modifier = Modifier,
     playWhenReady: Boolean = true,
     resizeMode: PlayerResizeMode = PlayerResizeMode.Fit,
+    useNativeController: Boolean = false,
     onControllerReady: (PlayerEngineController) -> Unit,
     onSnapshot: (PlayerPlaybackSnapshot) -> Unit,
     onError: (String?) -> Unit,
