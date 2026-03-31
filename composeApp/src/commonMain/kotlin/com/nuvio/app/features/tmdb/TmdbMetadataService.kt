@@ -5,6 +5,7 @@ import com.nuvio.app.features.addons.httpGetText
 import com.nuvio.app.features.details.MetaCompany
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.MetaPerson
+import com.nuvio.app.features.details.MetaTrailer
 import com.nuvio.app.features.details.MetaVideo
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.PosterShape
@@ -25,6 +26,7 @@ object TmdbMetadataService {
     private val episodeCache = mutableMapOf<String, Map<Pair<Int, Int>, TmdbEpisodeEnrichment>>()
     private val moreLikeThisCache = mutableMapOf<String, List<MetaPreview>>()
     private val collectionCache = mutableMapOf<String, Pair<String?, List<MetaPreview>>>()
+    private val trailerCache = mutableMapOf<String, List<MetaTrailer>>()
 
     suspend fun enrichMeta(
         meta: MetaDetails,
@@ -184,6 +186,10 @@ object TmdbMetadataService {
             )
         }
 
+        if (enrichment != null && settings.useTrailers && enrichment.trailers.isNotEmpty()) {
+            updated = updated.copy(trailers = enrichment.trailers)
+        }
+
         return updated
     }
 
@@ -245,11 +251,26 @@ object TmdbMetadataService {
                     emptyList()
                 }
             }
+            val trailers = async {
+                if (settings.useTrailers && (mediaType == "movie" || mediaType == "tv")) {
+                    fetchTrailers(
+                        tmdbId = numericId,
+                        mediaType = mediaType,
+                        language = normalizedLanguage,
+                    )
+                } else {
+                    emptyList()
+                }
+            }
             Quadruple(
                 first = details.await(),
                 second = credits.await(),
                 third = images.await(),
-                fourth = Pair(ageRating.await(), moreLikeThis.await()),
+                fourth = EnrichmentPayload(
+                    ageRating = ageRating.await(),
+                    moreLikeThis = moreLikeThis.await(),
+                    trailers = trailers.await(),
+                ),
             )
         }
 
@@ -280,7 +301,7 @@ object TmdbMetadataService {
             lastAirDate = lastAirDate,
             rating = details.voteAverage,
             runtimeMinutes = details.runtime ?: details.episodeRunTime.firstOrNull(),
-            ageRating = response.fourth.first,
+            ageRating = response.fourth.ageRating,
             status = details.status?.trim()?.takeIf(String::isNotBlank),
             countries = details.productionCountries
                 .mapNotNull { it.iso31661?.trim()?.takeIf(String::isNotBlank) }
@@ -297,7 +318,8 @@ object TmdbMetadataService {
             } else {
                 emptyList()
             },
-            moreLikeThis = response.fourth.second,
+            moreLikeThis = response.fourth.moreLikeThis,
+            trailers = response.fourth.trailers,
         )
 
         if (!enrichment.hasContent()) return@withContext null
@@ -444,6 +466,107 @@ object TmdbMetadataService {
         collectionCache[cacheKey] = result
         return result
     }
+
+    private suspend fun fetchTrailers(
+        tmdbId: Int,
+        mediaType: String,
+        language: String,
+    ): List<MetaTrailer> {
+        val cacheKey = "$tmdbId:$mediaType:$language:trailers"
+        trailerCache[cacheKey]?.let { return it }
+
+        val allVideos = mutableListOf<MetaTrailer>()
+
+        val primaryVideos = fetchTmdbVideos(
+            endpoint = "$mediaType/$tmdbId/videos",
+            language = language,
+        )
+        allVideos += primaryVideos.map { video ->
+            video.toMetaTrailer(
+                seasonNumber = null,
+                displayName = video.name,
+            )
+        }
+
+        if (mediaType == "tv") {
+            val details = fetch<TmdbDetailsResponse>(
+                endpoint = "tv/$tmdbId",
+                query = mapOf("language" to language),
+            )
+            val seasonCount = (details?.numberOfSeasons ?: 0).coerceAtLeast(0)
+            if (seasonCount > 0) {
+                val seasonVideos = coroutineScope {
+                    (1..seasonCount).map { seasonNumber ->
+                        async {
+                            seasonNumber to fetchTmdbVideos(
+                                endpoint = "tv/$tmdbId/season/$seasonNumber/videos",
+                                language = language,
+                            )
+                        }
+                    }.awaitAll()
+                }
+
+                seasonVideos.forEach { (seasonNumber, videos) ->
+                    allVideos += videos.map { video ->
+                        video.toMetaTrailer(
+                            seasonNumber = seasonNumber,
+                            displayName = "Season $seasonNumber - ${video.name}",
+                        )
+                    }
+                }
+            }
+        }
+
+        val byCategory = linkedMapOf<String, MutableList<MetaTrailer>>()
+        allVideos
+            .asSequence()
+            .filter { trailer ->
+                trailer.site.equals("YouTube", ignoreCase = true) && trailer.key.isNotBlank()
+            }
+            .forEach { trailer ->
+                byCategory.getOrPut(trailer.type.ifBlank { "Trailer" }) { mutableListOf() }
+                    .add(trailer)
+            }
+
+        byCategory.values.forEach { trailers ->
+            trailers.sortWith(
+                compareBy<MetaTrailer> {
+                    when {
+                        it.seasonNumber != null -> 0
+                        else -> 1
+                    }
+                }
+                    .thenByDescending { it.seasonNumber ?: Int.MIN_VALUE }
+                    .thenByDescending { it.official }
+                    .thenByDescending { it.publishedAt.orEmpty() }
+            )
+        }
+
+        val sortedCategories = byCategory.keys.sortedWith(
+            compareBy<String> { category ->
+                when {
+                    category.equals("Trailer", ignoreCase = true) -> 0
+                    byCategory[category].orEmpty().any { it.official } -> 1
+                    else -> 2
+                }
+            }.thenBy { it.lowercase() }
+        )
+
+        val result = sortedCategories.flatMap { byCategory[it].orEmpty() }
+        trailerCache[cacheKey] = result
+        return result
+    }
+
+    private suspend fun fetchTmdbVideos(
+        endpoint: String,
+        language: String,
+    ): List<TmdbVideoResult> {
+        val response = fetch<TmdbVideosResponse>(
+            endpoint = endpoint,
+            query = mapOf("language" to language),
+        )
+        return response?.results.orEmpty()
+    }
 }
 
 internal data class TmdbEnrichment(
@@ -469,6 +592,7 @@ internal data class TmdbEnrichment(
     val collectionName: String? = null,
     val collectionItems: List<MetaPreview> = emptyList(),
     val moreLikeThis: List<MetaPreview> = emptyList(),
+    val trailers: List<MetaTrailer> = emptyList(),
 ) {
     fun hasContent(): Boolean =
         localizedTitle != null ||
@@ -491,8 +615,15 @@ internal data class TmdbEnrichment(
             productionCompanies.isNotEmpty() ||
             networks.isNotEmpty() ||
             collectionItems.isNotEmpty() ||
-            moreLikeThis.isNotEmpty()
+            moreLikeThis.isNotEmpty() ||
+            trailers.isNotEmpty()
 }
+
+private data class EnrichmentPayload(
+    val ageRating: String?,
+    val moreLikeThis: List<MetaPreview>,
+    val trailers: List<MetaTrailer>,
+)
 
 internal data class TmdbEpisodeEnrichment(
     val title: String?,
@@ -746,7 +877,46 @@ private data class TmdbDetailsResponse(
     @SerialName("production_companies") val productionCompanies: List<TmdbCompany> = emptyList(),
     val networks: List<TmdbCompany> = emptyList(),
     @SerialName("belongs_to_collection") val belongsToCollection: TmdbCollectionRef? = null,
+    @SerialName("number_of_seasons") val numberOfSeasons: Int? = null,
 )
+
+@Serializable
+private data class TmdbVideosResponse(
+    val results: List<TmdbVideoResult> = emptyList(),
+)
+
+@Serializable
+private data class TmdbVideoResult(
+    val id: String? = null,
+    val key: String? = null,
+    val name: String? = null,
+    val site: String? = null,
+    val size: Int? = null,
+    val type: String? = null,
+    val official: Boolean? = null,
+    @SerialName("published_at") val publishedAt: String? = null,
+)
+
+private fun TmdbVideoResult.toMetaTrailer(
+    seasonNumber: Int?,
+    displayName: String?,
+): MetaTrailer {
+    val videoKey = key?.trim().orEmpty()
+    val videoName = name?.trim().takeUnless { it.isNullOrBlank() } ?: "Trailer"
+    val trailerId = id?.trim().takeUnless { it.isNullOrBlank() } ?: videoKey
+    return MetaTrailer(
+        id = trailerId,
+        key = videoKey,
+        name = videoName,
+        site = site?.trim().takeUnless { it.isNullOrBlank() } ?: "YouTube",
+        size = size,
+        type = type?.trim().takeUnless { it.isNullOrBlank() } ?: "Trailer",
+        official = official == true,
+        publishedAt = publishedAt,
+        seasonNumber = seasonNumber,
+        displayName = displayName,
+    )
+}
 
 @Serializable
 private data class TmdbNamedItem(

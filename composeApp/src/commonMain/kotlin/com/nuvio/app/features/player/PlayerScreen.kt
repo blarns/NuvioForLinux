@@ -50,6 +50,7 @@ private const val PlaybackProgressPersistIntervalMs = 60_000L
 fun PlayerScreen(
     title: String,
     sourceUrl: String,
+    sourceAudioUrl: String? = null,
     providerName: String,
     streamTitle: String,
     streamSubtitle: String?,
@@ -88,6 +89,7 @@ fun PlayerScreen(
         var controlsVisible by rememberSaveable { mutableStateOf(true) }
         // Active playback state (mutable to support source/episode switching)
         var activeSourceUrl by rememberSaveable { mutableStateOf(sourceUrl) }
+        var activeSourceAudioUrl by rememberSaveable { mutableStateOf(sourceAudioUrl) }
         var activeStreamTitle by rememberSaveable { mutableStateOf(streamTitle) }
         var activeStreamSubtitle by rememberSaveable { mutableStateOf(streamSubtitle) }
         var activeProviderName by rememberSaveable { mutableStateOf(providerName) }
@@ -148,6 +150,7 @@ fun PlayerScreen(
             activeStreamSubtitle,
             pauseDescription,
             activeSourceUrl,
+            activeSourceAudioUrl,
         ) {
             WatchProgressPlaybackSession(
                 contentType = contentType ?: parentMetaType,
@@ -349,6 +352,7 @@ fun PlayerScreen(
                 )
             }
             activeSourceUrl = url
+            activeSourceAudioUrl = null
             activeStreamTitle = stream.streamLabel
             activeStreamSubtitle = stream.streamSubtitle
             activeProviderName = stream.addonName
@@ -379,6 +383,7 @@ fun PlayerScreen(
                 )
             }
             activeSourceUrl = url
+            activeSourceAudioUrl = null
             activeStreamTitle = stream.streamLabel
             activeStreamSubtitle = stream.streamSubtitle
             activeProviderName = stream.addonName
@@ -414,7 +419,7 @@ fun PlayerScreen(
             controlsVisible = false
         }
 
-        LaunchedEffect(activeSourceUrl) {
+        LaunchedEffect(activeSourceUrl, activeSourceAudioUrl) {
             errorMessage = null
             scrubbingPositionMs = null
             initialLoadCompleted = false
@@ -512,7 +517,7 @@ fun PlayerScreen(
             )
         }
 
-        DisposableEffect(playbackSession.videoId, activeSourceUrl) {
+        DisposableEffect(playbackSession.videoId, activeSourceUrl, activeSourceAudioUrl) {
             onDispose {
                 flushWatchProgress()
             }
@@ -551,6 +556,7 @@ fun PlayerScreen(
         ) {
             PlatformPlayerSurface(
                 sourceUrl = activeSourceUrl,
+                sourceAudioUrl = activeSourceAudioUrl,
                 modifier = Modifier.fillMaxSize(),
                 playWhenReady = shouldPlay,
                 resizeMode = resizeMode,

@@ -27,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,10 +46,14 @@ import com.nuvio.app.features.details.components.DetailMetaInfo
 import com.nuvio.app.features.details.components.DetailPosterRailSection
 import com.nuvio.app.features.details.components.DetailProductionSection
 import com.nuvio.app.features.details.components.DetailSeriesContent
+import com.nuvio.app.features.details.components.DetailTrailersSection
 import com.nuvio.app.features.details.components.EpisodeWatchedActionSheet
+import com.nuvio.app.features.details.components.TrailerPlayerPopup
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.library.LibraryRepository
 import com.nuvio.app.features.library.toLibraryItem
+import com.nuvio.app.features.trailer.TrailerPlaybackResolver
+import com.nuvio.app.features.trailer.TrailerPlaybackSource
 import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watched.previousReleasedEpisodesBefore
 import com.nuvio.app.features.watched.releasedEpisodesForSeason
@@ -58,6 +63,7 @@ import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepository
 import com.nuvio.app.features.watching.application.WatchingActions
 import com.nuvio.app.features.watching.application.WatchingState
+import kotlinx.coroutines.launch
 
 @Composable
 fun MetaDetailsScreen(
@@ -187,6 +193,43 @@ fun MetaDetailsScreen(
                 val hasMoreLikeThisSection = remember(meta) {
                     meta.moreLikeThis.isNotEmpty()
                 }
+                val hasTrailersSection = remember(meta) {
+                    meta.trailers.isNotEmpty()
+                }
+                val trailerScope = rememberCoroutineScope()
+                var selectedTrailer by remember(meta.id) { mutableStateOf<MetaTrailer?>(null) }
+                var trailerPlaybackSource by remember(meta.id) { mutableStateOf<TrailerPlaybackSource?>(null) }
+                var trailerLoading by remember(meta.id) { mutableStateOf(false) }
+                var trailerErrorMessage by remember(meta.id) { mutableStateOf<String?>(null) }
+                var trailerRequestToken by remember(meta.id) { mutableIntStateOf(0) }
+                val resolveTrailer: (MetaTrailer) -> Unit = remember(meta.id) {
+                    { trailer ->
+                        selectedTrailer = trailer
+                        trailerPlaybackSource = null
+                        trailerErrorMessage = null
+                        trailerLoading = true
+                        trailerRequestToken += 1
+                        val currentRequestToken = trailerRequestToken
+                        trailerScope.launch {
+                            val youtubeUrl = trailer.key.takeIf {
+                                it.startsWith("http://") || it.startsWith("https://")
+                            } ?: "https://www.youtube.com/watch?v=${trailer.key}"
+                            val resolvedSource = runCatching {
+                                TrailerPlaybackResolver.resolveFromYouTubeUrl(youtubeUrl)
+                            }.getOrNull()
+                            if (currentRequestToken != trailerRequestToken) {
+                                return@launch
+                            }
+                            trailerPlaybackSource = resolvedSource
+                            trailerErrorMessage = if (resolvedSource == null) {
+                                "No playable trailer stream found."
+                            } else {
+                                null
+                            }
+                            trailerLoading = false
+                        }
+                    }
+                }
                 val playButtonLabel = remember(movieProgress, seriesAction, meta.type, hasEpisodes) {
                     when {
                         (meta.type == "series" || hasEpisodes) && seriesAction != null ->
@@ -289,6 +332,13 @@ fun MetaDetailsScreen(
                             }
 
                             DetailCastSection(cast = meta.cast)
+
+                            if (hasTrailersSection) {
+                                DetailTrailersSection(
+                                    trailers = meta.trailers,
+                                    onTrailerClick = resolveTrailer,
+                                )
+                            }
 
                             if (!hasEpisodes && hasProductionSection) {
                                 DetailProductionSection(meta = meta)
@@ -449,6 +499,26 @@ fun MetaDetailsScreen(
                             },
                         )
                     }
+
+                    TrailerPlayerPopup(
+                        visible = selectedTrailer != null,
+                        trailerTitle = selectedTrailer?.displayName ?: selectedTrailer?.name.orEmpty(),
+                        trailerType = selectedTrailer?.type.orEmpty(),
+                        contentTitle = meta.name,
+                        playbackSource = trailerPlaybackSource,
+                        isLoading = trailerLoading,
+                        errorMessage = trailerErrorMessage,
+                        onDismiss = {
+                            trailerRequestToken += 1
+                            trailerLoading = false
+                            trailerPlaybackSource = null
+                            trailerErrorMessage = null
+                            selectedTrailer = null
+                        },
+                        onRetry = selectedTrailer?.let { trailer ->
+                            { resolveTrailer(trailer) }
+                        },
+                    )
                 }
             }
         }

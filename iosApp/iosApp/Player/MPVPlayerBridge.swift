@@ -16,6 +16,7 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
     }
 
     func loadFile(url: String) { playerVC?.loadFile(url) }
+    func loadFileWithAudio(videoUrl: String, audioUrl: String?) { playerVC?.loadFile(videoUrl, audioUrl: audioUrl) }
     func play() { playerVC?.playPlayback() }
     func pause() { playerVC?.pausePlayback() }
     func seekTo(positionMs: Int64) { playerVC?.seekToMs(positionMs) }
@@ -220,12 +221,17 @@ final class MPVPlayerViewController: UIViewController {
 
     // MARK: - Playback API
 
-    func loadFile(_ urlString: String) {
+    func loadFile(_ urlString: String, audioUrl: String? = nil) {
         guard mpv != nil else { return }
         clearPlaybackError()
         isPlayerLoading = true
         isPlayerEnded = false
         command("loadfile", args: [urlString, "replace"])
+        if let audioUrl, !audioUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                self?.command("audio-add", args: [audioUrl, "select"], checkForErrors: false)
+            }
+        }
     }
 
     func playPlayback() {

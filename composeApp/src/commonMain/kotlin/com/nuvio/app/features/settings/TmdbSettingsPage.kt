@@ -66,6 +66,15 @@ internal fun LazyListScope.tmdbSettingsContent(
             SettingsGroup(isTablet = isTablet) {
                 TmdbToggleRow(
                     isTablet = isTablet,
+                    title = "Trailers",
+                    description = "Fetch and show TMDB trailer videos section on detail pages.",
+                    checked = settings.useTrailers,
+                    enabled = settings.enabled,
+                    onCheckedChange = TmdbSettingsRepository::setUseTrailers,
+                )
+                SettingsGroupDivider(isTablet = isTablet)
+                TmdbToggleRow(
+                    isTablet = isTablet,
                     title = "Artwork",
                     description = "Replace backdrop, poster, and logo with TMDB artwork.",
                     checked = settings.useArtwork,

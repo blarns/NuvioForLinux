@@ -32,6 +32,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
@@ -40,6 +41,7 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import androidx.media3.ui.CaptionStyleCompat
+import com.nuvio.app.features.trailer.YoutubeChunkedDataSourceFactory
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -55,6 +57,7 @@ private const val TAG = "NuvioPlayer"
 @Composable
 actual fun PlatformPlayerSurface(
     sourceUrl: String,
+    sourceAudioUrl: String?,
     modifier: Modifier,
     playWhenReady: Boolean,
     resizeMode: PlayerResizeMode,
@@ -73,7 +76,7 @@ actual fun PlatformPlayerSurface(
         PlayerSettingsRepository.uiState.value
     }
 
-    val exoPlayer = remember(sourceUrl) {
+    val exoPlayer = remember(sourceUrl, sourceAudioUrl) {
         val renderersFactory = DefaultRenderersFactory(context)
             .setExtensionRendererMode(playerSettings.decoderPriority)
             .setMapDV7ToHevc(playerSettings.mapDV7ToHevc)
@@ -102,13 +105,24 @@ actual fun PlatformPlayerSurface(
             .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS)
             .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
 
+        val mediaSourceFactory = DefaultMediaSourceFactory(
+            YoutubeChunkedDataSourceFactory(),
+            extractorsFactory,
+        )
+
         ExoPlayer.Builder(context)
             .setRenderersFactory(renderersFactory)
             .setTrackSelector(trackSelector)
             .setLoadControl(loadControl)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(context, extractorsFactory))
+            .setMediaSourceFactory(mediaSourceFactory)
             .build().apply {
-                setMediaItem(MediaItem.fromUri(sourceUrl))
+                if (!sourceAudioUrl.isNullOrBlank()) {
+                    val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(sourceUrl))
+                    val audioSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(sourceAudioUrl))
+                    setMediaSource(MergingMediaSource(videoSource, audioSource))
+                } else {
+                    setMediaItem(MediaItem.fromUri(sourceUrl))
+                }
                 prepare()
                 this.playWhenReady = playWhenReady
             }

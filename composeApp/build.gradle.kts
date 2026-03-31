@@ -106,6 +106,8 @@ kotlin {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
             implementation("androidx.recyclerview:recyclerview:1.4.0")
+            implementation("com.squareup.okhttp3:okhttp:4.12.0")
+            implementation("com.google.code.gson:gson:2.11.0")
             implementation(libs.ktor.client.android)
             implementation(libs.androidx.media3.exoplayer.hls)
             implementation(libs.androidx.media3.exoplayer.dash)

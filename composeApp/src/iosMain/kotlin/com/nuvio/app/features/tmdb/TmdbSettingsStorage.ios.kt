@@ -6,6 +6,7 @@ import platform.Foundation.NSUserDefaults
 actual object TmdbSettingsStorage {
     private const val enabledKey = "tmdb_enabled"
     private const val languageKey = "tmdb_language"
+    private const val useTrailersKey = "tmdb_use_trailers"
     private const val useArtworkKey = "tmdb_use_artwork"
     private const val useBasicInfoKey = "tmdb_use_basic_info"
     private const val useDetailsKey = "tmdb_use_details"
@@ -28,6 +29,12 @@ actual object TmdbSettingsStorage {
 
     actual fun saveLanguage(language: String) {
         NSUserDefaults.standardUserDefaults.setObject(language, forKey = ProfileScopedKey.of(languageKey))
+    }
+
+    actual fun loadUseTrailers(): Boolean? = loadBoolean(useTrailersKey)
+
+    actual fun saveUseTrailers(enabled: Boolean) {
+        saveBoolean(useTrailersKey, enabled)
     }
 
     actual fun loadUseArtwork(): Boolean? = loadBoolean(useArtworkKey)

@@ -638,6 +638,7 @@ private fun MainAppContent(
                     PlayerScreen(
                         title = launch.title,
                         sourceUrl = launch.sourceUrl,
+                        sourceAudioUrl = launch.sourceAudioUrl,
                         logo = launch.logo,
                         poster = launch.poster,
                         background = launch.background,

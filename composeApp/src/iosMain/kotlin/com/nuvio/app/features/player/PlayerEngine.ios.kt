@@ -19,6 +19,7 @@ private const val TAG = "NuvioiOSPlayer"
 @Composable
 actual fun PlatformPlayerSurface(
     sourceUrl: String,
+    sourceAudioUrl: String?,
     modifier: Modifier,
     playWhenReady: Boolean,
     resizeMode: PlayerResizeMode,
@@ -203,8 +204,8 @@ actual fun PlatformPlayerSurface(
     }
 
     // Load file and set initial state
-    LaunchedEffect(bridge, sourceUrl) {
-        bridge.loadFile(sourceUrl)
+    LaunchedEffect(bridge, sourceUrl, sourceAudioUrl) {
+        bridge.loadFileWithAudio(sourceUrl, sourceAudioUrl)
         if (playWhenReady) {
             bridge.play()
         } else {

@@ -32,8 +32,22 @@ data class MetaDetails(
     val moreLikeThis: List<MetaPreview> = emptyList(),
     val collectionName: String? = null,
     val collectionItems: List<MetaPreview> = emptyList(),
+    val trailers: List<MetaTrailer> = emptyList(),
     val links: List<MetaLink> = emptyList(),
     val videos: List<MetaVideo> = emptyList(),
+)
+
+data class MetaTrailer(
+    val id: String,
+    val key: String,
+    val name: String,
+    val site: String,
+    val size: Int? = null,
+    val type: String = "Trailer",
+    val official: Boolean = false,
+    val publishedAt: String? = null,
+    val seasonNumber: Int? = null,
+    val displayName: String? = null,
 )
 
 data class MetaPerson(

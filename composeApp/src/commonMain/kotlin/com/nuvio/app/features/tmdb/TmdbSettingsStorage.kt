@@ -5,6 +5,8 @@ internal expect object TmdbSettingsStorage {
     fun saveEnabled(enabled: Boolean)
     fun loadLanguage(): String?
     fun saveLanguage(language: String)
+    fun loadUseTrailers(): Boolean?
+    fun saveUseTrailers(enabled: Boolean)
     fun loadUseArtwork(): Boolean?
     fun saveUseArtwork(enabled: Boolean)
     fun loadUseBasicInfo(): Boolean?

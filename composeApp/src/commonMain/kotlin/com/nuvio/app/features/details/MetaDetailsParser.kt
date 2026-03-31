@@ -46,6 +46,7 @@ internal object MetaDetailsParser {
             language = meta.string("language"),
             website = meta.string("website"),
             hasScheduledVideos = meta.behaviorHints().boolean("hasScheduledVideos") == true,
+            trailers = meta.trailers(),
             links = links,
             videos = meta.videos(),
         )
@@ -228,6 +229,32 @@ internal object MetaDetailsParser {
                 overview = video.string("overview") ?: video.string("description"),
                 runtime = video.int("runtime"),
                 streams = video.embeddedStreams(),
+            )
+        }
+
+    private fun JsonObject.trailers(): List<MetaTrailer> =
+        array("trailers").mapNotNull { element ->
+            val trailer = element as? JsonObject ?: return@mapNotNull null
+            val key = trailer.string("key")
+                ?: trailer.string("source")
+                ?: trailer.string("ytId")
+                ?: trailer.string("ytid")
+                ?: return@mapNotNull null
+
+            val normalizedKey = key.trim()
+            if (normalizedKey.isEmpty()) return@mapNotNull null
+
+            MetaTrailer(
+                id = trailer.string("id")?.takeIf(String::isNotBlank) ?: normalizedKey,
+                key = normalizedKey,
+                name = trailer.string("name")?.takeIf(String::isNotBlank) ?: "Trailer",
+                site = trailer.string("site")?.takeIf(String::isNotBlank) ?: "YouTube",
+                size = trailer.int("size"),
+                type = trailer.string("type")?.takeIf(String::isNotBlank) ?: "Trailer",
+                official = trailer.boolean("official") == true,
+                publishedAt = trailer.string("published_at") ?: trailer.string("publishedAt"),
+                seasonNumber = trailer.int("seasonNumber") ?: trailer.int("season_number"),
+                displayName = trailer.string("displayName")?.takeIf(String::isNotBlank),
             )
         }
 

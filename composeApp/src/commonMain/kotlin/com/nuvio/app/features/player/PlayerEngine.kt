@@ -23,6 +23,7 @@ interface PlayerEngineController {
 @Composable
 expect fun PlatformPlayerSurface(
     sourceUrl: String,
+    sourceAudioUrl: String? = null,
     modifier: Modifier = Modifier,
     playWhenReady: Boolean = true,
     resizeMode: PlayerResizeMode = PlayerResizeMode.Fit,
