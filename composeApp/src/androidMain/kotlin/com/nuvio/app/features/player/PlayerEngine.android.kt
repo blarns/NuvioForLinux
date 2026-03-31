@@ -3,8 +3,8 @@ package com.nuvio.app.features.player
 import android.net.Uri
 import android.util.Log
 import android.util.TypedValue
+import android.graphics.Typeface
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
-import kotlin.math.roundToInt
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.Composable
@@ -387,11 +387,13 @@ private fun PlayerResizeMode.toExoResizeMode(): Int =
 
 private fun PlayerView.applySubtitleStyle(style: SubtitleStyleState) {
     subtitleView?.apply {
-        val bottomOffsetPx = (style.bottomOffset * resources.displayMetrics.density).roundToInt()
+        val baseBottomPaddingFraction = SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION * 2f / 3f
+        val offsetFraction = (style.bottomOffset / 1000f).coerceIn(0f, 0.2f)
+        val bottomPaddingFraction = (baseBottomPaddingFraction + offsetFraction).coerceIn(0f, 0.4f)
+
         setApplyEmbeddedStyles(false)
         setApplyEmbeddedFontSizes(false)
-        setPadding(paddingLeft, paddingTop, paddingRight, bottomOffsetPx)
-        setBottomPaddingFraction(0f)
+        setBottomPaddingFraction(bottomPaddingFraction)
         setStyle(
             CaptionStyleCompat(
                 style.textColor.toArgb(),
@@ -399,7 +401,7 @@ private fun PlayerView.applySubtitleStyle(style: SubtitleStyleState) {
                 android.graphics.Color.TRANSPARENT,
                 if (style.outlineEnabled) CaptionStyleCompat.EDGE_TYPE_OUTLINE else CaptionStyleCompat.EDGE_TYPE_NONE,
                 android.graphics.Color.BLACK,
-                null,
+                Typeface.DEFAULT,
             )
         )
         setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, style.fontSizeSp.toFloat())

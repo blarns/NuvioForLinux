@@ -1,6 +1,57 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import org.gradle.api.DefaultTask
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.Optional
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.TaskAction
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import java.util.Properties
+
+abstract class GenerateRuntimeConfigsTask : DefaultTask() {
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @get:Optional
+    @get:InputFile
+    abstract val localPropertiesFile: RegularFileProperty
+
+    @TaskAction
+    fun generate() {
+        val props = Properties()
+        localPropertiesFile.asFile.orNull?.takeIf { it.exists() }?.inputStream()?.use { props.load(it) }
+
+        val outDir = outputDir.get().asFile
+        outDir.resolve("com/nuvio/app/core/network").apply {
+            mkdirs()
+            resolve("SupabaseConfig.kt").writeText(
+                """
+                |package com.nuvio.app.core.network
+                |
+                |object SupabaseConfig {
+                |    const val URL = "${props.getProperty("SUPABASE_URL", "")}" 
+                |    const val ANON_KEY = "${props.getProperty("SUPABASE_ANON_KEY", "")}" 
+                |}
+                """.trimMargin()
+            )
+        }
+
+        outDir.resolve("com/nuvio/app/features/tmdb").apply {
+            mkdirs()
+            resolve("TmdbConfig.kt").writeText(
+                """
+                |package com.nuvio.app.features.tmdb
+                |
+                |object TmdbConfig {
+                |    const val API_KEY = "${props.getProperty("TMDB_API_KEY", "")}" 
+                |}
+                """.trimMargin()
+            )
+        }
+    }
+}
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -19,31 +70,15 @@ val releaseStorePassword = supabaseProps.getProperty("NUVIO_RELEASE_STORE_PASSWO
 val releaseKeyAlias = supabaseProps.getProperty("NUVIO_RELEASE_KEY_ALIAS")?.takeIf { it.isNotBlank() }
 val releaseKeyPassword = supabaseProps.getProperty("NUVIO_RELEASE_KEY_PASSWORD")?.takeIf { it.isNotBlank() }
 val releaseKeystore = releaseStoreFile?.let(rootProject::file)
-val generatedDir = layout.buildDirectory.dir("generated/supabase/kotlin").get().asFile
-generatedDir.resolve("com/nuvio/app/core/network").apply {
-    mkdirs()
-    resolve("SupabaseConfig.kt").writeText(
-        """
-        |package com.nuvio.app.core.network
-        |
-        |object SupabaseConfig {
-        |    const val URL = "${supabaseProps.getProperty("SUPABASE_URL", "")}"
-        |    const val ANON_KEY = "${supabaseProps.getProperty("SUPABASE_ANON_KEY", "")}"
-        |}
-        """.trimMargin()
-    )
+val generatedRuntimeConfigDir = layout.buildDirectory.dir("generated/runtime-config/kotlin")
+
+val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generateRuntimeConfigs") {
+    outputDir.set(generatedRuntimeConfigDir)
+    localPropertiesFile.set(rootProject.layout.projectDirectory.file("local.properties"))
 }
-generatedDir.resolve("com/nuvio/app/features/tmdb").apply {
-    mkdirs()
-    resolve("TmdbConfig.kt").writeText(
-        """
-        |package com.nuvio.app.features.tmdb
-        |
-        |object TmdbConfig {
-        |    const val API_KEY = "${supabaseProps.getProperty("TMDB_API_KEY", "")}"
-        |}
-        """.trimMargin()
-    )
+
+tasks.withType<KotlinCompile>().configureEach {
+    dependsOn(generateRuntimeConfigs)
 }
 
 kotlin {
@@ -65,7 +100,7 @@ kotlin {
     
     sourceSets {
         commonMain {
-            kotlin.srcDir(layout.buildDirectory.dir("generated/supabase/kotlin"))
+            kotlin.srcDir(generatedRuntimeConfigDir)
         }
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
