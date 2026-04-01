@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -30,6 +31,7 @@ fun DetailActionButtons(
     playLabel: String = "Play",
     saveLabel: String = "Save",
     isSaved: Boolean = false,
+    isTablet: Boolean = false,
     onPlayClick: () -> Unit = {},
     onSaveClick: () -> Unit = {},
 ) {
@@ -38,12 +40,22 @@ fun DetailActionButtons(
 
     Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = if (isTablet) {
+            Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)
+        } else {
+            Arrangement.spacedBy(12.dp)
+        },
     ) {
         Button(
             onClick = onPlayClick,
             modifier = Modifier
-                .weight(1f)
+                .then(
+                    if (isTablet) {
+                        Modifier.width(220.dp)
+                    } else {
+                        Modifier.weight(1f)
+                    }
+                )
                 .height(50.dp),
             shape = RoundedCornerShape(40.dp),
             colors = ButtonDefaults.buttonColors(
@@ -68,7 +80,13 @@ fun DetailActionButtons(
         OutlinedButton(
             onClick = onSaveClick,
             modifier = Modifier
-                .weight(1f)
+                .then(
+                    if (isTablet) {
+                        Modifier.width(220.dp)
+                    } else {
+                        Modifier.weight(1f)
+                    }
+                )
                 .height(50.dp),
             shape = RoundedCornerShape(40.dp),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),

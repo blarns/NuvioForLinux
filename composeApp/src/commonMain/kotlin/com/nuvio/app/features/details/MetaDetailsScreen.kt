@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.statusBars
@@ -46,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.ui.NuvioBackButton
@@ -306,303 +309,313 @@ fun MetaDetailsScreen(
                     label = "detail_floating_header_progress",
                 )
 
-                Box(modifier = Modifier.fillMaxSize()) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(scrollState),
-                    ) {
-                        DetailHero(
-                            meta = meta,
-                            scrollOffset = scrollState.value,
-                            onHeightChanged = { heroHeightPx = it },
-                        )
+                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    val isTablet = maxWidth >= 720.dp
+                    val contentHorizontalPadding = if (isTablet) 32.dp else 18.dp
+                    val contentMaxWidth = detailTabletContentMaxWidth(maxWidth, isTablet)
 
+                    Box(modifier = Modifier.fillMaxSize()) {
                         Column(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 18.dp),
-                            verticalArrangement = Arrangement.spacedBy(20.dp),
+                                .fillMaxSize()
+                                .verticalScroll(scrollState),
                         ) {
-                            DetailActionButtons(
-                                playLabel = playButtonLabel,
-                                saveLabel = if (isSaved) "Saved" else "Save",
-                                isSaved = isSaved,
-                                onPlayClick = {
-                                    when {
-                                        (meta.type == "series" || hasEpisodes) && seriesAction != null -> {
-                                            onPlay?.invoke(
-                                                meta.type,
-                                                seriesAction.videoId,
-                                                meta.id,
-                                                meta.type,
-                                                meta.name,
-                                                meta.logo,
-                                                meta.poster,
-                                                meta.background,
-                                                seriesAction.seasonNumber,
-                                                seriesAction.episodeNumber,
-                                                seriesAction.episodeTitle,
-                                                seriesAction.episodeThumbnail,
-                                                seriesPauseDescription,
-                                                seriesAction.resumePositionMs,
-                                            )
-                                        }
-
-                                        else -> {
-                                            onPlay?.invoke(
-                                                meta.type,
-                                                meta.id,
-                                                meta.id,
-                                                meta.type,
-                                                meta.name,
-                                                meta.logo,
-                                                meta.poster,
-                                                meta.background,
-                                                null,
-                                                null,
-                                                null,
-                                                null,
-                                                meta.description,
-                                                movieProgress?.lastPositionMs,
-                                            )
-                                        }
-                                    }
-                                },
-                                onSaveClick = toggleSaved,
-                            )
-
-                            DetailMetaInfo(meta = meta)
-
-                            if (hasEpisodes && hasProductionSection) {
-                                DetailProductionSection(meta = meta)
-                            }
-
-                            DetailCastSection(cast = meta.cast)
-
-                            if (hasTrailersSection) {
-                                DetailTrailersSection(
-                                    trailers = meta.trailers,
-                                    onTrailerClick = resolveTrailer,
-                                )
-                            }
-
-                            if (!hasEpisodes && hasProductionSection) {
-                                DetailProductionSection(meta = meta)
-                            }
-
-                            DetailSeriesContent(
+                            DetailHero(
                                 meta = meta,
-                                progressByVideoId = watchProgressUiState.byVideoId,
-                                watchedKeys = watchedUiState.watchedKeys,
-                                onEpisodeClick = { video ->
-                                    val season = video.season
-                                    val episode = video.episode
-                                    val playbackVideoId = buildPlaybackVideoId(
-                                        parentMetaId = meta.id,
-                                        seasonNumber = season,
-                                        episodeNumber = episode,
-                                        fallbackVideoId = video.id,
-                                    )
-                                    val savedProgress = watchProgressUiState.byVideoId[playbackVideoId]
-                                        ?.takeUnless { it.isCompleted }
-                                    onPlay?.invoke(
-                                        meta.type,
-                                        playbackVideoId,
-                                        meta.id,
-                                        meta.type,
-                                        meta.name,
-                                        meta.logo,
-                                        meta.poster,
-                                        meta.background,
-                                        season,
-                                        episode,
-                                        video.title,
-                                        video.thumbnail,
-                                        video.overview,
-                                        savedProgress?.lastPositionMs,
-                                    )
-                                },
-                                onEpisodeLongPress = { video ->
-                                    selectedEpisodeForActions = video
-                                },
+                                isTablet = isTablet,
+                                contentMaxWidth = contentMaxWidth,
+                                scrollOffset = scrollState.value,
+                                onHeightChanged = { heroHeightPx = it },
                             )
 
-                            if (hasEpisodes && hasAdditionalInfoSection) {
-                                DetailAdditionalInfoSection(meta = meta)
-                            }
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = contentHorizontalPadding)
+                                    .widthIn(max = if (isTablet) contentMaxWidth else Dp.Unspecified),
+                                verticalArrangement = Arrangement.spacedBy(20.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                DetailActionButtons(
+                                    playLabel = playButtonLabel,
+                                    saveLabel = if (isSaved) "Saved" else "Save",
+                                    isSaved = isSaved,
+                                    isTablet = isTablet,
+                                    onPlayClick = {
+                                        when {
+                                            (meta.type == "series" || hasEpisodes) && seriesAction != null -> {
+                                                onPlay?.invoke(
+                                                    meta.type,
+                                                    seriesAction.videoId,
+                                                    meta.id,
+                                                    meta.type,
+                                                    meta.name,
+                                                    meta.logo,
+                                                    meta.poster,
+                                                    meta.background,
+                                                    seriesAction.seasonNumber,
+                                                    seriesAction.episodeNumber,
+                                                    seriesAction.episodeTitle,
+                                                    seriesAction.episodeThumbnail,
+                                                    seriesPauseDescription,
+                                                    seriesAction.resumePositionMs,
+                                                )
+                                            }
 
-                            if (!hasEpisodes && hasAdditionalInfoSection) {
-                                DetailAdditionalInfoSection(meta = meta)
-                            }
-
-                            if (!hasEpisodes && hasCollectionSection) {
-                                DetailPosterRailSection(
-                                    title = meta.collectionName.orEmpty(),
-                                    items = meta.collectionItems,
-                                    watchedKeys = watchedUiState.watchedKeys,
-                                    onPosterClick = onOpenMeta,
+                                            else -> {
+                                                onPlay?.invoke(
+                                                    meta.type,
+                                                    meta.id,
+                                                    meta.id,
+                                                    meta.type,
+                                                    meta.name,
+                                                    meta.logo,
+                                                    meta.poster,
+                                                    meta.background,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    meta.description,
+                                                    movieProgress?.lastPositionMs,
+                                                )
+                                            }
+                                        }
+                                    },
+                                    onSaveClick = toggleSaved,
                                 )
-                            }
 
-                            if (hasMoreLikeThisSection) {
-                                DetailPosterRailSection(
-                                    title = "More Like This",
-                                    items = meta.moreLikeThis,
-                                    watchedKeys = watchedUiState.watchedKeys,
-                                    onPosterClick = onOpenMeta,
-                                )
-                            }
+                                DetailMetaInfo(meta = meta)
 
-                            Spacer(modifier = Modifier.height(32.dp + nuvioPlatformExtraBottomPadding))
-                        }
-                    }
-
-                    if (headerProgress <= 0.05f) {
-                        NuvioBackButton(
-                            onClick = onBack,
-                            modifier = Modifier.padding(
-                                start = 12.dp,
-                                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp,
-                            ),
-                            containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.5f),
-                            contentColor = MaterialTheme.colorScheme.onBackground,
-                        )
-                    }
-
-                    DetailFloatingHeader(
-                        meta = meta,
-                        isSaved = isSaved,
-                        progress = headerProgress,
-                        onBack = onBack,
-                        onToggleSaved = toggleSaved,
-                    )
-
-                    selectedEpisodeForActions?.let { selectedEpisode ->
-                        val isSelectedEpisodeWatched = remember(meta, selectedEpisode, watchedUiState.watchedKeys) {
-                            WatchingState.isEpisodeWatched(
-                                watchedKeys = watchedUiState.watchedKeys,
-                                metaType = meta.type,
-                                metaId = meta.id,
-                                episode = selectedEpisode,
-                            )
-                        }
-                        val previousEpisodes = remember(meta, selectedEpisode, todayIsoDate) {
-                            meta.previousReleasedEpisodesBefore(
-                                target = selectedEpisode,
-                                todayIsoDate = todayIsoDate,
-                            )
-                        }
-                        val seasonEpisodes = remember(meta, selectedEpisode, todayIsoDate) {
-                            meta.releasedEpisodesForSeason(
-                                seasonNumber = selectedEpisode.season,
-                                todayIsoDate = todayIsoDate,
-                            )
-                        }
-                        val arePreviousEpisodesWatched = remember(previousEpisodes, watchedUiState.watchedKeys) {
-                            WatchingState.areEpisodesWatched(
-                                watchedKeys = watchedUiState.watchedKeys,
-                                metaType = meta.type,
-                                metaId = meta.id,
-                                episodes = previousEpisodes,
-                            )
-                        }
-                        val isSeasonWatched = remember(seasonEpisodes, watchedUiState.watchedKeys) {
-                            WatchingState.areEpisodesWatched(
-                                watchedKeys = watchedUiState.watchedKeys,
-                                metaType = meta.type,
-                                metaId = meta.id,
-                                episodes = seasonEpisodes,
-                            )
-                        }
-                        EpisodeWatchedActionSheet(
-                            episode = selectedEpisode,
-                            seasonLabel = selectedEpisode.season?.let { "Season $it" } ?: "Specials",
-                            isEpisodeWatched = isSelectedEpisodeWatched,
-                            canMarkPreviousEpisodes = previousEpisodes.isNotEmpty(),
-                            arePreviousEpisodesWatched = arePreviousEpisodesWatched,
-                            isSeasonWatched = isSeasonWatched,
-                            onDismiss = { selectedEpisodeForActions = null },
-                            onToggleWatched = {
-                                WatchingActions.toggleEpisodeWatched(
-                                    meta = meta,
-                                    episode = selectedEpisode,
-                                    isCurrentlyWatched = isSelectedEpisodeWatched,
-                                )
-                            },
-                            onTogglePreviousWatched = {
-                                WatchingActions.togglePreviousEpisodesWatched(
-                                    meta = meta,
-                                    episodes = previousEpisodes,
-                                    areCurrentlyWatched = arePreviousEpisodesWatched,
-                                )
-                            },
-                            onToggleSeasonWatched = {
-                                WatchingActions.toggleSeasonWatched(
-                                    meta = meta,
-                                    episodes = seasonEpisodes,
-                                    areCurrentlyWatched = isSeasonWatched,
-                                )
-                            },
-                        )
-                    }
-
-                    TrailerPlayerPopup(
-                        visible = selectedTrailer != null,
-                        trailerTitle = selectedTrailer?.displayName ?: selectedTrailer?.name.orEmpty(),
-                        trailerType = selectedTrailer?.type.orEmpty(),
-                        contentTitle = meta.name,
-                        playbackSource = trailerPlaybackSource,
-                        isLoading = trailerLoading,
-                        errorMessage = trailerErrorMessage,
-                        onDismiss = {
-                            trailerRequestToken += 1
-                            trailerLoading = false
-                            trailerPlaybackSource = null
-                            trailerErrorMessage = null
-                            selectedTrailer = null
-                        },
-                        onRetry = selectedTrailer?.let { trailer ->
-                            { resolveTrailer(trailer) }
-                        },
-                    )
-
-                    TraktListPickerDialog(
-                        visible = showLibraryListPicker,
-                        title = meta.name,
-                        tabs = pickerTabs,
-                        membership = pickerMembership,
-                        isPending = pickerPending,
-                        errorMessage = pickerError,
-                        onToggle = { listKey ->
-                            pickerMembership = pickerMembership.toMutableMap().apply {
-                                this[listKey] = !(this[listKey] == true)
-                            }
-                        },
-                        onDismiss = {
-                            if (!pickerPending) {
-                                showLibraryListPicker = false
-                            }
-                        },
-                        onSave = {
-                            detailsScope.launch {
-                                pickerPending = true
-                                pickerError = null
-                                runCatching {
-                                    LibraryRepository.applyMembershipChanges(
-                                        item = meta.toLibraryItem(savedAtEpochMs = 0L),
-                                        desiredMembership = pickerMembership,
-                                    )
-                                }.onSuccess {
-                                    showLibraryListPicker = false
-                                }.onFailure { error ->
-                                    pickerError = error.message ?: "Failed to update Trakt lists"
+                                if (hasEpisodes && hasProductionSection) {
+                                    DetailProductionSection(meta = meta)
                                 }
-                                pickerPending = false
+
+                                DetailCastSection(cast = meta.cast)
+
+                                if (hasTrailersSection) {
+                                    DetailTrailersSection(
+                                        trailers = meta.trailers,
+                                        onTrailerClick = resolveTrailer,
+                                    )
+                                }
+
+                                if (!hasEpisodes && hasProductionSection) {
+                                    DetailProductionSection(meta = meta)
+                                }
+
+                                DetailSeriesContent(
+                                    meta = meta,
+                                    progressByVideoId = watchProgressUiState.byVideoId,
+                                    watchedKeys = watchedUiState.watchedKeys,
+                                    onEpisodeClick = { video ->
+                                        val season = video.season
+                                        val episode = video.episode
+                                        val playbackVideoId = buildPlaybackVideoId(
+                                            parentMetaId = meta.id,
+                                            seasonNumber = season,
+                                            episodeNumber = episode,
+                                            fallbackVideoId = video.id,
+                                        )
+                                        val savedProgress = watchProgressUiState.byVideoId[playbackVideoId]
+                                            ?.takeUnless { it.isCompleted }
+                                        onPlay?.invoke(
+                                            meta.type,
+                                            playbackVideoId,
+                                            meta.id,
+                                            meta.type,
+                                            meta.name,
+                                            meta.logo,
+                                            meta.poster,
+                                            meta.background,
+                                            season,
+                                            episode,
+                                            video.title,
+                                            video.thumbnail,
+                                            video.overview,
+                                            savedProgress?.lastPositionMs,
+                                        )
+                                    },
+                                    onEpisodeLongPress = { video ->
+                                        selectedEpisodeForActions = video
+                                    },
+                                )
+
+                                if (hasEpisodes && hasAdditionalInfoSection) {
+                                    DetailAdditionalInfoSection(meta = meta)
+                                }
+
+                                if (!hasEpisodes && hasAdditionalInfoSection) {
+                                    DetailAdditionalInfoSection(meta = meta)
+                                }
+
+                                if (!hasEpisodes && hasCollectionSection) {
+                                    DetailPosterRailSection(
+                                        title = meta.collectionName.orEmpty(),
+                                        items = meta.collectionItems,
+                                        watchedKeys = watchedUiState.watchedKeys,
+                                        onPosterClick = onOpenMeta,
+                                    )
+                                }
+
+                                if (hasMoreLikeThisSection) {
+                                    DetailPosterRailSection(
+                                        title = "More Like This",
+                                        items = meta.moreLikeThis,
+                                        watchedKeys = watchedUiState.watchedKeys,
+                                        onPosterClick = onOpenMeta,
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(32.dp + nuvioPlatformExtraBottomPadding))
                             }
-                            Unit
-                        },
-                    )
+                        }
+
+                        if (headerProgress <= 0.05f) {
+                            NuvioBackButton(
+                                onClick = onBack,
+                                modifier = Modifier.padding(
+                                    start = 12.dp,
+                                    top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp,
+                                ),
+                                containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.5f),
+                                contentColor = MaterialTheme.colorScheme.onBackground,
+                            )
+                        }
+
+                        DetailFloatingHeader(
+                            meta = meta,
+                            isSaved = isSaved,
+                            progress = headerProgress,
+                            onBack = onBack,
+                            onToggleSaved = toggleSaved,
+                        )
+
+                        selectedEpisodeForActions?.let { selectedEpisode ->
+                            val isSelectedEpisodeWatched = remember(meta, selectedEpisode, watchedUiState.watchedKeys) {
+                                WatchingState.isEpisodeWatched(
+                                    watchedKeys = watchedUiState.watchedKeys,
+                                    metaType = meta.type,
+                                    metaId = meta.id,
+                                    episode = selectedEpisode,
+                                )
+                            }
+                            val previousEpisodes = remember(meta, selectedEpisode, todayIsoDate) {
+                                meta.previousReleasedEpisodesBefore(
+                                    target = selectedEpisode,
+                                    todayIsoDate = todayIsoDate,
+                                )
+                            }
+                            val seasonEpisodes = remember(meta, selectedEpisode, todayIsoDate) {
+                                meta.releasedEpisodesForSeason(
+                                    seasonNumber = selectedEpisode.season,
+                                    todayIsoDate = todayIsoDate,
+                                )
+                            }
+                            val arePreviousEpisodesWatched = remember(previousEpisodes, watchedUiState.watchedKeys) {
+                                WatchingState.areEpisodesWatched(
+                                    watchedKeys = watchedUiState.watchedKeys,
+                                    metaType = meta.type,
+                                    metaId = meta.id,
+                                    episodes = previousEpisodes,
+                                )
+                            }
+                            val isSeasonWatched = remember(seasonEpisodes, watchedUiState.watchedKeys) {
+                                WatchingState.areEpisodesWatched(
+                                    watchedKeys = watchedUiState.watchedKeys,
+                                    metaType = meta.type,
+                                    metaId = meta.id,
+                                    episodes = seasonEpisodes,
+                                )
+                            }
+                            EpisodeWatchedActionSheet(
+                                episode = selectedEpisode,
+                                seasonLabel = selectedEpisode.season?.let { "Season $it" } ?: "Specials",
+                                isEpisodeWatched = isSelectedEpisodeWatched,
+                                canMarkPreviousEpisodes = previousEpisodes.isNotEmpty(),
+                                arePreviousEpisodesWatched = arePreviousEpisodesWatched,
+                                isSeasonWatched = isSeasonWatched,
+                                onDismiss = { selectedEpisodeForActions = null },
+                                onToggleWatched = {
+                                    WatchingActions.toggleEpisodeWatched(
+                                        meta = meta,
+                                        episode = selectedEpisode,
+                                        isCurrentlyWatched = isSelectedEpisodeWatched,
+                                    )
+                                },
+                                onTogglePreviousWatched = {
+                                    WatchingActions.togglePreviousEpisodesWatched(
+                                        meta = meta,
+                                        episodes = previousEpisodes,
+                                        areCurrentlyWatched = arePreviousEpisodesWatched,
+                                    )
+                                },
+                                onToggleSeasonWatched = {
+                                    WatchingActions.toggleSeasonWatched(
+                                        meta = meta,
+                                        episodes = seasonEpisodes,
+                                        areCurrentlyWatched = isSeasonWatched,
+                                    )
+                                },
+                            )
+                        }
+
+                        TrailerPlayerPopup(
+                            visible = selectedTrailer != null,
+                            trailerTitle = selectedTrailer?.displayName ?: selectedTrailer?.name.orEmpty(),
+                            trailerType = selectedTrailer?.type.orEmpty(),
+                            contentTitle = meta.name,
+                            playbackSource = trailerPlaybackSource,
+                            isLoading = trailerLoading,
+                            errorMessage = trailerErrorMessage,
+                            onDismiss = {
+                                trailerRequestToken += 1
+                                trailerLoading = false
+                                trailerPlaybackSource = null
+                                trailerErrorMessage = null
+                                selectedTrailer = null
+                            },
+                            onRetry = selectedTrailer?.let { trailer ->
+                                { resolveTrailer(trailer) }
+                            },
+                        )
+
+                        TraktListPickerDialog(
+                            visible = showLibraryListPicker,
+                            title = meta.name,
+                            tabs = pickerTabs,
+                            membership = pickerMembership,
+                            isPending = pickerPending,
+                            errorMessage = pickerError,
+                            onToggle = { listKey ->
+                                pickerMembership = pickerMembership.toMutableMap().apply {
+                                    this[listKey] = !(this[listKey] == true)
+                                }
+                            },
+                            onDismiss = {
+                                if (!pickerPending) {
+                                    showLibraryListPicker = false
+                                }
+                            },
+                            onSave = {
+                                detailsScope.launch {
+                                    pickerPending = true
+                                    pickerError = null
+                                    runCatching {
+                                        LibraryRepository.applyMembershipChanges(
+                                            item = meta.toLibraryItem(savedAtEpochMs = 0L),
+                                            desiredMembership = pickerMembership,
+                                        )
+                                    }.onSuccess {
+                                        showLibraryListPicker = false
+                                    }.onFailure { error ->
+                                        pickerError = error.message ?: "Failed to update Trakt lists"
+                                    }
+                                    pickerPending = false
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -620,6 +633,13 @@ fun MetaDetailsScreen(
         }
     }
 }
+
+private fun detailTabletContentMaxWidth(maxWidth: Dp, isTablet: Boolean): Dp =
+    if (!isTablet) {
+        maxWidth
+    } else {
+        (maxWidth * 0.6f).coerceIn(520.dp, 680.dp)
+    }
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
