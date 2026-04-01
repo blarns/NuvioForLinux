@@ -8,16 +8,24 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Search
@@ -33,6 +41,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -404,92 +413,109 @@ private fun MainAppContent(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 composable<TabsRoute> {
-                    Scaffold(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .alpha(if (initialHomeReady) 1f else 0f),
-                        containerColor = MaterialTheme.colorScheme.background,
-                        contentWindowInsets = WindowInsets(0),
-                        bottomBar = {
-                            val navigationItemColors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            NavigationBar(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                windowInsets = nuvioBottomNavigationBarInsets(),
-                            ) {
-                                NavigationBarItem(
-                                    selected = selectedTab == AppScreenTab.Home,
-                                    onClick = { selectedTab = AppScreenTab.Home },
-                                    icon = { Icon(Icons.Rounded.Home, contentDescription = null) },
-                                    label = { Text("Home") },
-                                    colors = navigationItemColors,
-                                )
-                                NavigationBarItem(
-                                    selected = selectedTab == AppScreenTab.Search,
-                                    onClick = { selectedTab = AppScreenTab.Search },
-                                    icon = { Icon(Icons.Rounded.Search, contentDescription = null) },
-                                    label = { Text("Search") },
-                                    colors = navigationItemColors,
-                                )
-                                NavigationBarItem(
-                                    selected = selectedTab == AppScreenTab.Library,
-                                    onClick = { selectedTab = AppScreenTab.Library },
-                                    icon = { Icon(Icons.Rounded.VideoLibrary, contentDescription = null) },
-                                    label = { Text("Library") },
-                                    colors = navigationItemColors,
-                                )
-                                NavigationBarItem(
-                                    selected = selectedTab == AppScreenTab.Settings,
-                                    onClick = { selectedTab = AppScreenTab.Settings },
-                                    icon = {
-                                        ProfileSwitcherTab(
-                                            selected = selectedTab == AppScreenTab.Settings,
-                                            onClick = { selectedTab = AppScreenTab.Settings },
-                                            onProfileSelected = { profile ->
-                                                profileSwitchLoading = true
-                                                selectedTab = AppScreenTab.Home
-                                                ProfileRepository.selectProfile(profile.profileIndex)
-                                                com.nuvio.app.core.sync.SyncManager.pullAllForProfile(profile.profileIndex)
-                                            },
-                                        )
-                                    },
-                                    label = { Text("Profile") },
-                                    colors = navigationItemColors,
-                                )
-                            }
-                        },
-                    ) { innerPadding ->
-                        AppTabHost(
+                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                        val isTabletLayout = maxWidth >= 768.dp
+                        val onProfileSelected: (NuvioProfile) -> Unit = { profile ->
+                            profileSwitchLoading = true
+                            selectedTab = AppScreenTab.Home
+                            ProfileRepository.selectProfile(profile.profileIndex)
+                            com.nuvio.app.core.sync.SyncManager.pullAllForProfile(profile.profileIndex)
+                        }
+
+                        Scaffold(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(innerPadding),
-                            selectedTab = selectedTab,
-                            onCatalogClick = onCatalogClick,
-                            onPosterClick = { meta ->
-                                navController.navigate(DetailRoute(type = meta.type, id = meta.id))
+                                .alpha(if (initialHomeReady) 1f else 0f),
+                            containerColor = MaterialTheme.colorScheme.background,
+                            contentWindowInsets = WindowInsets(0),
+                            bottomBar = {
+                                if (!isTabletLayout) {
+                                    val navigationItemColors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    NavigationBar(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                        windowInsets = nuvioBottomNavigationBarInsets(),
+                                    ) {
+                                        NavigationBarItem(
+                                            selected = selectedTab == AppScreenTab.Home,
+                                            onClick = { selectedTab = AppScreenTab.Home },
+                                            icon = { Icon(Icons.Rounded.Home, contentDescription = null) },
+                                            label = { Text("Home") },
+                                            colors = navigationItemColors,
+                                        )
+                                        NavigationBarItem(
+                                            selected = selectedTab == AppScreenTab.Search,
+                                            onClick = { selectedTab = AppScreenTab.Search },
+                                            icon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+                                            label = { Text("Search") },
+                                            colors = navigationItemColors,
+                                        )
+                                        NavigationBarItem(
+                                            selected = selectedTab == AppScreenTab.Library,
+                                            onClick = { selectedTab = AppScreenTab.Library },
+                                            icon = { Icon(Icons.Rounded.VideoLibrary, contentDescription = null) },
+                                            label = { Text("Library") },
+                                            colors = navigationItemColors,
+                                        )
+                                        NavigationBarItem(
+                                            selected = selectedTab == AppScreenTab.Settings,
+                                            onClick = { selectedTab = AppScreenTab.Settings },
+                                            icon = {
+                                                ProfileSwitcherTab(
+                                                    selected = selectedTab == AppScreenTab.Settings,
+                                                    onClick = { selectedTab = AppScreenTab.Settings },
+                                                    onProfileSelected = onProfileSelected,
+                                                )
+                                            },
+                                            label = { Text("Profile") },
+                                            colors = navigationItemColors,
+                                        )
+                                    }
+                                }
                             },
-                            onPosterLongClick = { meta ->
-                                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                                selectedPosterForActions = meta
-                            },
-                            onLibraryPosterClick = { item ->
-                                navController.navigate(DetailRoute(type = item.type, id = item.id))
-                            },
-                            onLibrarySectionViewAllClick = onLibrarySectionViewAllClick,
-                            onContinueWatchingClick = onContinueWatchingClick,
-                            onContinueWatchingLongPress = onContinueWatchingLongPress,
-                            onSwitchProfile = onSwitchProfile,
-                            onHomescreenSettingsClick = { navController.navigate(HomescreenSettingsRoute) },
-                            onContinueWatchingSettingsClick = { navController.navigate(ContinueWatchingSettingsRoute) },
-                            onAddonsSettingsClick = { navController.navigate(AddonsSettingsRoute) },
-                            onAccountSettingsClick = { navController.navigate(AccountSettingsRoute) },
-                            onInitialHomeContentRendered = { initialHomeReady = true },
-                        )
+                        ) { innerPadding ->
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                AppTabHost(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(innerPadding),
+                                    selectedTab = selectedTab,
+                                    onCatalogClick = onCatalogClick,
+                                    onPosterClick = { meta ->
+                                        navController.navigate(DetailRoute(type = meta.type, id = meta.id))
+                                    },
+                                    onPosterLongClick = { meta ->
+                                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        selectedPosterForActions = meta
+                                    },
+                                    onLibraryPosterClick = { item ->
+                                        navController.navigate(DetailRoute(type = item.type, id = item.id))
+                                    },
+                                    onLibrarySectionViewAllClick = onLibrarySectionViewAllClick,
+                                    onContinueWatchingClick = onContinueWatchingClick,
+                                    onContinueWatchingLongPress = onContinueWatchingLongPress,
+                                    onSwitchProfile = onSwitchProfile,
+                                    onHomescreenSettingsClick = { navController.navigate(HomescreenSettingsRoute) },
+                                    onContinueWatchingSettingsClick = { navController.navigate(ContinueWatchingSettingsRoute) },
+                                    onAddonsSettingsClick = { navController.navigate(AddonsSettingsRoute) },
+                                    onAccountSettingsClick = { navController.navigate(AccountSettingsRoute) },
+                                    onInitialHomeContentRendered = { initialHomeReady = true },
+                                )
+
+                                if (isTabletLayout) {
+                                    TabletFloatingTopBar(
+                                        selectedTab = selectedTab,
+                                        onTabSelected = { selectedTab = it },
+                                        onProfileSelected = onProfileSelected,
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
                 composable<DetailRoute> { backStackEntry ->
@@ -831,6 +857,135 @@ private fun AppTabHost(
                 onContinueWatchingClick = onContinueWatchingSettingsClick,
                 onAddonsClick = onAddonsSettingsClick,
                 onAccountClick = onAccountSettingsClick,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TabletFloatingTopBar(
+    selectedTab: AppScreenTab,
+    onTabSelected: (AppScreenTab) -> Unit,
+    onProfileSelected: (NuvioProfile) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = statusBarPadding + 10.dp, bottom = 8.dp),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Surface(
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+            shape = RoundedCornerShape(999.dp),
+            tonalElevation = 4.dp,
+            shadowElevation = 10.dp,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TabletTopPillItem(
+                    label = "Home",
+                    selected = selectedTab == AppScreenTab.Home,
+                    onClick = { onTabSelected(AppScreenTab.Home) },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Rounded.Home,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    },
+                )
+                TabletTopPillItem(
+                    label = "Search",
+                    selected = selectedTab == AppScreenTab.Search,
+                    onClick = { onTabSelected(AppScreenTab.Search) },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Rounded.Search,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    },
+                )
+                TabletTopPillItem(
+                    label = "Library",
+                    selected = selectedTab == AppScreenTab.Library,
+                    onClick = { onTabSelected(AppScreenTab.Library) },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Rounded.VideoLibrary,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    },
+                )
+                Surface(
+                    color = if (selectedTab == AppScreenTab.Settings) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surface
+                    },
+                    shape = RoundedCornerShape(999.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ProfileSwitcherTab(
+                            selected = selectedTab == AppScreenTab.Settings,
+                            onClick = { onTabSelected(AppScreenTab.Settings) },
+                            onProfileSelected = onProfileSelected,
+                        )
+                        Text(
+                            text = "Profile",
+                            modifier = Modifier.clickable { onTabSelected(AppScreenTab.Settings) },
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (selectedTab == AppScreenTab.Settings) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TabletTopPillItem(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    icon: @Composable () -> Unit,
+) {
+    Surface(
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(999.dp),
+        tonalElevation = if (selected) 2.dp else 0.dp,
+        modifier = Modifier.clickable(onClick = onClick),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            icon()
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (selected) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
             )
         }
     }
