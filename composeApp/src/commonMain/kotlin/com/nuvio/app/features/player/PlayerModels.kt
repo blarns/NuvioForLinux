@@ -28,6 +28,7 @@ data class PlayerLaunch(
     val parentMetaId: String,
     val parentMetaType: String,
     val initialPositionMs: Long = 0L,
+    val initialProgressFraction: Float? = null,
 )
 
 object PlayerLaunchStore {

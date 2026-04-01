@@ -83,6 +83,7 @@ fun PlayerScreen(
     parentMetaType: String,
     providerAddonId: String? = null,
     initialPositionMs: Long = 0L,
+    initialProgressFraction: Float? = null,
 ) {
     LockPlayerToLandscape()
     EnterImmersivePlayerMode()
@@ -114,6 +115,7 @@ fun PlayerScreen(
         var activeEpisodeThumbnail by rememberSaveable { mutableStateOf(episodeThumbnail) }
         var activeVideoId by rememberSaveable { mutableStateOf(videoId) }
         var activeInitialPositionMs by rememberSaveable { mutableStateOf(initialPositionMs) }
+        var activeInitialProgressFraction by rememberSaveable { mutableStateOf(initialProgressFraction) }
         var shouldPlay by rememberSaveable(activeSourceUrl) { mutableStateOf(true) }
         var resizeMode by rememberSaveable { mutableStateOf(PlayerResizeMode.Fit) }
         var layoutSize by remember { mutableStateOf(IntSize.Zero) }
@@ -125,8 +127,12 @@ fun PlayerScreen(
         var gestureFeedback by remember { mutableStateOf<GestureFeedbackState?>(null) }
         var gestureMessageJob by remember { mutableStateOf<Job?>(null) }
         var initialLoadCompleted by remember(activeSourceUrl) { mutableStateOf(false) }
-        var initialSeekApplied by remember(activeSourceUrl, activeInitialPositionMs) {
-            mutableStateOf(activeInitialPositionMs <= 0L)
+        var initialSeekApplied by remember(activeSourceUrl, activeInitialPositionMs, activeInitialProgressFraction) {
+            val initialProgressFraction = activeInitialProgressFraction
+            mutableStateOf(
+                activeInitialPositionMs <= 0L &&
+                    (initialProgressFraction == null || initialProgressFraction <= 0f),
+            )
         }
         var lastProgressPersistEpochMs by remember(activeSourceUrl) { mutableStateOf(0L) }
         var previousIsPlaying by remember(activeSourceUrl) { mutableStateOf(false) }
@@ -467,6 +473,7 @@ fun PlayerScreen(
             activeProviderName = stream.addonName
             activeProviderAddonId = stream.addonId
             activeInitialPositionMs = 0L
+            activeInitialProgressFraction = null
             showSourcesPanel = false
             controlsVisible = true
         }
@@ -503,6 +510,7 @@ fun PlayerScreen(
             activeEpisodeThumbnail = episode.thumbnail
             activeVideoId = episode.id
             activeInitialPositionMs = 0L
+            activeInitialProgressFraction = null
             showEpisodesPanel = false
             episodeStreamsPanelState = EpisodeStreamsPanelState()
             PlayerStreamsRepository.clearEpisodeStreams()
@@ -572,12 +580,36 @@ fun PlayerScreen(
             }
         }
 
-        LaunchedEffect(playerController, playbackSnapshot.isLoading, activeInitialPositionMs, initialSeekApplied) {
+        LaunchedEffect(
+            playerController,
+            playbackSnapshot.isLoading,
+            playbackSnapshot.durationMs,
+            activeInitialPositionMs,
+            activeInitialProgressFraction,
+            initialSeekApplied,
+        ) {
             val controller = playerController ?: return@LaunchedEffect
-            if (initialSeekApplied || playbackSnapshot.isLoading || activeInitialPositionMs <= 0L) {
+            if (initialSeekApplied || playbackSnapshot.isLoading) {
                 return@LaunchedEffect
             }
-            controller.seekTo(activeInitialPositionMs)
+
+            val progressFraction = activeInitialProgressFraction
+                ?.takeIf { it > 0f }
+                ?.coerceIn(0f, 1f)
+            val targetPositionMs = when {
+                activeInitialPositionMs > 0L -> activeInitialPositionMs
+                progressFraction != null && playbackSnapshot.durationMs > 0L -> {
+                    (playbackSnapshot.durationMs.toDouble() * progressFraction.toDouble()).toLong()
+                }
+                progressFraction != null -> return@LaunchedEffect
+                else -> 0L
+            }
+            if (targetPositionMs <= 0L) {
+                initialSeekApplied = true
+                return@LaunchedEffect
+            }
+
+            controller.seekTo(targetPositionMs)
             initialSeekApplied = true
         }
 

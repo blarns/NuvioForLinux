@@ -34,12 +34,18 @@ data class WatchProgressEntry(
     val pauseDescription: String? = null,
     val lastSourceUrl: String? = null,
     val isCompleted: Boolean = false,
+    val progressPercent: Float? = null,
 ) {
     val progressFraction: Float
-        get() = if (durationMs > 0L) {
-            (lastPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
-        } else {
-            0f
+        get() {
+            progressPercent?.let { explicitPercent ->
+                return (explicitPercent / 100f).coerceIn(0f, 1f)
+            }
+            return if (durationMs > 0L) {
+                (lastPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+            } else {
+                0f
+            }
         }
 
     val isEpisode: Boolean
@@ -96,6 +102,7 @@ data class ContinueWatchingItem(
     val episodeThumbnail: String? = null,
     val pauseDescription: String? = null,
     val resumePositionMs: Long,
+    val resumeProgressFraction: Float? = null,
     val durationMs: Long,
     val progressFraction: Float,
 )
@@ -107,6 +114,10 @@ data class ContinueWatchingPreferencesUiState(
 )
 
 internal fun WatchProgressEntry.toContinueWatchingItem(): ContinueWatchingItem {
+    val explicitResumeProgressFraction = progressPercent
+        ?.takeIf { durationMs <= 0L && it > 0f }
+        ?.let { explicitPercent -> (explicitPercent / 100f).coerceIn(0f, 1f) }
+
     val subtitle = if (seasonNumber != null && episodeNumber != null) {
         buildString {
             append("S")
@@ -137,7 +148,8 @@ internal fun WatchProgressEntry.toContinueWatchingItem(): ContinueWatchingItem {
         episodeTitle = episodeTitle,
         episodeThumbnail = episodeThumbnail,
         pauseDescription = pauseDescription,
-        resumePositionMs = lastPositionMs,
+        resumePositionMs = if (explicitResumeProgressFraction != null) 0L else lastPositionMs,
+        resumeProgressFraction = explicitResumeProgressFraction,
         durationMs = durationMs,
         progressFraction = progressFraction,
     )
@@ -181,6 +193,7 @@ internal fun WatchProgressEntry.toUpNextContinueWatchingItem(
         episodeThumbnail = nextEpisode.thumbnail,
         pauseDescription = nextEpisode.overview,
         resumePositionMs = 0L,
+        resumeProgressFraction = null,
         durationMs = 0L,
         progressFraction = 0f,
     )

@@ -30,6 +30,7 @@ private const val PLAYBACK_SYNTHETIC_DURATION_MS = 100_000L
 private const val HISTORY_LIMIT = 250
 private const val METADATA_FETCH_TIMEOUT_MS = 3_500L
 private const val METADATA_FETCH_CONCURRENCY = 5
+private const val METADATA_HYDRATION_LIMIT = 30
 
 data class TraktProgressUiState(
     val entries: List<WatchProgressEntry> = emptyList(),
@@ -143,22 +144,39 @@ object TraktProgressRepository {
     }
 
     private suspend fun fetchSnapshotEntries(headers: Map<String, String>): List<WatchProgressEntry> = withContext(Dispatchers.Default) {
-        val moviesPayload = httpGetTextWithHeaders(
-            url = "$BASE_URL/sync/playback/movies",
-            headers = headers,
-        )
-        val episodesPayload = httpGetTextWithHeaders(
-            url = "$BASE_URL/sync/playback/episodes",
-            headers = headers,
-        )
-        val historyPayload = httpGetTextWithHeaders(
-            url = "$BASE_URL/sync/history/episodes?limit=$HISTORY_LIMIT",
-            headers = headers,
-        )
-        val movieHistoryPayload = httpGetTextWithHeaders(
-            url = "$BASE_URL/sync/history/movies?limit=$HISTORY_LIMIT",
-            headers = headers,
-        )
+        val payloads = coroutineScope {
+            val moviesPayload = async {
+                httpGetTextWithHeaders(
+                    url = "$BASE_URL/sync/playback/movies",
+                    headers = headers,
+                )
+            }
+            val episodesPayload = async {
+                httpGetTextWithHeaders(
+                    url = "$BASE_URL/sync/playback/episodes",
+                    headers = headers,
+                )
+            }
+            val historyPayload = async {
+                httpGetTextWithHeaders(
+                    url = "$BASE_URL/sync/history/episodes?limit=$HISTORY_LIMIT",
+                    headers = headers,
+                )
+            }
+            val movieHistoryPayload = async {
+                httpGetTextWithHeaders(
+                    url = "$BASE_URL/sync/history/movies?limit=$HISTORY_LIMIT",
+                    headers = headers,
+                )
+            }
+
+            awaitAll(moviesPayload, episodesPayload, historyPayload, movieHistoryPayload)
+        }
+
+        val moviesPayload = payloads[0]
+        val episodesPayload = payloads[1]
+        val historyPayload = payloads[2]
+        val movieHistoryPayload = payloads[3]
 
         val moviePlayback = json.decodeFromString<List<TraktPlaybackItem>>(moviesPayload)
         val episodePlayback = json.decodeFromString<List<TraktPlaybackItem>>(episodesPayload)
@@ -243,6 +261,7 @@ object TraktProgressRepository {
         val uniqueContent = entries
             .map { entry -> entry.parentMetaType to entry.parentMetaId }
             .distinct()
+            .take(METADATA_HYDRATION_LIMIT)
 
         val semaphore = Semaphore(METADATA_FETCH_CONCURRENCY)
         val metadataByContent = uniqueContent
@@ -292,7 +311,9 @@ object TraktProgressRepository {
         val parentMetaId = normalizeTraktContentId(movie.ids, fallback = movie.title)
         if (parentMetaId.isBlank()) return null
 
-        val progressFraction = ((item.progress ?: 0f).coerceIn(0f, 100f) / 100f)
+        val progressPercent = normalizeTraktProgressPercent(item.progress) ?: return null
+        if (progressPercent <= 0f) return null
+        val progressFraction = progressPercent / 100f
         val positionMs = (PLAYBACK_SYNTHETIC_DURATION_MS * progressFraction).toLong()
 
         return WatchProgressEntry(
@@ -305,6 +326,7 @@ object TraktProgressRepository {
             durationMs = PLAYBACK_SYNTHETIC_DURATION_MS,
             lastUpdatedEpochMs = rankedTimestamp(item.pausedAt, fallbackIndex),
             isCompleted = false,
+            progressPercent = progressPercent,
         )
     }
 
@@ -317,7 +339,9 @@ object TraktProgressRepository {
         val parentMetaId = normalizeTraktContentId(show.ids, fallback = show.title)
         if (parentMetaId.isBlank()) return null
 
-        val progressFraction = ((item.progress ?: 0f).coerceIn(0f, 100f) / 100f)
+        val progressPercent = normalizeTraktProgressPercent(item.progress) ?: return null
+        if (progressPercent <= 0f) return null
+        val progressFraction = progressPercent / 100f
         val positionMs = (PLAYBACK_SYNTHETIC_DURATION_MS * progressFraction).toLong()
 
         return WatchProgressEntry(
@@ -338,6 +362,7 @@ object TraktProgressRepository {
             durationMs = PLAYBACK_SYNTHETIC_DURATION_MS,
             lastUpdatedEpochMs = rankedTimestamp(item.pausedAt, fallbackIndex),
             isCompleted = false,
+            progressPercent = progressPercent,
         )
     }
 
@@ -368,6 +393,7 @@ object TraktProgressRepository {
             durationMs = 1L,
             lastUpdatedEpochMs = rankedTimestamp(item.watchedAt, fallbackIndex),
             isCompleted = true,
+            progressPercent = 100f,
         )
     }
 
@@ -386,7 +412,18 @@ object TraktProgressRepository {
             durationMs = 1L,
             lastUpdatedEpochMs = rankedTimestamp(item.watchedAt, fallbackIndex),
             isCompleted = true,
+            progressPercent = 100f,
         )
+    }
+
+    private fun normalizeTraktProgressPercent(rawProgress: Float?): Float? {
+        val value = rawProgress ?: return null
+        if (!value.isFinite()) return null
+        val normalized = when {
+            value <= 1f -> value * 100f
+            else -> value
+        }
+        return normalized.coerceIn(0f, 100f)
     }
 
     private fun rankedTimestamp(isoDate: String?, fallbackIndex: Int): Long {

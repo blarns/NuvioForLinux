@@ -69,7 +69,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.nuvio.app.core.ui.nuvioPlatformExtraBottomPadding
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
+import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
 import kotlin.math.round
+import kotlin.math.roundToInt
 
 // ---------------------------------------------------------------------------
 // Streams Screen
@@ -90,7 +92,8 @@ fun StreamsScreen(
     episodeTitle: String? = null,
     episodeThumbnail: String? = null,
     resumePositionMs: Long? = null,
-    onStreamSelected: (StreamItem) -> Unit = {},
+    resumeProgressFraction: Float? = null,
+    onStreamSelected: (stream: StreamItem, resumePositionMs: Long?, resumeProgressFraction: Float?) -> Unit = { _, _, _ -> },
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -101,8 +104,31 @@ fun StreamsScreen(
     }.collectAsStateWithLifecycle()
     val isEpisode = seasonNumber != null && episodeNumber != null
     var preferredFilterApplied by remember(videoId) { mutableStateOf(false) }
+    val legacyEpisodeVideoId = remember(type, parentMetaId, seasonNumber, episodeNumber, videoId) {
+        if (type == "series" && seasonNumber != null && episodeNumber != null) {
+            buildPlaybackVideoId(
+                parentMetaId = parentMetaId,
+                seasonNumber = seasonNumber,
+                episodeNumber = episodeNumber,
+            ).takeIf { it != videoId }
+        } else {
+            null
+        }
+    }
     val storedProgress = watchProgressUiState.byVideoId[videoId]
-    val effectiveResumePositionMs = resumePositionMs ?: storedProgress?.lastPositionMs
+        ?: legacyEpisodeVideoId?.let { legacyId -> watchProgressUiState.byVideoId[legacyId] }
+    val storedProgressFraction = storedProgress?.progressPercent
+        ?.takeIf { it > 0f }
+        ?.let { explicitPercent -> (explicitPercent / 100f).coerceIn(0f, 1f) }
+    val effectiveResumeProgressFraction = resumeProgressFraction
+        ?.takeIf { it > 0f }
+        ?.coerceIn(0f, 1f)
+        ?: storedProgressFraction
+    val effectiveResumePositionMs = if (effectiveResumeProgressFraction != null) {
+        null
+    } else {
+        (resumePositionMs ?: storedProgress?.lastPositionMs)?.takeIf { it > 0L }
+    }
 
     LaunchedEffect(type, videoId) {
         StreamsRepository.load(type, videoId)
@@ -143,6 +169,7 @@ fun StreamsScreen(
                 episodeTitle = episodeTitle,
                 uiState = uiState,
                 resumePositionMs = effectiveResumePositionMs,
+                resumeProgressFraction = effectiveResumeProgressFraction,
                 onStreamSelected = onStreamSelected,
             )
         } else {
@@ -156,6 +183,7 @@ fun StreamsScreen(
                 episodeTitle = episodeTitle,
                 uiState = uiState,
                 resumePositionMs = effectiveResumePositionMs,
+                resumeProgressFraction = effectiveResumeProgressFraction,
                 onStreamSelected = onStreamSelected,
             )
         }
@@ -207,7 +235,8 @@ private fun MobileStreamsLayout(
     episodeTitle: String?,
     uiState: StreamsUiState,
     resumePositionMs: Long?,
-    onStreamSelected: (StreamItem) -> Unit,
+    resumeProgressFraction: Float?,
+    onStreamSelected: (stream: StreamItem, resumePositionMs: Long?, resumeProgressFraction: Float?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -269,9 +298,10 @@ private fun MobileStreamsLayout(
                 }
 
                 Column(modifier = Modifier.fillMaxSize()) {
-                    if (resumePositionMs != null && resumePositionMs > 0L) {
+                    if ((resumePositionMs != null && resumePositionMs > 0L) || (resumeProgressFraction != null && resumeProgressFraction > 0f)) {
                         ResumeBanner(
                             positionMs = resumePositionMs,
+                            progressFraction = resumeProgressFraction,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                         )
                     }
@@ -284,6 +314,8 @@ private fun MobileStreamsLayout(
                     StreamList(
                         uiState = uiState,
                         onStreamSelected = onStreamSelected,
+                        resumePositionMs = resumePositionMs,
+                        resumeProgressFraction = resumeProgressFraction,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -294,9 +326,16 @@ private fun MobileStreamsLayout(
 
 @Composable
 internal fun ResumeBanner(
-    positionMs: Long,
+    positionMs: Long?,
+    progressFraction: Float? = null,
     modifier: Modifier = Modifier,
 ) {
+    val resumeText = when {
+        progressFraction != null && progressFraction > 0f -> "Resume from ${(progressFraction * 100f).roundToInt()}%"
+        positionMs != null && positionMs > 0L -> "Resume from ${positionMs.toPlaybackClock()}"
+        else -> null
+    } ?: return
+
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
@@ -304,7 +343,7 @@ internal fun ResumeBanner(
             .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
         Text(
-            text = "Resume from ${positionMs.toPlaybackClock()}",
+            text = resumeText,
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.SemiBold,
@@ -560,7 +599,9 @@ private fun FilterChip(
 @Composable
 internal fun StreamList(
     uiState: StreamsUiState,
-    onStreamSelected: (StreamItem) -> Unit,
+    onStreamSelected: (stream: StreamItem, resumePositionMs: Long?, resumeProgressFraction: Float?) -> Unit,
+    resumePositionMs: Long?,
+    resumeProgressFraction: Float?,
     modifier: Modifier = Modifier,
 ) {
     val filteredGroups = uiState.filteredGroups
@@ -595,6 +636,8 @@ internal fun StreamList(
                         group = group,
                         showHeader = uiState.selectedFilter == null,
                         onStreamSelected = onStreamSelected,
+                        resumePositionMs = resumePositionMs,
+                        resumeProgressFraction = resumeProgressFraction,
                     )
                 }
                 if (anyLoading) {
@@ -613,7 +656,9 @@ internal fun StreamList(
 private fun LazyListScope.streamSection(
     group: AddonStreamGroup,
     showHeader: Boolean,
-    onStreamSelected: (StreamItem) -> Unit,
+    onStreamSelected: (stream: StreamItem, resumePositionMs: Long?, resumeProgressFraction: Float?) -> Unit,
+    resumePositionMs: Long?,
+    resumeProgressFraction: Float?,
 ) {
     if (group.streams.isEmpty() && !group.isLoading) return
 
@@ -634,7 +679,7 @@ private fun LazyListScope.streamSection(
             stream = stream,
             onClick = {
                 if (stream.directPlaybackUrl != null) {
-                    onStreamSelected(stream)
+                    onStreamSelected(stream, resumePositionMs, resumeProgressFraction)
                 }
             },
         )

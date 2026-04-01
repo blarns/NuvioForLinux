@@ -155,6 +155,7 @@ data class StreamRoute(
     val episodeThumbnail: String? = null,
     val streamContextId: Long? = null,
     val resumePositionMs: Long? = null,
+    val resumeProgressFraction: Float? = null,
 )
 
 @Serializable
@@ -335,6 +336,7 @@ private fun MainAppContent(
                         episodeThumbnail = episodeThumbnail,
                         streamContextId = streamContextId,
                         resumePositionMs = resumePositionMs,
+                        resumeProgressFraction = null,
                     )
                 )
             }
@@ -389,6 +391,7 @@ private fun MainAppContent(
                     episodeThumbnail = item.episodeThumbnail,
                     streamContextId = streamContextId,
                     resumePositionMs = item.resumePositionMs,
+                    resumeProgressFraction = item.resumeProgressFraction,
                 ),
             )
         }
@@ -559,6 +562,59 @@ private fun MainAppContent(
                             StreamContextStore.get(contextId)?.pauseDescription
                         }
                     }
+                    val shouldResolveEpisodeVideoId =
+                        route.type == "series" &&
+                            route.parentMetaId != null &&
+                            route.seasonNumber != null &&
+                            route.episodeNumber != null
+                    var effectiveVideoId by rememberSaveable(
+                        route.videoId,
+                        route.parentMetaId,
+                        route.seasonNumber,
+                        route.episodeNumber,
+                    ) {
+                        mutableStateOf(route.videoId)
+                    }
+                    var hasResolvedVideoId by rememberSaveable(
+                        route.videoId,
+                        route.parentMetaId,
+                        route.seasonNumber,
+                        route.episodeNumber,
+                    ) {
+                        mutableStateOf(!shouldResolveEpisodeVideoId)
+                    }
+
+                    LaunchedEffect(
+                        route.videoId,
+                        route.parentMetaId,
+                        route.parentMetaType,
+                        route.type,
+                        route.seasonNumber,
+                        route.episodeNumber,
+                    ) {
+                        effectiveVideoId = route.videoId
+                        if (!shouldResolveEpisodeVideoId) {
+                            hasResolvedVideoId = true
+                            return@LaunchedEffect
+                        }
+
+                        hasResolvedVideoId = false
+                        val metaType = route.parentMetaType ?: route.type
+                        val metaId = route.parentMetaId ?: return@LaunchedEffect
+                        val resolvedVideoId = runCatching {
+                            MetaDetailsRepository.fetch(metaType, metaId)
+                        }.getOrNull()
+                            ?.videos
+                            ?.firstOrNull { video ->
+                                video.season == route.seasonNumber &&
+                                    video.episode == route.episodeNumber
+                            }
+                            ?.id
+                            ?.takeIf { it.isNotBlank() }
+
+                        effectiveVideoId = resolvedVideoId ?: route.videoId
+                        hasResolvedVideoId = true
+                    }
 
                     val playerSettings by remember {
                         PlayerSettingsRepository.ensureLoaded()
@@ -566,12 +622,13 @@ private fun MainAppContent(
                     }.collectAsStateWithLifecycle()
 
                     // Reuse Last Link: auto-play from cache if enabled (only on first entry)
-                    var reuseHandled by rememberSaveable(route.videoId) { mutableStateOf(false) }
-                    LaunchedEffect(route.videoId, playerSettings.streamReuseLastLinkEnabled) {
+                    var reuseHandled by rememberSaveable(route.videoId, effectiveVideoId) { mutableStateOf(false) }
+                    LaunchedEffect(effectiveVideoId, hasResolvedVideoId, playerSettings.streamReuseLastLinkEnabled) {
+                        if (!hasResolvedVideoId) return@LaunchedEffect
                         if (reuseHandled) return@LaunchedEffect
                         reuseHandled = true
                         if (!playerSettings.streamReuseLastLinkEnabled) return@LaunchedEffect
-                        val cacheKey = StreamLinkCacheRepository.contentKey(route.type, route.videoId)
+                        val cacheKey = StreamLinkCacheRepository.contentKey(route.type, effectiveVideoId)
                         val maxAgeMs = playerSettings.streamReuseLastLinkCacheHours * 60L * 60L * 1000L
                         val cached = StreamLinkCacheRepository.getValid(cacheKey, maxAgeMs)
                         if (cached != null) {
@@ -592,10 +649,11 @@ private fun MainAppContent(
                                     providerName = cached.addonName,
                                     providerAddonId = cached.addonId,
                                     contentType = route.type,
-                                    videoId = route.videoId,
-                                    parentMetaId = route.parentMetaId ?: route.videoId,
+                                    videoId = effectiveVideoId,
+                                    parentMetaId = route.parentMetaId ?: effectiveVideoId,
                                     parentMetaType = route.parentMetaType ?: route.type,
                                     initialPositionMs = route.resumePositionMs ?: 0L,
+                                    initialProgressFraction = route.resumeProgressFraction,
                                 )
                             )
                             route.streamContextId?.let(StreamContextStore::remove)
@@ -605,10 +663,20 @@ private fun MainAppContent(
                         }
                     }
 
+                    if (!hasResolvedVideoId) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        }
+                        return@composable
+                    }
+
                     StreamsScreen(
                         type = route.type,
-                        videoId = route.videoId,
-                        parentMetaId = route.parentMetaId ?: route.videoId,
+                        videoId = effectiveVideoId,
+                        parentMetaId = route.parentMetaId ?: effectiveVideoId,
                         parentMetaType = route.parentMetaType ?: route.type,
                         title = route.title,
                         logo = route.logo,
@@ -619,12 +687,13 @@ private fun MainAppContent(
                         episodeTitle = route.episodeTitle,
                         episodeThumbnail = route.episodeThumbnail,
                         resumePositionMs = route.resumePositionMs,
-                        onStreamSelected = { stream ->
+                        resumeProgressFraction = route.resumeProgressFraction,
+                        onStreamSelected = { stream, resolvedResumePositionMs, resolvedResumeProgressFraction ->
                             val sourceUrl = stream.directPlaybackUrl
                             if (sourceUrl != null) {
                                 // Persist for Reuse Last Link
                                 if (playerSettings.streamReuseLastLinkEnabled) {
-                                    val cacheKey = StreamLinkCacheRepository.contentKey(route.type, route.videoId)
+                                    val cacheKey = StreamLinkCacheRepository.contentKey(route.type, effectiveVideoId)
                                     StreamLinkCacheRepository.save(
                                         contentKey = cacheKey,
                                         url = sourceUrl,
@@ -652,10 +721,11 @@ private fun MainAppContent(
                                         providerName = stream.addonName,
                                         providerAddonId = stream.addonId,
                                         contentType = route.type,
-                                        videoId = route.videoId,
-                                        parentMetaId = route.parentMetaId ?: route.videoId,
+                                        videoId = effectiveVideoId,
+                                        parentMetaId = route.parentMetaId ?: effectiveVideoId,
                                         parentMetaType = route.parentMetaType ?: route.type,
-                                        initialPositionMs = route.resumePositionMs ?: 0L,
+                                        initialPositionMs = resolvedResumePositionMs ?: 0L,
+                                        initialProgressFraction = resolvedResumeProgressFraction,
                                     )
                                 )
                                 route.streamContextId?.let(StreamContextStore::remove)
@@ -703,6 +773,7 @@ private fun MainAppContent(
                         parentMetaId = launch.parentMetaId,
                         parentMetaType = launch.parentMetaType,
                         initialPositionMs = launch.initialPositionMs,
+                        initialProgressFraction = launch.initialProgressFraction,
                         onBack = {
                             PlayerLaunchStore.remove(route.launchId)
                             navController.popBackStack()

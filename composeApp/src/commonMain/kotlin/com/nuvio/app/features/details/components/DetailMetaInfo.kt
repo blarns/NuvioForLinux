@@ -1,5 +1,6 @@
 package com.nuvio.app.features.details.components
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
@@ -149,7 +150,10 @@ fun DetailMetaInfo(
 
         if (!meta.description.isNullOrBlank()) {
             var expanded by remember { mutableStateOf(false) }
-            Column {
+            var canExpand by remember(meta.description) { mutableStateOf(false) }
+            Column(
+                modifier = Modifier.animateContentSize(),
+            ) {
                 Text(
                     text = meta.description,
                     style = MaterialTheme.typography.bodyMedium,
@@ -157,14 +161,21 @@ fun DetailMetaInfo(
                     maxLines = if (expanded) Int.MAX_VALUE else 3,
                     overflow = TextOverflow.Ellipsis,
                     lineHeight = 22.sp,
+                    onTextLayout = { result ->
+                        if (!expanded) {
+                            canExpand = result.hasVisualOverflow
+                        }
+                    },
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = if (expanded) "Show Less" else "Show More ▾",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.clickable { expanded = !expanded },
-                )
+                if (canExpand) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (expanded) "Show Less" else "Show More ▾",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.clickable { expanded = !expanded },
+                    )
+                }
             }
         }
     }

@@ -214,16 +214,28 @@ fun MetaDetailsScreen(
                         preferFurthestEpisode = cwPrefs.upNextFromFurthestEpisode,
                     )
                 }
-                val seriesPauseDescription = remember(seriesAction, meta.id, meta.videos) {
+                val seriesActionVideo = remember(seriesAction, meta.id, meta.videos) {
                     val action = seriesAction ?: return@remember null
                     meta.videos.firstOrNull { video ->
-                        buildPlaybackVideoId(
-                            parentMetaId = meta.id,
-                            seasonNumber = video.season,
-                            episodeNumber = video.episode,
-                            fallbackVideoId = video.id,
-                        ) == action.videoId
-                    }?.overview
+                        if (action.seasonNumber != null && action.episodeNumber != null) {
+                            video.season == action.seasonNumber &&
+                                video.episode == action.episodeNumber
+                        } else {
+                            buildPlaybackVideoId(
+                                parentMetaId = meta.id,
+                                seasonNumber = video.season,
+                                episodeNumber = video.episode,
+                                fallbackVideoId = video.id,
+                            ) == action.videoId || video.id == action.videoId
+                        }
+                    }
+                }
+                val seriesPauseDescription = remember(seriesActionVideo) {
+                    seriesActionVideo?.overview
+                }
+                val seriesStreamVideoId = remember(seriesAction, seriesActionVideo) {
+                    val action = seriesAction ?: return@remember null
+                    seriesActionVideo?.id?.takeIf { it.isNotBlank() } ?: action.videoId
                 }
                 val hasEpisodes = meta.videos.any { it.season != null || it.episode != null }
                 val hasProductionSection = remember(meta) {
@@ -346,7 +358,7 @@ fun MetaDetailsScreen(
                                             (meta.type == "series" || hasEpisodes) && seriesAction != null -> {
                                                 onPlay?.invoke(
                                                     meta.type,
-                                                    seriesAction.videoId,
+                                                    seriesStreamVideoId ?: seriesAction.videoId,
                                                     meta.id,
                                                     meta.type,
                                                     meta.name,
@@ -417,11 +429,12 @@ fun MetaDetailsScreen(
                                             episodeNumber = episode,
                                             fallbackVideoId = video.id,
                                         )
+                                        val streamVideoId = video.id.takeIf { it.isNotBlank() } ?: playbackVideoId
                                         val savedProgress = watchProgressUiState.byVideoId[playbackVideoId]
                                             ?.takeUnless { it.isCompleted }
                                         onPlay?.invoke(
                                             meta.type,
-                                            playbackVideoId,
+                                            streamVideoId,
                                             meta.id,
                                             meta.type,
                                             meta.name,

@@ -59,7 +59,8 @@ internal fun TabletStreamsLayout(
     episodeTitle: String?,
     uiState: StreamsUiState,
     resumePositionMs: Long?,
-    onStreamSelected: (StreamItem) -> Unit,
+    resumeProgressFraction: Float?,
+    onStreamSelected: (stream: StreamItem, resumePositionMs: Long?, resumeProgressFraction: Float?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val hazeState = rememberHazeState()
@@ -179,9 +180,10 @@ internal fun TabletStreamsLayout(
                             .fillMaxSize()
                             .padding(16.dp),
                     ) {
-                        if (resumePositionMs != null && resumePositionMs > 0L) {
+                        if ((resumePositionMs != null && resumePositionMs > 0L) || (resumeProgressFraction != null && resumeProgressFraction > 0f)) {
                             ResumeBanner(
                                 positionMs = resumePositionMs,
+                                progressFraction = resumeProgressFraction,
                                 modifier = Modifier.padding(bottom = 8.dp),
                             )
                         }
@@ -200,6 +202,8 @@ internal fun TabletStreamsLayout(
                         StreamList(
                             uiState = uiState,
                             onStreamSelected = onStreamSelected,
+                            resumePositionMs = resumePositionMs,
+                            resumeProgressFraction = resumeProgressFraction,
                             modifier = Modifier.weight(1f),
                         )
                     }
