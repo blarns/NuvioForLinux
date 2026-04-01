@@ -11,9 +11,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -122,12 +123,94 @@ fun StreamsScreen(
         background ?: poster
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
     ) {
-        // Background artwork
+        val isTabletLayout = maxWidth >= 768.dp
+
+        if (isTabletLayout) {
+            TabletStreamsLayout(
+                isEpisode = isEpisode,
+                title = title,
+                logo = logo,
+                poster = poster,
+                background = background,
+                episodeThumbnail = episodeThumbnail,
+                seasonNumber = seasonNumber,
+                episodeNumber = episodeNumber,
+                episodeTitle = episodeTitle,
+                uiState = uiState,
+                resumePositionMs = effectiveResumePositionMs,
+                onStreamSelected = onStreamSelected,
+            )
+        } else {
+            MobileStreamsLayout(
+                isEpisode = isEpisode,
+                title = title,
+                logo = logo,
+                heroArtwork = heroArtwork,
+                seasonNumber = seasonNumber,
+                episodeNumber = episodeNumber,
+                episodeTitle = episodeTitle,
+                uiState = uiState,
+                resumePositionMs = effectiveResumePositionMs,
+                onStreamSelected = onStreamSelected,
+            )
+        }
+
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+                .padding(start = 12.dp, top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            NuvioBackButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .size(40.dp),
+                containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.45f),
+                contentColor = MaterialTheme.colorScheme.onBackground,
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.background.copy(alpha = 0.45f),
+                        shape = CircleShape,
+                    )
+                    .clickable(onClick = { StreamsRepository.reload(type, videoId) }),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Refresh,
+                    contentDescription = "Refresh streams",
+                    tint = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MobileStreamsLayout(
+    isEpisode: Boolean,
+    title: String,
+    logo: String?,
+    heroArtwork: String?,
+    seasonNumber: Int?,
+    episodeNumber: Int?,
+    episodeTitle: String?,
+    uiState: StreamsUiState,
+    resumePositionMs: Long?,
+    onStreamSelected: (StreamItem) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier = modifier.fillMaxSize()) {
         if (heroArtwork != null) {
             AsyncImage(
                 model = heroArtwork,
@@ -137,7 +220,6 @@ fun StreamsScreen(
                     .blur(22.dp),
                 contentScale = ContentScale.Crop,
             )
-            // Dark scrim
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -147,10 +229,8 @@ fun StreamsScreen(
 
         val streamBlendColor = MaterialTheme.colorScheme.background
 
-        // Main content column
         Column(modifier = Modifier.fillMaxSize()) {
-            // Hero block
-            if (isEpisode) {
+            if (isEpisode && seasonNumber != null && episodeNumber != null) {
                 EpisodeHeroBlock(
                     seasonNumber = seasonNumber,
                     episodeNumber = episodeNumber,
@@ -189,9 +269,9 @@ fun StreamsScreen(
                 }
 
                 Column(modifier = Modifier.fillMaxSize()) {
-                    if (effectiveResumePositionMs != null && effectiveResumePositionMs > 0L) {
+                    if (resumePositionMs != null && resumePositionMs > 0L) {
                         ResumeBanner(
-                            positionMs = effectiveResumePositionMs,
+                            positionMs = resumePositionMs,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                         )
                     }
@@ -209,44 +289,11 @@ fun StreamsScreen(
                 }
             }
         }
-
-        Row(
-            modifier = Modifier
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
-                .padding(start = 12.dp, top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            NuvioBackButton(
-                onClick = onBack,
-                modifier = Modifier
-                    .size(40.dp),
-                containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.45f),
-                contentColor = MaterialTheme.colorScheme.onBackground,
-            )
-
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.background.copy(alpha = 0.45f),
-                        shape = CircleShape,
-                    )
-                    .clickable(onClick = { StreamsRepository.reload(type, videoId) }),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Refresh,
-                    contentDescription = "Refresh streams",
-                    tint = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        }
     }
 }
 
 @Composable
-private fun ResumeBanner(
+internal fun ResumeBanner(
     positionMs: Long,
     modifier: Modifier = Modifier,
 ) {
@@ -415,7 +462,7 @@ private fun EpisodeHeroBlock(
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun ProviderFilterRow(
+internal fun ProviderFilterRow(
     groups: List<AddonStreamGroup>,
     selectedFilter: String?,
     onFilterSelected: (String?) -> Unit,
@@ -511,7 +558,7 @@ private fun FilterChip(
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun StreamList(
+internal fun StreamList(
     uiState: StreamsUiState,
     onStreamSelected: (StreamItem) -> Unit,
     modifier: Modifier = Modifier,
