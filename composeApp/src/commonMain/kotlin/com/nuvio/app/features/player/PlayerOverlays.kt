@@ -29,6 +29,9 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.VolumeOff
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.Brightness6
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material3.CircularProgressIndicator
@@ -55,6 +58,19 @@ import coil3.compose.AsyncImage
 import com.nuvio.app.core.ui.NuvioBackButton
 import com.nuvio.app.core.ui.nuvioTypeScale
 import kotlin.math.max
+
+internal enum class GestureFeedbackIcon {
+    Speed,
+    Brightness,
+    Volume,
+    VolumeMuted,
+}
+
+internal data class GestureFeedbackState(
+    val message: String,
+    val icon: GestureFeedbackIcon = GestureFeedbackIcon.Speed,
+    val isDanger: Boolean = false,
+)
 
 @Composable
 internal fun OpeningOverlay(
@@ -174,13 +190,30 @@ internal fun OpeningOverlay(
 
 @Composable
 internal fun GestureFeedbackPill(
-    message: String,
+    feedback: GestureFeedbackState,
     modifier: Modifier = Modifier,
 ) {
+    val backgroundColor = if (feedback.isDanger) {
+        Color(0xFF5D1F1F).copy(alpha = 0.88f)
+    } else {
+        Color.Black.copy(alpha = 0.75f)
+    }
+    val iconBackgroundColor = if (feedback.isDanger) {
+        Color(0xFFFF8A80).copy(alpha = 0.22f)
+    } else {
+        Color.White.copy(alpha = 0.15f)
+    }
+    val icon = when (feedback.icon) {
+        GestureFeedbackIcon.Speed -> Icons.Rounded.Speed
+        GestureFeedbackIcon.Brightness -> Icons.Rounded.Brightness6
+        GestureFeedbackIcon.Volume -> Icons.AutoMirrored.Rounded.VolumeUp
+        GestureFeedbackIcon.VolumeMuted -> Icons.AutoMirrored.Rounded.VolumeOff
+    }
+
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(24.dp))
-            .background(Color.Black.copy(alpha = 0.75f))
+            .background(backgroundColor)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -189,18 +222,18 @@ internal fun GestureFeedbackPill(
             modifier = Modifier
                 .size(28.dp)
                 .clip(RoundedCornerShape(14.dp))
-                .background(Color.White.copy(alpha = 0.15f)),
+                .background(iconBackgroundColor),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = Icons.Rounded.Speed,
+                imageVector = icon,
                 contentDescription = null,
                 tint = Color.White,
                 modifier = Modifier.size(16.dp),
             )
         }
         Text(
-            text = message,
+            text = feedback.message,
             style = MaterialTheme.nuvioTypeScale.bodyLg.copy(fontWeight = FontWeight.SemiBold),
             color = Color.White,
         )

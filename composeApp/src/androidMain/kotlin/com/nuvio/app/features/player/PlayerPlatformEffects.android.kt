@@ -4,12 +4,17 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
+import android.media.AudioManager
+import android.provider.Settings
+import android.view.WindowManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import kotlin.math.roundToInt
 
 @Composable
 actual fun LockPlayerToLandscape() {
@@ -45,9 +50,101 @@ actual fun EnterImmersivePlayerMode() {
     }
 }
 
+@Composable
+actual fun rememberPlayerGestureController(): PlayerGestureController? {
+    val context = LocalContext.current
+    val activity = context.findActivity() ?: return null
+    val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return null
+
+    val controller = remember(activity, audioManager) {
+        AndroidPlayerGestureController(
+            activity = activity,
+            audioManager = audioManager,
+        )
+    }
+
+    DisposableEffect(controller) {
+        onDispose {
+            controller.restoreBrightness()
+        }
+    }
+
+    return controller
+}
+
 private tailrec fun Context.findActivity(): Activity? =
     when (this) {
         is Activity -> this
         is ContextWrapper -> baseContext.findActivity()
         else -> null
     }
+
+private class AndroidPlayerGestureController(
+    private val activity: Activity,
+    private val audioManager: AudioManager,
+) : PlayerGestureController {
+    private val originalBrightness = activity.window.attributes.screenBrightness
+    private var brightnessRestored = false
+
+    override fun currentBrightness(): Float {
+        val windowValue = activity.window.attributes.screenBrightness
+        return if (windowValue in 0f..1f) {
+            windowValue.coerceIn(0.02f, 1f)
+        } else {
+            readSystemBrightness()
+        }
+    }
+
+    override fun setBrightness(level: Float): Float {
+        val target = level.coerceIn(0.02f, 1f)
+        val attributes = activity.window.attributes
+        attributes.screenBrightness = target
+        activity.window.attributes = attributes
+        return target
+    }
+
+    override fun currentVolume(): PlayerAudioLevel {
+        val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+        val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).coerceIn(0, maxVolume)
+        val fraction = currentVolume.toFloat() / maxVolume.toFloat()
+        return PlayerAudioLevel(
+            fraction = fraction,
+            isMuted = currentVolume == 0,
+        )
+    }
+
+    override fun setVolume(level: Float): PlayerAudioLevel {
+        val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+        val targetVolume = (level.coerceIn(0f, 1f) * maxVolume.toFloat())
+            .roundToInt()
+            .coerceIn(0, maxVolume)
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVolume, 0)
+        val fraction = targetVolume.toFloat() / maxVolume.toFloat()
+        return PlayerAudioLevel(
+            fraction = fraction,
+            isMuted = targetVolume == 0,
+        )
+    }
+
+    fun restoreBrightness() {
+        if (brightnessRestored) return
+        brightnessRestored = true
+
+        val attributes = activity.window.attributes
+        attributes.screenBrightness = when {
+            originalBrightness < 0f -> WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+            else -> originalBrightness.coerceIn(0f, 1f)
+        }
+        activity.window.attributes = attributes
+    }
+
+    private fun readSystemBrightness(): Float =
+        runCatching {
+            Settings.System.getInt(
+                activity.contentResolver,
+                Settings.System.SCREEN_BRIGHTNESS,
+            )
+        }.getOrDefault(127)
+            .coerceIn(1, 255)
+            .toFloat() / 255f
+}
