@@ -1,6 +1,7 @@
 package com.nuvio.app.features.settings
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -8,6 +9,7 @@ internal enum class SettingsCategory(
     val label: String,
     val icon: ImageVector,
 ) {
+    Account("Account", Icons.Rounded.AccountCircle),
     General("General", Icons.Rounded.Settings),
 }
 

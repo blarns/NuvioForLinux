@@ -300,12 +300,19 @@ private fun TabletSettingsScreen(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 Spacer(modifier = Modifier.height(10.dp))
-                SettingsSidebarItem(
-                    label = activeCategory.label,
-                    icon = activeCategory.icon,
-                    selected = true,
-                    onClick = { selectedCategory = activeCategory.name },
-                )
+                SettingsCategory.entries.forEach { category ->
+                    SettingsSidebarItem(
+                        label = category.label,
+                        icon = category.icon,
+                        selected = category == activeCategory,
+                        onClick = {
+                            selectedCategory = category.name
+                            if (page != SettingsPage.Root) {
+                                onPageChange(SettingsPage.Root)
+                            }
+                        },
+                    )
+                }
             }
         }
 
@@ -336,6 +343,8 @@ private fun TabletSettingsScreen(
                     onIntegrationsClick = { onPageChange(SettingsPage.Integrations) },
                     onAccountClick = onAccountClick,
                     onSwitchProfileClick = onSwitchProfile,
+                    showAccountSection = activeCategory == SettingsCategory.Account,
+                    showGeneralSection = activeCategory == SettingsCategory.General,
                 )
                 SettingsPage.Playback -> playbackSettingsContent(
                     isTablet = true,
