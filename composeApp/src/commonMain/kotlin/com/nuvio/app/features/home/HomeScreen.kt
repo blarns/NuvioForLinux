@@ -13,7 +13,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.details.MetaDetailsRepository
-import com.nuvio.app.features.details.nextReleasedEpisodeAfter
+import com.nuvio.app.features.details.sortedPlayableEpisodes
 import com.nuvio.app.features.home.components.HomeCatalogRowSection
 import com.nuvio.app.features.home.components.HomeContinueWatchingSection
 import com.nuvio.app.features.home.components.HomeEmptyStateCard
@@ -21,16 +21,20 @@ import com.nuvio.app.features.home.components.HomeHeroReservedSpace
 import com.nuvio.app.features.home.components.HomeHeroSection
 import com.nuvio.app.features.home.components.HomeSkeletonHero
 import com.nuvio.app.features.home.components.HomeSkeletonRow
+import com.nuvio.app.features.trakt.TraktAuthRepository
 import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watchprogress.CurrentDateProvider
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepository
 import com.nuvio.app.features.watchprogress.ContinueWatchingItem
+import com.nuvio.app.features.watchprogress.WatchProgressClock
 import com.nuvio.app.features.watchprogress.WatchProgressEntry
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import com.nuvio.app.features.watchprogress.toContinueWatchingItem
 import com.nuvio.app.features.watchprogress.toUpNextContinueWatchingItem
 import com.nuvio.app.features.watching.application.WatchingState
 import com.nuvio.app.features.watching.domain.WatchingContentRef
+import com.nuvio.app.features.watching.domain.buildPlaybackVideoId
+import com.nuvio.app.features.watching.domain.isReleasedBy
 
 @Composable
 fun HomeScreen(
@@ -55,11 +59,28 @@ fun HomeScreen(
     val continueWatchingPreferences by ContinueWatchingPreferencesRepository.uiState.collectAsStateWithLifecycle()
     val watchedUiState by WatchedRepository.uiState.collectAsStateWithLifecycle()
     val watchProgressUiState by WatchProgressRepository.uiState.collectAsStateWithLifecycle()
+    val isTraktAuthenticated by remember {
+        TraktAuthRepository.ensureLoaded()
+        TraktAuthRepository.isAuthenticated
+    }.collectAsStateWithLifecycle()
 
-    val latestCompletedBySeries = remember(watchProgressUiState.entries, watchedUiState.items, continueWatchingPreferences.upNextFromFurthestEpisode) {
+    val effectiveWatchProgressEntries = remember(watchProgressUiState.entries, isTraktAuthenticated) {
+        if (!isTraktAuthenticated) {
+            watchProgressUiState.entries
+        } else {
+            val cutoffMs = WatchProgressClock.nowEpochMs() - (TRAKT_CONTINUE_WATCHING_DAYS_CAP_DEFAULT.toLong() * 24L * 60L * 60L * 1000L)
+            watchProgressUiState.entries.filter { entry -> entry.lastUpdatedEpochMs >= cutoffMs }
+        }
+    }
+
+    val effectiveWatchedItems = remember(watchedUiState.items, isTraktAuthenticated) {
+        if (isTraktAuthenticated) emptyList() else watchedUiState.items
+    }
+
+    val latestCompletedBySeries = remember(effectiveWatchProgressEntries, effectiveWatchedItems, continueWatchingPreferences.upNextFromFurthestEpisode) {
         WatchingState.latestCompletedBySeries(
-            progressEntries = watchProgressUiState.entries,
-            watchedItems = watchedUiState.items,
+            progressEntries = effectiveWatchProgressEntries,
+            watchedItems = effectiveWatchedItems,
             preferFurthestEpisode = continueWatchingPreferences.upNextFromFurthestEpisode,
         )
     }
@@ -74,11 +95,11 @@ fun HomeScreen(
         }
     }
     val visibleContinueWatchingEntries = remember(
-        watchProgressUiState.entries,
+        effectiveWatchProgressEntries,
         latestCompletedBySeries,
     ) {
         WatchingState.visibleContinueWatchingEntries(
-            progressEntries = watchProgressUiState.entries,
+            progressEntries = effectiveWatchProgressEntries,
             latestCompletedBySeries = latestCompletedBySeries,
         )
     }
@@ -145,6 +166,7 @@ fun HomeScreen(
                 seasonNumber = completedEntry.seasonNumber,
                 episodeNumber = completedEntry.episodeNumber,
                 todayIsoDate = todayIsoDate,
+                showUnairedNextUp = isTraktAuthenticated,
             ) ?: return@forEach
             resolvedItems[completedEntry.content.id] =
                 completedEntry.markedAtEpochMs to completedEntry.toContinueWatchingSeed(meta).toUpNextContinueWatchingItem(nextEpisode)
@@ -277,6 +299,7 @@ fun HomeScreen(
 }
 
 private const val HOME_CATALOG_PREVIEW_LIMIT = 18
+private const val TRAKT_CONTINUE_WATCHING_DAYS_CAP_DEFAULT = 60
 
 internal fun buildHomeContinueWatchingItems(
     visibleEntries: List<WatchProgressEntry>,
@@ -340,3 +363,37 @@ private fun CompletedSeriesCandidate.toContinueWatchingSeed(meta: com.nuvio.app.
         lastUpdatedEpochMs = markedAtEpochMs,
         isCompleted = true,
     )
+
+private fun com.nuvio.app.features.details.MetaDetails.nextReleasedEpisodeAfter(
+    seasonNumber: Int?,
+    episodeNumber: Int?,
+    todayIsoDate: String,
+    showUnairedNextUp: Boolean,
+): com.nuvio.app.features.details.MetaVideo? {
+    val content = WatchingContentRef(type = type, id = id)
+    val watchedVideoId = buildPlaybackVideoId(
+        content = content,
+        seasonNumber = seasonNumber,
+        episodeNumber = episodeNumber,
+    )
+
+    val ordered = sortedPlayableEpisodes()
+        .dropWhile { episode ->
+            buildPlaybackVideoId(
+                content = content,
+                seasonNumber = episode.season,
+                episodeNumber = episode.episode,
+                fallbackVideoId = episode.id,
+            ) != watchedVideoId
+        }
+        .drop(1)
+        .filter { episode -> (episode.season ?: 0) > 0 }
+
+    if (showUnairedNextUp) {
+        return ordered.firstOrNull()
+    }
+
+    return ordered.firstOrNull { episode ->
+        isReleasedBy(todayIsoDate = todayIsoDate, releasedDate = episode.released)
+    }
+}

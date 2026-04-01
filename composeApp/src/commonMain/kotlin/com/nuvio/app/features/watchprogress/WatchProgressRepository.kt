@@ -5,12 +5,15 @@ import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.player.PlayerPlaybackSnapshot
 import com.nuvio.app.features.profiles.ProfileRepository
+import com.nuvio.app.features.trakt.TraktAuthRepository
+import com.nuvio.app.features.trakt.TraktProgressRepository
 import com.nuvio.app.features.watching.application.WatchingActions
 import com.nuvio.app.features.watching.sync.ProgressSyncAdapter
 import com.nuvio.app.features.watching.sync.SupabaseProgressSyncAdapter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,20 +32,50 @@ object WatchProgressRepository {
     private var entriesByVideoId: MutableMap<String, WatchProgressEntry> = mutableMapOf()
     internal var syncAdapter: ProgressSyncAdapter = SupabaseProgressSyncAdapter
 
+    init {
+        syncScope.launch {
+            TraktAuthRepository.isAuthenticated.collectLatest { authenticated ->
+                if (authenticated) {
+                    runCatching { TraktProgressRepository.refreshNow() }
+                        .onFailure { error -> log.w { "Failed to refresh Trakt progress after auth: ${error.message}" } }
+                }
+                publish()
+            }
+        }
+
+        syncScope.launch {
+            TraktProgressRepository.uiState.collectLatest {
+                if (TraktAuthRepository.isAuthenticated.value) {
+                    publish()
+                }
+            }
+        }
+    }
+
     fun ensureLoaded() {
+        TraktAuthRepository.ensureLoaded()
+        TraktProgressRepository.ensureLoaded()
         if (hasLoaded) return
         loadFromDisk(ProfileRepository.activeProfileId)
+        if (TraktAuthRepository.isAuthenticated.value) {
+            TraktProgressRepository.refreshAsync()
+        }
     }
 
     fun onProfileChanged(profileId: Int) {
         if (profileId == currentProfileId && hasLoaded) return
         loadFromDisk(profileId)
+        TraktProgressRepository.onProfileChanged()
+        if (TraktAuthRepository.isAuthenticated.value) {
+            TraktProgressRepository.refreshAsync()
+        }
     }
 
     fun clearLocalState() {
         hasLoaded = false
         currentProfileId = 1
         entriesByVideoId.clear()
+        TraktProgressRepository.clearLocalState()
         _uiState.value = WatchProgressUiState()
     }
 
@@ -62,6 +95,14 @@ object WatchProgressRepository {
 
     suspend fun pullFromServer(profileId: Int) {
         currentProfileId = profileId
+
+        if (TraktAuthRepository.isAuthenticated.value) {
+            runCatching { TraktProgressRepository.refreshNow() }
+                .onFailure { e -> log.e(e) { "Failed to pull Trakt progress" } }
+            publish()
+            return
+        }
+
         runCatching {
             val serverEntries = syncAdapter.pull(profileId = profileId)
 
@@ -178,6 +219,13 @@ object WatchProgressRepository {
     fun clearProgress(videoIds: Collection<String>) {
         ensureLoaded()
         if (videoIds.isEmpty()) return
+
+        if (shouldUseTraktProgress()) {
+            videoIds.forEach(TraktProgressRepository::applyOptimisticRemoval)
+            publish()
+            return
+        }
+
         val removedEntries = videoIds.mapNotNull { videoId ->
             entriesByVideoId.remove(videoId)
         }
@@ -190,17 +238,21 @@ object WatchProgressRepository {
 
     fun progressForVideo(videoId: String): WatchProgressEntry? {
         ensureLoaded()
-        return entriesByVideoId[videoId]
+        return if (shouldUseTraktProgress()) {
+            TraktProgressRepository.uiState.value.entries.firstOrNull { it.videoId == videoId }
+        } else {
+            entriesByVideoId[videoId]
+        }
     }
 
     fun resumeEntryForSeries(metaId: String): WatchProgressEntry? {
         ensureLoaded()
-        return entriesByVideoId.values.toList().resumeEntryForSeries(metaId)
+        return currentEntries().resumeEntryForSeries(metaId)
     }
 
     fun continueWatching(): List<WatchProgressEntry> {
         ensureLoaded()
-        return entriesByVideoId.values.toList().continueWatchingEntries()
+        return currentEntries().continueWatchingEntries()
     }
 
     private fun upsert(
@@ -245,6 +297,9 @@ object WatchProgressRepository {
         )
 
         entriesByVideoId[session.videoId] = entry
+        if (shouldUseTraktProgress()) {
+            TraktProgressRepository.applyOptimisticProgress(entry)
+        }
         publish()
         if (persist) persist()
         pushScrobbleToServer(entry)
@@ -252,6 +307,7 @@ object WatchProgressRepository {
     }
 
     private fun pushScrobbleToServer(entry: WatchProgressEntry) {
+        if (shouldUseTraktProgress()) return
         syncScope.launch {
             runCatching {
                 val profileId = ProfileRepository.activeProfileId
@@ -263,6 +319,7 @@ object WatchProgressRepository {
     }
 
     private fun pushDeleteToServer(entries: Collection<WatchProgressEntry>) {
+        if (shouldUseTraktProgress()) return
         syncScope.launch {
             runCatching {
                 if (entries.isEmpty()) return@runCatching
@@ -275,8 +332,9 @@ object WatchProgressRepository {
     }
 
     private fun publish() {
+        val entries = currentEntries()
         _uiState.value = WatchProgressUiState(
-            entries = entriesByVideoId.values.toList().sortedByDescending { it.lastUpdatedEpochMs },
+            entries = entries.sortedByDescending { it.lastUpdatedEpochMs },
         )
     }
 
@@ -285,6 +343,16 @@ object WatchProgressRepository {
             currentProfileId,
             WatchProgressCodec.encodeEntries(entriesByVideoId.values),
         )
+    }
+
+    private fun shouldUseTraktProgress(): Boolean = TraktAuthRepository.isAuthenticated.value
+
+    private fun currentEntries(): List<WatchProgressEntry> {
+        return if (shouldUseTraktProgress()) {
+            TraktProgressRepository.uiState.value.entries
+        } else {
+            entriesByVideoId.values.toList()
+        }
     }
 
 }

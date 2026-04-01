@@ -36,6 +36,7 @@ import com.nuvio.app.features.details.MetaVideo
 import com.nuvio.app.features.streams.StreamItem
 import com.nuvio.app.features.streams.StreamLinkCacheRepository
 import com.nuvio.app.features.streams.StreamsUiState
+import com.nuvio.app.features.trakt.TraktScrobbleRepository
 import com.nuvio.app.features.watchprogress.WatchProgressClock
 import com.nuvio.app.features.watchprogress.WatchProgressPlaybackSession
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
@@ -116,6 +117,18 @@ fun PlayerScreen(
         }
         var lastProgressPersistEpochMs by remember(activeSourceUrl) { mutableStateOf(0L) }
         var previousIsPlaying by remember(activeSourceUrl) { mutableStateOf(false) }
+        var hasRequestedScrobbleStartForCurrentItem by remember(
+            activeSourceUrl,
+            activeVideoId,
+            activeSeasonNumber,
+            activeEpisodeNumber,
+        ) { mutableStateOf(false) }
+        var hasSentCompletionScrobbleForCurrentItem by remember(
+            activeSourceUrl,
+            activeVideoId,
+            activeSeasonNumber,
+            activeEpisodeNumber,
+        ) { mutableStateOf(false) }
         val backdropArtwork = background ?: poster
         val displayedPositionMs = scrubbingPositionMs ?: playbackSnapshot.positionMs
         val isEpisode = activeSeasonNumber != null && activeEpisodeNumber != null
@@ -179,7 +192,65 @@ fun PlayerScreen(
             )
         }
 
+        fun currentPlaybackProgressPercent(snapshot: PlayerPlaybackSnapshot = playbackSnapshot): Float {
+            val duration = snapshot.durationMs.takeIf { it > 0L } ?: return 0f
+            return ((snapshot.positionMs.toFloat() / duration.toFloat()) * 100f)
+                .coerceIn(0f, 100f)
+        }
+
+        fun currentTraktScrobbleItem() = TraktScrobbleRepository.buildItem(
+            contentType = contentType ?: parentMetaType,
+            parentMetaId = parentMetaId,
+            title = title,
+            seasonNumber = activeSeasonNumber,
+            episodeNumber = activeEpisodeNumber,
+            episodeTitle = activeEpisodeTitle,
+        )
+
+        fun emitTraktScrobbleStart() {
+            val item = currentTraktScrobbleItem() ?: return
+            if (hasRequestedScrobbleStartForCurrentItem) return
+            hasRequestedScrobbleStartForCurrentItem = true
+
+            scope.launch {
+                TraktScrobbleRepository.scrobbleStart(
+                    item = item,
+                    progressPercent = currentPlaybackProgressPercent(),
+                )
+            }
+        }
+
+        fun emitTraktScrobbleStop(progressPercent: Float? = null) {
+            val item = currentTraktScrobbleItem() ?: return
+            val provided = progressPercent
+            if (!hasRequestedScrobbleStartForCurrentItem && (provided ?: 0f) < 80f) return
+
+            val percent = provided ?: currentPlaybackProgressPercent()
+            scope.launch {
+                TraktScrobbleRepository.scrobbleStop(
+                    item = item,
+                    progressPercent = percent,
+                )
+            }
+            hasRequestedScrobbleStartForCurrentItem = false
+        }
+
+        fun emitStopScrobbleForCurrentProgress() {
+            val progressPercent = currentPlaybackProgressPercent()
+            if (progressPercent >= 1f && progressPercent < 80f) {
+                emitTraktScrobbleStop(progressPercent)
+                hasSentCompletionScrobbleForCurrentItem = false
+                return
+            }
+
+            if (progressPercent >= 80f && !hasSentCompletionScrobbleForCurrentItem) {
+                hasSentCompletionScrobbleForCurrentItem = true
+                emitTraktScrobbleStop(progressPercent)
+            }
+        }
+
         fun flushWatchProgress() {
+            emitStopScrobbleForCurrentProgress()
             WatchProgressRepository.flushPlaybackProgress(
                 session = playbackSession,
                 snapshot = playbackSnapshot,
@@ -491,6 +562,7 @@ fun PlayerScreen(
 
         LaunchedEffect(playbackSnapshot.positionMs, playbackSnapshot.isPlaying, playbackSnapshot.isEnded, playbackSnapshot.durationMs) {
             if (playbackSnapshot.isEnded) {
+                hasSentCompletionScrobbleForCurrentItem = false
                 flushWatchProgress()
                 previousIsPlaying = false
                 return@LaunchedEffect
@@ -498,6 +570,10 @@ fun PlayerScreen(
 
             if (previousIsPlaying && !playbackSnapshot.isPlaying) {
                 flushWatchProgress()
+            }
+
+            if (!previousIsPlaying && playbackSnapshot.isPlaying) {
+                emitTraktScrobbleStart()
             }
 
             previousIsPlaying = playbackSnapshot.isPlaying
