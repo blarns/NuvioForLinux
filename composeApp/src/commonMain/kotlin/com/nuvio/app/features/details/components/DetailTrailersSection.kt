@@ -81,7 +81,7 @@ fun DetailTrailersSection(
             ) {
                 DetailSectionTitle(
                     title = "Trailers",
-                    modifier = Modifier.weight(1f),
+                    fullWidth = false,
                 )
 
                 Box {

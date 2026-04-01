@@ -30,9 +30,11 @@ fun DetailSection(
 @Composable
 fun DetailSectionTitle(
     title: String,
+    fullWidth: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+    val titleModifier = if (fullWidth) modifier.fillMaxWidth() else modifier
+    BoxWithConstraints(modifier = titleModifier) {
         val titleSize = if (maxWidth >= 720.dp) 22.sp else 20.sp
         Text(
             text = title,
