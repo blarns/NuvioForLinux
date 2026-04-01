@@ -84,45 +84,74 @@ object TraktProgressRepository {
 
         _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
 
-        val rawEntries = runCatching {
-            fetchSnapshotEntries(headers)
+        val playbackEntries = runCatching {
+            fetchPlaybackEntries(headers)
         }.onFailure { error ->
             if (error is CancellationException) throw error
             log.w { "Failed to refresh Trakt progress: ${error.message}" }
         }.getOrNull()
 
-        if (rawEntries == null) {
+        if (playbackEntries == null) {
             _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = "Failed to load Trakt progress")
             return
         }
 
         _uiState.value = TraktProgressUiState(
-            entries = rawEntries,
+            entries = playbackEntries,
             isLoading = false,
             errorMessage = null,
         )
 
-        if (rawEntries.isNotEmpty()) {
-            scope.launch {
-                val hydrated = runCatching {
-                    hydrateEntriesFromAddonMeta(rawEntries)
-                }.onFailure { error ->
-                    if (error is CancellationException) throw error
-                    log.w { "Failed to hydrate Trakt metadata: ${error.message}" }
-                }.getOrNull() ?: return@launch
+        if (playbackEntries.isNotEmpty()) {
+            launchHydration(requestId = requestId, entries = playbackEntries)
+        }
 
-                if (!isLatestRefreshRequest(requestId)) return@launch
+        scope.launch {
+            val historyEntries = runCatching {
+                fetchHistoryEntries(headers)
+            }.onFailure { error ->
+                if (error is CancellationException) throw error
+                log.w { "Failed to fetch Trakt history snapshot: ${error.message}" }
+            }.getOrNull() ?: return@launch
 
-                val merged = mergeEntriesPreferRichMetadata(
-                    current = _uiState.value.entries,
-                    hydrated = hydrated,
-                )
-                _uiState.value = _uiState.value.copy(
-                    entries = merged.sortedByDescending { it.lastUpdatedEpochMs },
-                    isLoading = false,
-                    errorMessage = null,
-                )
+            if (!isLatestRefreshRequest(requestId)) return@launch
+
+            val merged = mergeNewestByVideoId(playbackEntries + historyEntries)
+            _uiState.value = _uiState.value.copy(
+                entries = merged.sortedByDescending { it.lastUpdatedEpochMs },
+                isLoading = false,
+                errorMessage = null,
+            )
+
+            if (merged.isNotEmpty()) {
+                launchHydration(requestId = requestId, entries = merged)
             }
+        }
+    }
+
+    private fun launchHydration(
+        requestId: Long,
+        entries: List<WatchProgressEntry>,
+    ) {
+        scope.launch {
+            val hydrated = runCatching {
+                hydrateEntriesFromAddonMeta(entries)
+            }.onFailure { error ->
+                if (error is CancellationException) throw error
+                log.w { "Failed to hydrate Trakt metadata: ${error.message}" }
+            }.getOrNull() ?: return@launch
+
+            if (!isLatestRefreshRequest(requestId)) return@launch
+
+            val merged = mergeEntriesPreferRichMetadata(
+                current = _uiState.value.entries,
+                hydrated = hydrated,
+            )
+            _uiState.value = _uiState.value.copy(
+                entries = merged.sortedByDescending { it.lastUpdatedEpochMs },
+                isLoading = false,
+                errorMessage = null,
+            )
         }
     }
 
@@ -143,7 +172,7 @@ object TraktProgressRepository {
         _uiState.value = _uiState.value.copy(entries = filtered)
     }
 
-    private suspend fun fetchSnapshotEntries(headers: Map<String, String>): List<WatchProgressEntry> = withContext(Dispatchers.Default) {
+    private suspend fun fetchPlaybackEntries(headers: Map<String, String>): List<WatchProgressEntry> = withContext(Dispatchers.Default) {
         val payloads = coroutineScope {
             val moviesPayload = async {
                 httpGetTextWithHeaders(
@@ -157,6 +186,28 @@ object TraktProgressRepository {
                     headers = headers,
                 )
             }
+
+            awaitAll(moviesPayload, episodesPayload)
+        }
+
+        val moviesPayload = payloads[0]
+        val episodesPayload = payloads[1]
+
+        val moviePlayback = json.decodeFromString<List<TraktPlaybackItem>>(moviesPayload)
+        val episodePlayback = json.decodeFromString<List<TraktPlaybackItem>>(episodesPayload)
+
+        val inProgressMovies = moviePlayback.mapIndexedNotNull { index, item ->
+            mapPlaybackMovie(item = item, fallbackIndex = index)
+        }
+        val inProgressEpisodes = episodePlayback.mapIndexedNotNull { index, item ->
+            mapPlaybackEpisode(item = item, fallbackIndex = index)
+        }
+
+        mergeNewestByVideoId(inProgressMovies + inProgressEpisodes)
+    }
+
+    private suspend fun fetchHistoryEntries(headers: Map<String, String>): List<WatchProgressEntry> = withContext(Dispatchers.Default) {
+        val payloads = coroutineScope {
             val historyPayload = async {
                 httpGetTextWithHeaders(
                     url = "$BASE_URL/sync/history/episodes?limit=$HISTORY_LIMIT",
@@ -170,25 +221,13 @@ object TraktProgressRepository {
                 )
             }
 
-            awaitAll(moviesPayload, episodesPayload, historyPayload, movieHistoryPayload)
+            awaitAll(historyPayload, movieHistoryPayload)
         }
 
-        val moviesPayload = payloads[0]
-        val episodesPayload = payloads[1]
-        val historyPayload = payloads[2]
-        val movieHistoryPayload = payloads[3]
-
-        val moviePlayback = json.decodeFromString<List<TraktPlaybackItem>>(moviesPayload)
-        val episodePlayback = json.decodeFromString<List<TraktPlaybackItem>>(episodesPayload)
+        val historyPayload = payloads[0]
+        val movieHistoryPayload = payloads[1]
         val episodeHistory = json.decodeFromString<List<TraktHistoryEpisodeItem>>(historyPayload)
         val movieHistory = json.decodeFromString<List<TraktHistoryMovieItem>>(movieHistoryPayload)
-
-        val inProgressMovies = moviePlayback.mapIndexedNotNull { index, item ->
-            mapPlaybackMovie(item = item, fallbackIndex = index)
-        }
-        val inProgressEpisodes = episodePlayback.mapIndexedNotNull { index, item ->
-            mapPlaybackEpisode(item = item, fallbackIndex = index)
-        }
 
         val completedEpisodes = episodeHistory
             .mapIndexedNotNull { index, item -> mapHistoryEpisode(item = item, fallbackIndex = index) }
@@ -197,15 +236,19 @@ object TraktProgressRepository {
             .mapIndexedNotNull { index, item -> mapHistoryMovie(item = item, fallbackIndex = index) }
             .distinctBy { entry -> entry.videoId }
 
+        mergeNewestByVideoId(completedEpisodes + completedMovies)
+    }
+
+    private fun mergeNewestByVideoId(entries: List<WatchProgressEntry>): List<WatchProgressEntry> {
         val mergedByVideoId = linkedMapOf<String, WatchProgressEntry>()
-        (inProgressMovies + inProgressEpisodes + completedEpisodes + completedMovies).forEach { entry ->
+        entries.forEach { entry ->
             val existing = mergedByVideoId[entry.videoId]
             if (existing == null || entry.lastUpdatedEpochMs > existing.lastUpdatedEpochMs) {
                 mergedByVideoId[entry.videoId] = entry
             }
         }
 
-        mergedByVideoId.values
+        return mergedByVideoId.values
             .toList()
             .sortedByDescending { it.lastUpdatedEpochMs }
     }
