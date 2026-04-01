@@ -20,6 +20,7 @@ internal enum class SettingsPage(
     ContentDiscovery("Content & Discovery"),
     TmdbEnrichment("TMDB Enrichment"),
     MdbListRatings("MDBList Ratings"),
+    TraktAuthentication("Trakt"),
 }
 
 internal fun SettingsPage.previousPage(): SettingsPage? =
@@ -30,4 +31,5 @@ internal fun SettingsPage.previousPage(): SettingsPage? =
         SettingsPage.ContentDiscovery -> SettingsPage.Root
         SettingsPage.TmdbEnrichment -> SettingsPage.ContentDiscovery
         SettingsPage.MdbListRatings -> SettingsPage.ContentDiscovery
+        SettingsPage.TraktAuthentication -> SettingsPage.ContentDiscovery
     }

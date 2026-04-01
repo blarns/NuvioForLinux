@@ -32,6 +32,7 @@ fun LibraryScreen(
         LibraryRepository.uiState
     }.collectAsStateWithLifecycle()
     var pendingRemovalItem by remember { mutableStateOf<LibraryItem?>(null) }
+    val isTraktSource = uiState.sourceMode == LibrarySourceMode.TRAKT
 
     NuvioScreen(
         modifier = modifier,
@@ -39,7 +40,7 @@ fun LibraryScreen(
     ) {
         stickyHeader {
             NuvioScreenHeader(
-                title = "Library",
+                title = if (isTraktSource) "Trakt Library" else "Library",
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
@@ -59,8 +60,12 @@ fun LibraryScreen(
                 item {
                     HomeEmptyStateCard(
                         modifier = Modifier.padding(horizontal = 16.dp),
-                        title = "Your library is empty",
-                        message = "Saved titles will appear here after you tap Save on a details screen.",
+                        title = if (isTraktSource) "Your Trakt library is empty" else "Your library is empty",
+                        message = if (isTraktSource) {
+                            "Connect Trakt and save titles to your watchlist or personal lists."
+                        } else {
+                            "Saved titles will appear here after you tap Save on a details screen."
+                        },
                     )
                 }
             }
@@ -69,7 +74,11 @@ fun LibraryScreen(
                 librarySections(
                     sections = uiState.sections,
                     onPosterClick = onPosterClick,
-                    onPosterLongClick = { item -> pendingRemovalItem = item },
+                    onPosterLongClick = { item ->
+                        if (!isTraktSource) {
+                            pendingRemovalItem = item
+                        }
+                    },
                 )
             }
         }

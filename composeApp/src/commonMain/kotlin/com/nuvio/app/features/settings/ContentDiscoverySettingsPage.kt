@@ -2,6 +2,7 @@ package com.nuvio.app.features.settings
 
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ConnectedTv
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.MovieFilter
 import androidx.compose.material.icons.rounded.Star
@@ -13,6 +14,7 @@ internal fun LazyListScope.contentDiscoveryContent(
     onHomescreenClick: () -> Unit,
     onTmdbClick: () -> Unit,
     onMdbListClick: () -> Unit,
+    onTraktClick: () -> Unit,
 ) {
     item {
         SettingsSection(
@@ -50,6 +52,14 @@ internal fun LazyListScope.contentDiscoveryContent(
                     icon = Icons.Rounded.Star,
                     isTablet = isTablet,
                     onClick = onMdbListClick,
+                )
+                SettingsGroupDivider(isTablet = isTablet)
+                SettingsNavigationRow(
+                    title = "Trakt",
+                    description = "Connect Trakt, sync watchlist lists, and save titles directly to Trakt.",
+                    icon = Icons.Rounded.ConnectedTv,
+                    isTablet = isTablet,
+                    onClick = onTraktClick,
                 )
             }
         }

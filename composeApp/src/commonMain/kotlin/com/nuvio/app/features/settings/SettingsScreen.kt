@@ -39,6 +39,8 @@ import com.nuvio.app.core.ui.NuvioScreenHeader
 import com.nuvio.app.features.mdblist.MdbListSettings
 import com.nuvio.app.features.mdblist.MdbListSettingsRepository
 import com.nuvio.app.features.player.PlayerSettingsRepository
+import com.nuvio.app.features.trakt.TraktAuthUiState
+import com.nuvio.app.features.trakt.TraktAuthRepository
 import com.nuvio.app.features.tmdb.TmdbSettings
 import com.nuvio.app.features.tmdb.TmdbSettingsRepository
 
@@ -74,6 +76,10 @@ fun SettingsScreen(
             MdbListSettingsRepository.ensureLoaded()
             MdbListSettingsRepository.uiState
         }.collectAsStateWithLifecycle()
+        val traktAuthUiState by remember {
+            TraktAuthRepository.ensureLoaded()
+            TraktAuthRepository.uiState
+        }.collectAsStateWithLifecycle()
 
         var currentPage by rememberSaveable { mutableStateOf(SettingsPage.Root.name) }
         val page = remember(currentPage) { SettingsPage.valueOf(currentPage) }
@@ -104,6 +110,7 @@ fun SettingsScreen(
                 onAmoledToggle = ThemeSettingsRepository::setAmoled,
                 tmdbSettings = tmdbSettings,
                 mdbListSettings = mdbListSettings,
+                traktAuthUiState = traktAuthUiState,
                 onSwitchProfile = onSwitchProfile,
                 onHomescreenClick = onHomescreenClick,
                 onContinueWatchingClick = onContinueWatchingClick,
@@ -130,6 +137,7 @@ fun SettingsScreen(
                 onAmoledToggle = ThemeSettingsRepository::setAmoled,
                 tmdbSettings = tmdbSettings,
                 mdbListSettings = mdbListSettings,
+                traktAuthUiState = traktAuthUiState,
                 onSwitchProfile = onSwitchProfile,
                 onHomescreenClick = onHomescreenClick,
                 onContinueWatchingClick = onContinueWatchingClick,
@@ -160,6 +168,7 @@ private fun MobileSettingsScreen(
     onAmoledToggle: (Boolean) -> Unit,
     tmdbSettings: TmdbSettings,
     mdbListSettings: MdbListSettings,
+    traktAuthUiState: TraktAuthUiState,
     onSwitchProfile: (() -> Unit)? = null,
     onHomescreenClick: () -> Unit = {},
     onContinueWatchingClick: () -> Unit = {},
@@ -211,6 +220,7 @@ private fun MobileSettingsScreen(
                 onHomescreenClick = onHomescreenClick,
                 onTmdbClick = { onPageChange(SettingsPage.TmdbEnrichment) },
                 onMdbListClick = { onPageChange(SettingsPage.MdbListRatings) },
+                onTraktClick = { onPageChange(SettingsPage.TraktAuthentication) },
             )
             SettingsPage.TmdbEnrichment -> tmdbSettingsContent(
                 isTablet = false,
@@ -219,6 +229,10 @@ private fun MobileSettingsScreen(
             SettingsPage.MdbListRatings -> mdbListSettingsContent(
                 isTablet = false,
                 settings = mdbListSettings,
+            )
+            SettingsPage.TraktAuthentication -> traktSettingsContent(
+                isTablet = false,
+                uiState = traktAuthUiState,
             )
         }
     }
@@ -244,6 +258,7 @@ private fun TabletSettingsScreen(
     onAmoledToggle: (Boolean) -> Unit,
     tmdbSettings: TmdbSettings,
     mdbListSettings: MdbListSettings,
+    traktAuthUiState: TraktAuthUiState,
     onSwitchProfile: (() -> Unit)? = null,
     onHomescreenClick: () -> Unit = {},
     onContinueWatchingClick: () -> Unit = {},
@@ -344,6 +359,7 @@ private fun TabletSettingsScreen(
                     onHomescreenClick = onHomescreenClick,
                     onTmdbClick = { onPageChange(SettingsPage.TmdbEnrichment) },
                     onMdbListClick = { onPageChange(SettingsPage.MdbListRatings) },
+                    onTraktClick = { onPageChange(SettingsPage.TraktAuthentication) },
                 )
                 SettingsPage.TmdbEnrichment -> tmdbSettingsContent(
                     isTablet = true,
@@ -352,6 +368,10 @@ private fun TabletSettingsScreen(
                 SettingsPage.MdbListRatings -> mdbListSettingsContent(
                     isTablet = true,
                     settings = mdbListSettings,
+                )
+                SettingsPage.TraktAuthentication -> traktSettingsContent(
+                    isTablet = true,
+                    uiState = traktAuthUiState,
                 )
             }
         }

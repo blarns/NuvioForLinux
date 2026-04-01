@@ -11,6 +11,7 @@ import com.nuvio.app.features.mdblist.MdbListSettingsRepository
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.search.SearchHistoryRepository
 import com.nuvio.app.features.settings.ThemeSettingsRepository
+import com.nuvio.app.features.trakt.TraktAuthRepository
 import com.nuvio.app.features.tmdb.TmdbSettingsRepository
 import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepository
@@ -127,6 +128,7 @@ object ProfileRepository {
         ContinueWatchingPreferencesRepository.onProfileChanged()
         TmdbSettingsRepository.onProfileChanged()
         MdbListSettingsRepository.onProfileChanged()
+        TraktAuthRepository.onProfileChanged()
         SearchHistoryRepository.onProfileChanged()
     }
 

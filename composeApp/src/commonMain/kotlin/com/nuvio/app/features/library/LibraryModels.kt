@@ -27,7 +27,13 @@ data class LibrarySection(
     val items: List<LibraryItem>,
 )
 
+enum class LibrarySourceMode {
+    LOCAL,
+    TRAKT,
+}
+
 data class LibraryUiState(
+    val sourceMode: LibrarySourceMode = LibrarySourceMode.LOCAL,
     val items: List<LibraryItem> = emptyList(),
     val sections: List<LibrarySection> = emptyList(),
     val isLoaded: Boolean = false,

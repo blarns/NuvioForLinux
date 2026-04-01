@@ -76,3 +76,50 @@ actual suspend fun httpPostJson(url: String, body: String): String =
             }
             payload
         }
+
+actual suspend fun httpGetTextWithHeaders(
+    url: String,
+    headers: Map<String, String>,
+): String =
+    addonHttpClient
+        .get(url) {
+            accept(ContentType.Application.Json)
+            headers.forEach { (key, value) ->
+                header(key, value)
+            }
+        }
+        .let { response ->
+            val payload = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                error("Request failed with HTTP ${response.status.value}")
+            }
+            if (payload.isBlank()) {
+                throw IllegalStateException("Empty response body")
+            }
+            payload
+        }
+
+actual suspend fun httpPostJsonWithHeaders(
+    url: String,
+    body: String,
+    headers: Map<String, String>,
+): String =
+    addonHttpClient
+        .post(url) {
+            accept(ContentType.Application.Json)
+            header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+            headers.forEach { (key, value) ->
+                header(key, value)
+            }
+            setBody(body)
+        }
+        .let { response ->
+            val payload = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                error("Request failed with HTTP ${response.status.value}")
+            }
+            if (payload.isBlank()) {
+                throw IllegalStateException("Empty response body")
+            }
+            payload
+        }

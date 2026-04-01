@@ -5,6 +5,8 @@ import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,11 +17,22 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.BasicAlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -52,6 +65,9 @@ import com.nuvio.app.features.details.components.TrailerPlayerPopup
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.library.LibraryRepository
 import com.nuvio.app.features.library.toLibraryItem
+import com.nuvio.app.features.trakt.TraktAuthRepository
+import com.nuvio.app.features.trakt.TraktConnectionMode
+import com.nuvio.app.features.trakt.TraktListTab
 import com.nuvio.app.features.trailer.TrailerPlaybackResolver
 import com.nuvio.app.features.trailer.TrailerPlaybackSource
 import com.nuvio.app.features.watched.WatchedRepository
@@ -75,6 +91,10 @@ fun MetaDetailsScreen(
     modifier: Modifier = Modifier,
 ) {
     val uiState by MetaDetailsRepository.uiState.collectAsStateWithLifecycle()
+    val traktAuthUiState by remember {
+        TraktAuthRepository.ensureLoaded()
+        TraktAuthRepository.uiState
+    }.collectAsStateWithLifecycle()
     val libraryUiState by remember {
         LibraryRepository.ensureLoaded()
         LibraryRepository.uiState
@@ -91,6 +111,12 @@ fun MetaDetailsScreen(
     val requestedMeta = uiState.meta?.takeIf { it.type == type && it.id == id }
     val needsFreshLoad = requestedMeta == null && !uiState.isLoading
     var selectedEpisodeForActions by remember(type, id) { mutableStateOf<MetaVideo?>(null) }
+    val detailsScope = rememberCoroutineScope()
+    var showLibraryListPicker by remember(type, id) { mutableStateOf(false) }
+    var pickerTabs by remember(type, id) { mutableStateOf<List<TraktListTab>>(emptyList()) }
+    var pickerMembership by remember(type, id) { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+    var pickerPending by remember(type, id) { mutableStateOf(false) }
+    var pickerError by remember(type, id) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(type, id, needsFreshLoad) {
         if (!needsFreshLoad) {
@@ -146,11 +172,32 @@ fun MetaDetailsScreen(
                 val isSaved = remember(libraryUiState.items, meta.id) {
                     libraryUiState.items.any { it.id == meta.id }
                 }
-                val toggleSaved = remember(meta) {
+                val isTraktConnected = traktAuthUiState.mode == TraktConnectionMode.CONNECTED
+                val toggleSaved = remember(meta, isTraktConnected) {
                     {
-                        LibraryRepository.toggleSaved(
-                            meta.toLibraryItem(savedAtEpochMs = 0L),
-                        )
+                        val libraryItem = meta.toLibraryItem(savedAtEpochMs = 0L)
+                        if (!isTraktConnected) {
+                            LibraryRepository.toggleSaved(libraryItem)
+                        } else {
+                            detailsScope.launch {
+                                pickerPending = true
+                                pickerError = null
+                                runCatching {
+                                    LibraryRepository.pullFromServer(com.nuvio.app.features.profiles.ProfileRepository.activeProfileId)
+                                    val tabs = LibraryRepository.traktListTabs()
+                                    val snapshot = LibraryRepository.getMembershipSnapshot(libraryItem)
+                                    pickerTabs = tabs
+                                    pickerMembership = tabs.associate { tab ->
+                                        tab.key to (snapshot[tab.key] == true)
+                                    }
+                                    showLibraryListPicker = true
+                                }.onFailure { error ->
+                                    pickerError = error.message ?: "Failed to load Trakt lists"
+                                }
+                                pickerPending = false
+                            }
+                            Unit
+                        }
                     }
                 }
                 val movieProgress = watchProgressUiState.byVideoId[meta.id]
@@ -519,6 +566,43 @@ fun MetaDetailsScreen(
                             { resolveTrailer(trailer) }
                         },
                     )
+
+                    TraktListPickerDialog(
+                        visible = showLibraryListPicker,
+                        title = meta.name,
+                        tabs = pickerTabs,
+                        membership = pickerMembership,
+                        isPending = pickerPending,
+                        errorMessage = pickerError,
+                        onToggle = { listKey ->
+                            pickerMembership = pickerMembership.toMutableMap().apply {
+                                this[listKey] = !(this[listKey] == true)
+                            }
+                        },
+                        onDismiss = {
+                            if (!pickerPending) {
+                                showLibraryListPicker = false
+                            }
+                        },
+                        onSave = {
+                            detailsScope.launch {
+                                pickerPending = true
+                                pickerError = null
+                                runCatching {
+                                    LibraryRepository.applyMembershipChanges(
+                                        item = meta.toLibraryItem(savedAtEpochMs = 0L),
+                                        desiredMembership = pickerMembership,
+                                    )
+                                }.onSuccess {
+                                    showLibraryListPicker = false
+                                }.onFailure { error ->
+                                    pickerError = error.message ?: "Failed to update Trakt lists"
+                                }
+                                pickerPending = false
+                            }
+                            Unit
+                        },
+                    )
                 }
             }
         }
@@ -533,6 +617,126 @@ fun MetaDetailsScreen(
                 containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.5f),
                 contentColor = MaterialTheme.colorScheme.onBackground,
             )
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun TraktListPickerDialog(
+    visible: Boolean,
+    title: String,
+    tabs: List<TraktListTab>,
+    membership: Map<String, Boolean>,
+    isPending: Boolean,
+    errorMessage: String?,
+    onToggle: (String) -> Unit,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    if (!visible) return
+
+    BasicAlertDialog(
+        onDismissRequest = onDismiss,
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(20.dp),
+        ) {
+            Column(
+                modifier = Modifier.padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = "Choose where to save this title on Trakt",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                if (!errorMessage.isNullOrBlank()) {
+                    Text(
+                        text = errorMessage,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(280.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(items = tabs, key = { it.key }) { tab ->
+                        val selected = membership[tab.key] == true
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    color = if (selected) {
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                )
+                                .clickable(enabled = !isPending) { onToggle(tab.key) }
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = tab.title,
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            if (selected) {
+                                androidx.compose.material3.Icon(
+                                    imageVector = Icons.Rounded.Check,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
+                ) {
+                    Button(
+                        onClick = onDismiss,
+                        enabled = !isPending,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                        ),
+                    ) {
+                        Text("Cancel")
+                    }
+                    Button(
+                        onClick = onSave,
+                        enabled = !isPending,
+                    ) {
+                        if (isPending) {
+                            CircularProgressIndicator(
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        } else {
+                            Text("Save")
+                        }
+                    }
+                }
+            }
         }
     }
 }
