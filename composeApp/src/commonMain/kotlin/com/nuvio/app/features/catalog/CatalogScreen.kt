@@ -3,6 +3,7 @@ package com.nuvio.app.features.catalog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -35,6 +36,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -91,54 +93,58 @@ fun CatalogScreen(
             }
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
     ) {
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
-            state = gridState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = 16.dp,
-                top = with(androidx.compose.ui.platform.LocalDensity.current) { headerHeightPx.toDp() } + 12.dp,
-                end = 16.dp,
-                bottom = nuvioPlatformExtraBottomPadding + 28.dp,
-            ),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-        ) {
-            if (uiState.items.isEmpty() && uiState.isLoading) {
-                items(9) { CatalogSkeletonTile() }
-            } else if (uiState.items.isEmpty()) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    CatalogEmptyState(errorMessage = uiState.errorMessage)
-                }
-            } else {
-                items(
-                    items = uiState.items,
-                    key = { item -> item.stableKey() },
-                ) { item ->
-                    CatalogPosterTile(
-                        item = item,
-                        onClick = onPosterClick?.let { { it(item) } },
-                    )
-                }
-                if (uiState.isLoading) {
+        val columns = remember(maxWidth) { catalogGridColumnsForWidth(maxWidth) }
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(columns),
+                state = gridState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    top = with(androidx.compose.ui.platform.LocalDensity.current) { headerHeightPx.toDp() } + 12.dp,
+                    end = 16.dp,
+                    bottom = nuvioPlatformExtraBottomPadding + 28.dp,
+                ),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
+                if (uiState.items.isEmpty() && uiState.isLoading) {
+                    items(columns * 3) { CatalogSkeletonTile() }
+                } else if (uiState.items.isEmpty()) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        CatalogLoadingFooter()
+                        CatalogEmptyState(errorMessage = uiState.errorMessage)
+                    }
+                } else {
+                    items(
+                        items = uiState.items,
+                        key = { item -> item.stableKey() },
+                    ) { item ->
+                        CatalogPosterTile(
+                            item = item,
+                            onClick = onPosterClick?.let { { it(item) } },
+                        )
+                    }
+                    if (uiState.isLoading) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            CatalogLoadingFooter()
+                        }
                     }
                 }
             }
-        }
 
-        CatalogHeader(
-            title = title,
-            subtitle = subtitle,
-            modifier = Modifier.onSizeChanged { headerHeightPx = it.height },
-            onBack = onBack,
-        )
+            CatalogHeader(
+                title = title,
+                subtitle = subtitle,
+                modifier = Modifier.onSizeChanged { headerHeightPx = it.height },
+                onBack = onBack,
+            )
+        }
     }
 }
 
@@ -287,4 +293,13 @@ private fun PosterShape.catalogAspectRatio(): Float =
         PosterShape.Poster -> 0.68f
         PosterShape.Square -> 1f
         PosterShape.Landscape -> 1.2f
+    }
+
+private fun catalogGridColumnsForWidth(screenWidth: Dp): Int =
+    when {
+        screenWidth >= 1400.dp -> 7
+        screenWidth >= 1200.dp -> 6
+        screenWidth >= 1000.dp -> 5
+        screenWidth >= 840.dp -> 4
+        else -> 3
     }
