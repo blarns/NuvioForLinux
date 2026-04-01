@@ -1,4 +1,5 @@
 import SwiftUI
+import ComposeApp
 
 @main
 struct iOSApp: App {
@@ -8,6 +9,9 @@ struct iOSApp: App {
         WindowGroup {
             ContentView()
                 .preferredColorScheme(.dark)
+                .onOpenURL { url in
+                    TraktAuthBridgeKt.handleTraktAuthCallbackUrl(url: url.absoluteString)
+                }
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.nuvio.app
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -17,6 +18,7 @@ import com.nuvio.app.features.details.SeasonViewModeStorage
 import com.nuvio.app.features.search.SearchHistoryStorage
 import com.nuvio.app.features.settings.ThemeSettingsStorage
 import com.nuvio.app.features.trakt.TraktAuthStorage
+import com.nuvio.app.features.trakt.handleTraktAuthCallbackUrl
 import com.nuvio.app.features.tmdb.TmdbSettingsStorage
 import com.nuvio.app.features.watched.WatchedStorage
 import com.nuvio.app.features.streams.StreamLinkCacheStorage
@@ -51,9 +53,22 @@ class MainActivity : ComponentActivity() {
         WatchProgressStorage.initialize(applicationContext)
         StreamLinkCacheStorage.initialize(applicationContext)
         PlatformLocalAccountDataCleaner.initialize(applicationContext)
+        forwardTraktAuthCallback(intent)
 
         setContent {
             App()
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        forwardTraktAuthCallback(intent)
+    }
+
+    private fun forwardTraktAuthCallback(intent: Intent?) {
+        val callbackUrl = intent?.dataString?.trim().orEmpty()
+        if (callbackUrl.isBlank()) return
+        handleTraktAuthCallbackUrl(callbackUrl)
     }
 }

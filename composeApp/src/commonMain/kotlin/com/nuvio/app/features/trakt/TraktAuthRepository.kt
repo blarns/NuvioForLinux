@@ -3,25 +3,26 @@ package com.nuvio.app.features.trakt
 import co.touchlab.kermit.Logger
 import com.nuvio.app.features.addons.httpGetTextWithHeaders
 import com.nuvio.app.features.addons.httpPostJsonWithHeaders
+import io.ktor.http.Url
+import io.ktor.http.encodeURLParameter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlin.random.Random
 
 object TraktAuthRepository {
     private const val BASE_URL = "https://api.trakt.tv"
+    private const val AUTHORIZE_URL = "https://trakt.tv/oauth/authorize"
     private const val API_VERSION = "2"
 
     private val log = Logger.withTag("TraktAuth")
@@ -39,7 +40,6 @@ object TraktAuthRepository {
 
     private var hasLoaded = false
     private var authState = TraktAuthState()
-    private var pollJob: Job? = null
 
     fun ensureLoaded() {
         if (hasLoaded) return
@@ -47,14 +47,10 @@ object TraktAuthRepository {
     }
 
     fun onProfileChanged() {
-        pollJob?.cancel()
-        pollJob = null
         loadFromDisk()
     }
 
     fun clearLocalState() {
-        pollJob?.cancel()
-        pollJob = null
         hasLoaded = false
         authState = TraktAuthState()
         publish()
@@ -68,32 +64,58 @@ object TraktAuthRepository {
     fun hasRequiredCredentials(): Boolean =
         TraktConfig.CLIENT_ID.isNotBlank() && TraktConfig.CLIENT_SECRET.isNotBlank()
 
-    fun onConnectRequested() {
+    fun onConnectRequested(): String? {
         ensureLoaded()
-        scope.launch {
-            startDeviceAuth()
+        if (!hasRequiredCredentials()) {
+            publish(errorMessage = "Missing Trakt credentials")
+            return null
         }
+
+        val oauthState = generateOauthState()
+        authState = authState.copy(
+            pendingAuthorizationState = oauthState,
+            pendingAuthorizationStartedAtMillis = TraktPlatformClock.nowEpochMs(),
+        )
+        persist()
+        publish(
+            statusMessage = "Complete Trakt sign in in your browser",
+            errorMessage = null,
+        )
+
+        return buildAuthorizationUrl(oauthState)
     }
 
-    fun onCancelDeviceFlow() {
+    fun pendingAuthorizationUrl(): String? {
         ensureLoaded()
-        pollJob?.cancel()
-        pollJob = null
-        authState = authState.copy(
-            deviceCode = null,
-            userCode = null,
-            verificationUrl = null,
-            expiresAtMillis = null,
-            pollIntervalSeconds = null,
-        )
+        val oauthState = authState.pendingAuthorizationState ?: return null
+        return buildAuthorizationUrl(oauthState)
+    }
+
+    fun onCancelAuthorization() {
+        ensureLoaded()
+        clearPendingAuthorization()
         persist()
         publish(statusMessage = null, errorMessage = null)
     }
 
-    fun onDisconnectRequested() {
+    fun onCancelDeviceFlow() {
+        onCancelAuthorization()
+    }
+
+    fun onAuthLaunchFailed(reason: String) {
+        publish(errorMessage = reason)
+    }
+
+    fun onAuthCallbackReceived(callbackUrl: String) {
         ensureLoaded()
+        if (!callbackUrl.startsWith("${TraktConfig.REDIRECT_URI}?", ignoreCase = true) &&
+            !callbackUrl.equals(TraktConfig.REDIRECT_URI, ignoreCase = true)
+        ) {
+            return
+        }
+
         scope.launch {
-            disconnect()
+            completeAuthorizationFromCallback(callbackUrl)
         }
     }
 
@@ -140,177 +162,126 @@ object TraktAuthRepository {
         return authState.username
     }
 
-    private suspend fun startDeviceAuth() {
-        if (!hasRequiredCredentials()) {
-            publish(errorMessage = "Missing Trakt credentials")
-            return
+    fun onDisconnectRequested() {
+        ensureLoaded()
+        scope.launch {
+            disconnect()
         }
-
-        publish(isLoading = true, errorMessage = null, statusMessage = null)
-
-        val body = json.encodeToString(
-            TraktDeviceCodeRequest(clientId = TraktConfig.CLIENT_ID),
-        )
-
-        val response = runCatching {
-            httpPostJsonWithHeaders(
-                url = "$BASE_URL/oauth/device/code",
-                body = body,
-                headers = emptyMap(),
-            )
-        }.onFailure { error ->
-            if (error is CancellationException) throw error
-            log.w { "Failed to start Trakt device auth: ${error.message}" }
-        }.getOrNull()
-
-        if (response == null) {
-            publish(isLoading = false, errorMessage = "Network error, please try again")
-            return
-        }
-
-        val parsed = runCatching {
-            json.decodeFromString<TraktDeviceCodeResponse>(response)
-        }.getOrNull()
-
-        if (parsed == null) {
-            publish(isLoading = false, errorMessage = "Invalid response from Trakt")
-            return
-        }
-
-        val now = TraktPlatformClock.nowEpochMs()
-        authState = authState.copy(
-            deviceCode = parsed.deviceCode,
-            userCode = parsed.userCode,
-            verificationUrl = parsed.verificationUrl,
-            expiresAtMillis = now + parsed.expiresIn * 1_000L,
-            pollIntervalSeconds = parsed.interval,
-        )
-        persist()
-        publish(
-            isLoading = false,
-            statusMessage = "Enter your code on trakt.tv/activate",
-            errorMessage = null,
-        )
-        startPollingIfNeeded(force = true)
     }
 
-    private fun startPollingIfNeeded(force: Boolean) {
-        if (!force && pollJob?.isActive == true) return
-        val hasDeviceFlow = !authState.deviceCode.isNullOrBlank()
-        if (!hasDeviceFlow) return
+    private suspend fun completeAuthorizationFromCallback(callbackUrl: String) {
+        publish(isLoading = true, errorMessage = null)
 
-        pollJob?.cancel()
-        pollJob = scope.launch {
-            publish(isPolling = true, errorMessage = null)
-            while (isActive) {
-                when (val result = pollDeviceToken()) {
-                    DeviceTokenPollResult.Pending -> {
-                        val interval = (authState.pollIntervalSeconds ?: 5).coerceAtLeast(1)
-                        delay(interval * 1_000L)
-                    }
-                    DeviceTokenPollResult.SlowDown -> {
-                        val nextInterval = ((authState.pollIntervalSeconds ?: 5) + 5).coerceAtMost(60)
-                        authState = authState.copy(pollIntervalSeconds = nextInterval)
-                        persist()
-                        publish()
-                        delay(nextInterval * 1_000L)
-                    }
-                    DeviceTokenPollResult.Approved -> {
-                        publish(
-                            isPolling = false,
-                            statusMessage = "Connected to Trakt",
-                            errorMessage = null,
-                        )
-                        return@launch
-                    }
-                    DeviceTokenPollResult.AlreadyUsed -> {
-                        clearDeviceFlowOnly()
-                        publish(
-                            isPolling = false,
-                            errorMessage = "This device code was already used. Start again.",
-                        )
-                        return@launch
-                    }
-                    DeviceTokenPollResult.Expired -> {
-                        clearDeviceFlowOnly()
-                        publish(
-                            isPolling = false,
-                            errorMessage = "The Trakt code expired. Start again.",
-                        )
-                        return@launch
-                    }
-                    DeviceTokenPollResult.Denied -> {
-                        clearDeviceFlowOnly()
-                        publish(
-                            isPolling = false,
-                            errorMessage = "Authorization denied.",
-                        )
-                        return@launch
-                    }
-                    is DeviceTokenPollResult.Failed -> {
-                        clearDeviceFlowOnly()
-                        publish(
-                            isPolling = false,
-                            errorMessage = result.reason,
-                        )
-                        return@launch
-                    }
-                }
+        val parsedUrl = runCatching { Url(callbackUrl) }
+            .onFailure {
+                log.w { "Invalid Trakt callback URL: ${it.message}" }
             }
+            .getOrNull()
+
+        if (parsedUrl == null) {
+            clearPendingAuthorization()
+            persist()
+            publish(
+                isLoading = false,
+                errorMessage = "Invalid Trakt callback",
+            )
+            return
         }
+
+        val errorCode = parsedUrl.parameters["error"]
+        if (!errorCode.isNullOrBlank()) {
+            val errorDescription = parsedUrl.parameters["error_description"]
+                ?: "Authorization denied"
+            clearPendingAuthorization()
+            persist()
+            publish(
+                isLoading = false,
+                errorMessage = errorDescription,
+            )
+            return
+        }
+
+        val code = parsedUrl.parameters["code"].orEmpty().trim()
+        if (code.isBlank()) {
+            clearPendingAuthorization()
+            persist()
+            publish(
+                isLoading = false,
+                errorMessage = "Trakt did not return an authorization code",
+            )
+            return
+        }
+
+        val expectedState = authState.pendingAuthorizationState
+        val callbackState = parsedUrl.parameters["state"].orEmpty().trim()
+        if (!expectedState.isNullOrBlank() && callbackState != expectedState) {
+            clearPendingAuthorization()
+            persist()
+            publish(
+                isLoading = false,
+                errorMessage = "Invalid Trakt callback state",
+            )
+            return
+        }
+
+        exchangeAuthorizationCode(code)
     }
 
-    private suspend fun pollDeviceToken(): DeviceTokenPollResult {
-        val deviceCode = authState.deviceCode?.takeIf { it.isNotBlank() }
-            ?: return DeviceTokenPollResult.Failed("No active Trakt code")
-
+    private suspend fun exchangeAuthorizationCode(code: String) {
         val body = json.encodeToString(
-            TraktDeviceTokenRequest(
-                code = deviceCode,
+            TraktAuthorizationCodeRequest(
+                code = code,
                 clientId = TraktConfig.CLIENT_ID,
                 clientSecret = TraktConfig.CLIENT_SECRET,
+                redirectUri = TraktConfig.REDIRECT_URI,
             ),
         )
 
         val response = runCatching {
             httpPostJsonWithHeaders(
-                url = "$BASE_URL/oauth/device/token",
+                url = "$BASE_URL/oauth/token",
                 body = body,
                 headers = emptyMap(),
             )
-        }.getOrElse { error ->
+        }.onFailure { error ->
             if (error is CancellationException) throw error
-            val code = extractHttpCode(error)
-            return when (code) {
-                400 -> DeviceTokenPollResult.Pending
-                409 -> DeviceTokenPollResult.AlreadyUsed
-                410 -> DeviceTokenPollResult.Expired
-                418 -> DeviceTokenPollResult.Denied
-                429 -> DeviceTokenPollResult.SlowDown
-                else -> DeviceTokenPollResult.Failed("Failed to finish Trakt auth")
-            }
+            log.w { "Failed to exchange Trakt auth code: ${error.message}" }
+        }.getOrNull()
+
+        if (response == null) {
+            clearPendingAuthorization()
+            persist()
+            publish(isLoading = false, errorMessage = "Failed to complete Trakt sign in")
+            return
         }
 
-        val tokenResponse = runCatching {
+        val parsed = runCatching {
             json.decodeFromString<TraktTokenResponse>(response)
-        }.getOrNull() ?: return DeviceTokenPollResult.Failed("Invalid Trakt token response")
+        }.getOrNull()
+
+        if (parsed == null) {
+            clearPendingAuthorization()
+            persist()
+            publish(isLoading = false, errorMessage = "Invalid Trakt token response")
+            return
+        }
 
         authState = authState.copy(
-            accessToken = tokenResponse.accessToken,
-            refreshToken = tokenResponse.refreshToken,
-            tokenType = tokenResponse.tokenType,
-            createdAt = tokenResponse.createdAt,
-            expiresIn = tokenResponse.expiresIn,
-            deviceCode = null,
-            userCode = null,
-            verificationUrl = null,
-            expiresAtMillis = null,
-            pollIntervalSeconds = null,
+            accessToken = parsed.accessToken,
+            refreshToken = parsed.refreshToken,
+            tokenType = parsed.tokenType,
+            createdAt = parsed.createdAt,
+            expiresIn = parsed.expiresIn,
+            pendingAuthorizationState = null,
+            pendingAuthorizationStartedAtMillis = null,
         )
         persist()
         refreshUserSettings()
-        publish()
-        return DeviceTokenPollResult.Approved
+        publish(
+            isLoading = false,
+            statusMessage = "Connected to Trakt",
+            errorMessage = null,
+        )
     }
 
     private suspend fun disconnect() {
@@ -338,12 +309,9 @@ object TraktAuthRepository {
         }
 
         authState = TraktAuthState()
-        pollJob?.cancel()
-        pollJob = null
         persist()
         publish(
             isLoading = false,
-            isPolling = false,
             statusMessage = "Disconnected from Trakt",
             errorMessage = null,
         )
@@ -362,7 +330,7 @@ object TraktAuthRepository {
                 refreshToken = refreshToken,
                 clientId = TraktConfig.CLIENT_ID,
                 clientSecret = TraktConfig.CLIENT_SECRET,
-                redirectUri = "urn:ietf:wg:oauth:2.0:oob",
+                redirectUri = TraktConfig.REDIRECT_URI,
             ),
         )
 
@@ -406,26 +374,17 @@ object TraktAuthRepository {
                 }
         }
         publish(statusMessage = null, errorMessage = null)
-
-        if (!authState.deviceCode.isNullOrBlank() && !authState.isAuthenticated) {
-            startPollingIfNeeded(force = false)
-        }
     }
 
-    private fun clearDeviceFlowOnly() {
+    private fun clearPendingAuthorization() {
         authState = authState.copy(
-            deviceCode = null,
-            userCode = null,
-            verificationUrl = null,
-            expiresAtMillis = null,
-            pollIntervalSeconds = null,
+            pendingAuthorizationState = null,
+            pendingAuthorizationStartedAtMillis = null,
         )
-        persist()
     }
 
     private fun publish(
         isLoading: Boolean = _uiState.value.isLoading,
-        isPolling: Boolean = _uiState.value.isPolling,
         statusMessage: String? = _uiState.value.statusMessage,
         errorMessage: String? = _uiState.value.errorMessage,
     ) {
@@ -438,7 +397,7 @@ object TraktAuthRepository {
 
         val mode = when {
             authState.isAuthenticated -> TraktConnectionMode.CONNECTED
-            !authState.deviceCode.isNullOrBlank() -> TraktConnectionMode.AWAITING_APPROVAL
+            !authState.pendingAuthorizationState.isNullOrBlank() -> TraktConnectionMode.AWAITING_APPROVAL
             else -> TraktConnectionMode.DISCONNECTED
         }
 
@@ -447,13 +406,9 @@ object TraktAuthRepository {
             mode = mode,
             credentialsConfigured = hasRequiredCredentials(),
             isLoading = isLoading,
-            isPolling = if (mode == TraktConnectionMode.CONNECTED) false else isPolling,
             username = authState.username,
             tokenExpiresAtMillis = tokenExpiresAtMillis,
-            deviceUserCode = authState.userCode,
-            verificationUrl = authState.verificationUrl,
-            pollIntervalSeconds = authState.pollIntervalSeconds ?: 5,
-            deviceCodeExpiresAtMillis = authState.expiresAtMillis,
+            pendingAuthorizationStartedAtMillis = authState.pendingAuthorizationStartedAtMillis,
             statusMessage = statusMessage,
             errorMessage = errorMessage,
         )
@@ -463,6 +418,20 @@ object TraktAuthRepository {
         TraktAuthStorage.savePayload(json.encodeToString(authState))
     }
 
+    private fun buildAuthorizationUrl(state: String): String {
+        val responseType = "code"
+        val encodedClientId = TraktConfig.CLIENT_ID.encodeURLParameter()
+        val encodedRedirectUri = TraktConfig.REDIRECT_URI.encodeURLParameter()
+        val encodedState = state.encodeURLParameter()
+        return "$AUTHORIZE_URL?response_type=$responseType&client_id=$encodedClientId&redirect_uri=$encodedRedirectUri&state=$encodedState"
+    }
+
+    private fun generateOauthState(): String {
+        val nowPart = TraktPlatformClock.nowEpochMs().toString(16)
+        val randomPart = Random.nextLong().toULong().toString(16)
+        return "$nowPart$randomPart"
+    }
+
     private fun isTokenExpiredOrExpiring(state: TraktAuthState): Boolean {
         val createdAt = state.createdAt ?: return true
         val expiresIn = state.expiresIn ?: return true
@@ -470,43 +439,15 @@ object TraktAuthRepository {
         val nowSeconds = TraktPlatformClock.nowEpochMs() / 1_000L
         return nowSeconds >= (expiresAtSeconds - 60)
     }
-
-    private fun extractHttpCode(error: Throwable): Int? {
-        val message = error.message ?: return null
-        val match = Regex("HTTP\\s+(\\d{3})").find(message) ?: return null
-        return match.groupValues.getOrNull(1)?.toIntOrNull()
-    }
-}
-
-private sealed interface DeviceTokenPollResult {
-    data object Pending : DeviceTokenPollResult
-    data object AlreadyUsed : DeviceTokenPollResult
-    data object Expired : DeviceTokenPollResult
-    data object Denied : DeviceTokenPollResult
-    data object SlowDown : DeviceTokenPollResult
-    data object Approved : DeviceTokenPollResult
-    data class Failed(val reason: String) : DeviceTokenPollResult
 }
 
 @Serializable
-private data class TraktDeviceCodeRequest(
-    @SerialName("client_id") val clientId: String,
-)
-
-@Serializable
-private data class TraktDeviceCodeResponse(
-    @SerialName("device_code") val deviceCode: String,
-    @SerialName("user_code") val userCode: String,
-    @SerialName("verification_url") val verificationUrl: String,
-    @SerialName("expires_in") val expiresIn: Int,
-    @SerialName("interval") val interval: Int,
-)
-
-@Serializable
-private data class TraktDeviceTokenRequest(
+private data class TraktAuthorizationCodeRequest(
     @SerialName("code") val code: String,
     @SerialName("client_id") val clientId: String,
     @SerialName("client_secret") val clientSecret: String,
+    @SerialName("redirect_uri") val redirectUri: String,
+    @SerialName("grant_type") val grantType: String = "authorization_code",
 )
 
 @Serializable

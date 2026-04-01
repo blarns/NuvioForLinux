@@ -11,11 +11,8 @@ data class TraktAuthState(
     val expiresIn: Int? = null,
     val username: String? = null,
     val userSlug: String? = null,
-    val deviceCode: String? = null,
-    val userCode: String? = null,
-    val verificationUrl: String? = null,
-    val expiresAtMillis: Long? = null,
-    val pollIntervalSeconds: Int? = null,
+    val pendingAuthorizationState: String? = null,
+    val pendingAuthorizationStartedAtMillis: Long? = null,
 ) {
     val isAuthenticated: Boolean
         get() = !accessToken.isNullOrBlank() && !refreshToken.isNullOrBlank()
@@ -31,16 +28,17 @@ data class TraktAuthUiState(
     val mode: TraktConnectionMode = TraktConnectionMode.DISCONNECTED,
     val credentialsConfigured: Boolean = true,
     val isLoading: Boolean = false,
-    val isPolling: Boolean = false,
     val username: String? = null,
     val tokenExpiresAtMillis: Long? = null,
-    val deviceUserCode: String? = null,
-    val verificationUrl: String? = null,
-    val pollIntervalSeconds: Int = 5,
-    val deviceCodeExpiresAtMillis: Long? = null,
+    val pendingAuthorizationStartedAtMillis: Long? = null,
     val statusMessage: String? = null,
     val errorMessage: String? = null,
 )
+
+enum class TraktBrandAsset {
+    Glyph,
+    Wordmark,
+}
 
 enum class TraktListType {
     WATCHLIST,

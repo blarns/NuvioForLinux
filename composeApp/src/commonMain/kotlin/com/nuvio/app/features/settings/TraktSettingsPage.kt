@@ -1,37 +1,31 @@
 package com.nuvio.app.features.settings
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.features.trakt.TraktAuthRepository
+import com.nuvio.app.features.trakt.TraktBrandAsset
 import com.nuvio.app.features.trakt.TraktAuthUiState
 import com.nuvio.app.features.trakt.TraktConnectionMode
-import com.nuvio.app.features.trakt.TraktPlatformClock
-import kotlinx.coroutines.delay
-import nuvio.composeapp.generated.resources.Res
-import nuvio.composeapp.generated.resources.trakt_tv_favicon
-import org.jetbrains.compose.resources.painterResource
+import com.nuvio.app.features.trakt.traktBrandPainter
 
 internal fun LazyListScope.traktSettingsContent(
     isTablet: Boolean,
@@ -69,6 +63,8 @@ private fun TraktBrandIntro(
 ) {
     val horizontalPadding = if (isTablet) 20.dp else 16.dp
     val verticalPadding = if (isTablet) 18.dp else 16.dp
+    val logoSize = if (isTablet) 56.dp else 48.dp
+    val wordmarkWidth = if (isTablet) 170.dp else 150.dp
 
     Column(
         modifier = Modifier
@@ -76,18 +72,28 @@ private fun TraktBrandIntro(
             .padding(horizontal = horizontalPadding, vertical = verticalPadding),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        androidx.compose.foundation.Image(
-            painter = painterResource(Res.drawable.trakt_tv_favicon),
-            contentDescription = "Trakt",
-            modifier = Modifier.size(56.dp),
-            contentScale = ContentScale.Fit,
-        )
-        Text(
-            text = "Trakt",
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.SemiBold,
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(if (isTablet) 64.dp else 56.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            androidx.compose.foundation.Image(
+                painter = traktBrandPainter(TraktBrandAsset.Glyph),
+                contentDescription = "Trakt",
+                modifier = Modifier.size(logoSize),
+                contentScale = ContentScale.Fit,
+            )
+            androidx.compose.foundation.Image(
+                painter = traktBrandPainter(TraktBrandAsset.Wordmark),
+                contentDescription = "Trakt",
+                modifier = Modifier
+                    .height(logoSize)
+                    .width(wordmarkWidth),
+                contentScale = ContentScale.Fit,
+            )
+        }
         Text(
             text = "Track what you watch, save to watchlist or custom lists, and keep your library synced with Trakt.",
             style = MaterialTheme.typography.bodyMedium,
@@ -101,19 +107,9 @@ private fun TraktConnectionCard(
     isTablet: Boolean,
     uiState: TraktAuthUiState,
 ) {
+    val uriHandler = LocalUriHandler.current
     val horizontalPadding = if (isTablet) 20.dp else 16.dp
     val verticalPadding = if (isTablet) 18.dp else 16.dp
-
-    val nowMillis by produceState(initialValue = 0L, key1 = uiState.mode) {
-        while (true) {
-            value = TraktPlatformClock.nowEpochMs()
-            delay(1_000)
-        }
-    }
-
-    val remainingSeconds = uiState.deviceCodeExpiresAtMillis
-        ?.let { expiresAt -> ((expiresAt - nowMillis).coerceAtLeast(0L) / 1_000L).toInt() }
-        ?: 0
 
     Column(
         modifier = Modifier
@@ -156,41 +152,34 @@ private fun TraktConnectionCard(
 
             TraktConnectionMode.AWAITING_APPROVAL -> {
                 Text(
-                    text = "Complete sign in on Trakt",
+                    text = "Finish Trakt sign in in your browser",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Medium,
                 )
                 Text(
-                    text = "Open https://trakt.tv/activate and enter this code:",
+                    text = "After approval, you will be redirected back automatically.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(74.dp)
-                        .background(
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                            shape = RoundedCornerShape(14.dp),
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = uiState.deviceUserCode ?: "-",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                    )
-                }
-                Text(
-                    text = "Code expires in ${formatRemaining(remainingSeconds)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
                 Button(
-                    onClick = TraktAuthRepository::onCancelDeviceFlow,
+                    onClick = {
+                        val authUrl = TraktAuthRepository.pendingAuthorizationUrl()
+                            ?: TraktAuthRepository.onConnectRequested()
+                        if (authUrl == null) return@Button
+                        runCatching { uriHandler.openUri(authUrl) }
+                            .onFailure {
+                                TraktAuthRepository.onAuthLaunchFailed(
+                                    it.message ?: "Failed to open browser",
+                                )
+                            }
+                    },
+                    enabled = !uiState.isLoading,
+                ) {
+                    Text("Open Trakt Login")
+                }
+                Button(
+                    onClick = TraktAuthRepository::onCancelAuthorization,
                     enabled = !uiState.isLoading,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -208,7 +197,15 @@ private fun TraktConnectionCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Button(
-                    onClick = TraktAuthRepository::onConnectRequested,
+                    onClick = {
+                        val authUrl = TraktAuthRepository.onConnectRequested() ?: return@Button
+                        runCatching { uriHandler.openUri(authUrl) }
+                            .onFailure {
+                                TraktAuthRepository.onAuthLaunchFailed(
+                                    it.message ?: "Failed to open browser",
+                                )
+                            }
+                    },
                     enabled = uiState.credentialsConfigured && !uiState.isLoading,
                 ) {
                     if (uiState.isLoading) {
@@ -246,13 +243,4 @@ private fun TraktConnectionCard(
             )
         }
     }
-}
-
-private fun formatRemaining(seconds: Int): String {
-    val safeSeconds = seconds.coerceAtLeast(0)
-    val minutes = safeSeconds / 60
-    val remain = safeSeconds % 60
-    val mm = minutes.toString().padStart(2, '0')
-    val ss = remain.toString().padStart(2, '0')
-    return "$mm:$ss"
 }
