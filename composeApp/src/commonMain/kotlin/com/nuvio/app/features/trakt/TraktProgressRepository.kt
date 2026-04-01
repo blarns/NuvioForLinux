@@ -46,6 +46,7 @@ object TraktProgressRepository {
     val uiState: StateFlow<TraktProgressUiState> = _uiState.asStateFlow()
 
     private var hasLoaded = false
+    private var refreshRequestId: Long = 0L
 
     fun ensureLoaded() {
         if (hasLoaded) return
@@ -53,12 +54,14 @@ object TraktProgressRepository {
     }
 
     fun onProfileChanged() {
+        invalidateInFlightRefreshes()
         hasLoaded = false
         _uiState.value = TraktProgressUiState()
         ensureLoaded()
     }
 
     fun clearLocalState() {
+        invalidateInFlightRefreshes()
         hasLoaded = false
         _uiState.value = TraktProgressUiState()
     }
@@ -71,6 +74,7 @@ object TraktProgressRepository {
 
     suspend fun refreshNow() {
         ensureLoaded()
+        val requestId = nextRefreshRequestId()
         val headers = TraktAuthRepository.authorizedHeaders()
         if (headers == null) {
             _uiState.value = TraktProgressUiState()
@@ -79,19 +83,46 @@ object TraktProgressRepository {
 
         _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
 
-        val snapshot = runCatching {
-            fetchSnapshot(headers)
+        val rawEntries = runCatching {
+            fetchSnapshotEntries(headers)
         }.onFailure { error ->
             if (error is CancellationException) throw error
             log.w { "Failed to refresh Trakt progress: ${error.message}" }
         }.getOrNull()
 
-        if (snapshot == null) {
+        if (rawEntries == null) {
             _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = "Failed to load Trakt progress")
             return
         }
 
-        _uiState.value = snapshot.copy(isLoading = false, errorMessage = null)
+        _uiState.value = TraktProgressUiState(
+            entries = rawEntries,
+            isLoading = false,
+            errorMessage = null,
+        )
+
+        if (rawEntries.isNotEmpty()) {
+            scope.launch {
+                val hydrated = runCatching {
+                    hydrateEntriesFromAddonMeta(rawEntries)
+                }.onFailure { error ->
+                    if (error is CancellationException) throw error
+                    log.w { "Failed to hydrate Trakt metadata: ${error.message}" }
+                }.getOrNull() ?: return@launch
+
+                if (!isLatestRefreshRequest(requestId)) return@launch
+
+                val merged = mergeEntriesPreferRichMetadata(
+                    current = _uiState.value.entries,
+                    hydrated = hydrated,
+                )
+                _uiState.value = _uiState.value.copy(
+                    entries = merged.sortedByDescending { it.lastUpdatedEpochMs },
+                    isLoading = false,
+                    errorMessage = null,
+                )
+            }
+        }
     }
 
     fun applyOptimisticProgress(entry: WatchProgressEntry) {
@@ -111,7 +142,7 @@ object TraktProgressRepository {
         _uiState.value = _uiState.value.copy(entries = filtered)
     }
 
-    private suspend fun fetchSnapshot(headers: Map<String, String>): TraktProgressUiState = withContext(Dispatchers.Default) {
+    private suspend fun fetchSnapshotEntries(headers: Map<String, String>): List<WatchProgressEntry> = withContext(Dispatchers.Default) {
         val moviesPayload = httpGetTextWithHeaders(
             url = "$BASE_URL/sync/playback/movies",
             headers = headers,
@@ -156,12 +187,53 @@ object TraktProgressRepository {
             }
         }
 
-        val hydrated = hydrateEntriesFromAddonMeta(mergedByVideoId.values.toList())
-
-        TraktProgressUiState(
-            entries = hydrated.sortedByDescending { it.lastUpdatedEpochMs },
-        )
+        mergedByVideoId.values
+            .toList()
+            .sortedByDescending { it.lastUpdatedEpochMs }
     }
+
+    private fun mergeEntriesPreferRichMetadata(
+        current: List<WatchProgressEntry>,
+        hydrated: List<WatchProgressEntry>,
+    ): List<WatchProgressEntry> {
+        val merged = current.associateBy { it.videoId }.toMutableMap()
+        hydrated.forEach { candidate ->
+            val existing = merged[candidate.videoId]
+            if (existing == null || shouldReplaceEntry(existing = existing, candidate = candidate)) {
+                merged[candidate.videoId] = candidate
+            }
+        }
+        return merged.values.toList()
+    }
+
+    private fun shouldReplaceEntry(existing: WatchProgressEntry, candidate: WatchProgressEntry): Boolean {
+        if (candidate.lastUpdatedEpochMs != existing.lastUpdatedEpochMs) {
+            return candidate.lastUpdatedEpochMs > existing.lastUpdatedEpochMs
+        }
+        return metadataScore(candidate) > metadataScore(existing)
+    }
+
+    private fun metadataScore(entry: WatchProgressEntry): Int {
+        var score = 0
+        if (!entry.logo.isNullOrBlank()) score += 1
+        if (!entry.poster.isNullOrBlank()) score += 1
+        if (!entry.background.isNullOrBlank()) score += 1
+        if (!entry.episodeTitle.isNullOrBlank()) score += 1
+        if (!entry.episodeThumbnail.isNullOrBlank()) score += 1
+        if (!entry.pauseDescription.isNullOrBlank()) score += 1
+        return score
+    }
+
+    private fun nextRefreshRequestId(): Long {
+        refreshRequestId += 1L
+        return refreshRequestId
+    }
+
+    private fun invalidateInFlightRefreshes() {
+        refreshRequestId += 1L
+    }
+
+    private fun isLatestRefreshRequest(requestId: Long): Boolean = refreshRequestId == requestId
 
     private suspend fun hydrateEntriesFromAddonMeta(
         entries: List<WatchProgressEntry>,
