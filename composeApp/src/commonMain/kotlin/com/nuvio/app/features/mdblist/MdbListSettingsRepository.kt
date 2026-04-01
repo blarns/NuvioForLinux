@@ -36,6 +36,7 @@ object MdbListSettingsRepository {
 
     fun setEnabled(value: Boolean) {
         ensureLoaded()
+        if (value && apiKey.isBlank()) return
         if (enabled == value) return
         enabled = value
         publish()
@@ -47,6 +48,10 @@ object MdbListSettingsRepository {
         val normalized = value.trim()
         if (apiKey == normalized) return
         apiKey = normalized
+        if (apiKey.isBlank()) {
+            enabled = false
+            MdbListSettingsStorage.saveEnabled(false)
+        }
         publish()
         MdbListSettingsStorage.saveApiKey(normalized)
         MdbListMetadataService.clearCache()
@@ -91,8 +96,8 @@ object MdbListSettingsRepository {
 
     private fun loadFromDisk() {
         hasLoaded = true
-        enabled = MdbListSettingsStorage.loadEnabled() ?: false
         apiKey = MdbListSettingsStorage.loadApiKey().orEmpty().trim()
+        enabled = (MdbListSettingsStorage.loadEnabled() ?: false) && apiKey.isNotBlank()
         useImdb = MdbListSettingsStorage.loadUseImdb() ?: true
         useTmdb = MdbListSettingsStorage.loadUseTmdb() ?: true
         useTomatoes = MdbListSettingsStorage.loadUseTomatoes() ?: true

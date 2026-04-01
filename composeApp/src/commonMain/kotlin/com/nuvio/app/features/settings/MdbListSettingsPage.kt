@@ -4,8 +4,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -27,6 +29,8 @@ internal fun LazyListScope.mdbListSettingsContent(
     isTablet: Boolean,
     settings: MdbListSettings,
 ) {
+    val providerControlsEnabled = settings.enabled && settings.hasApiKey
+
     item {
         SettingsSection(
             title = "MDBLIST",
@@ -37,9 +41,17 @@ internal fun LazyListScope.mdbListSettingsContent(
                     title = "Enable MDBList ratings",
                     description = "Show external ratings from MDBList on metadata pages when an IMDb ID is available.",
                     checked = settings.enabled,
+                    enabled = settings.hasApiKey,
                     isTablet = isTablet,
                     onCheckedChange = MdbListSettingsRepository::setEnabled,
                 )
+                if (!settings.hasApiKey) {
+                    SettingsGroupDivider(isTablet = isTablet)
+                    MdbListInfoRow(
+                        isTablet = isTablet,
+                        text = "Add your MDBList API key below before turning ratings on.",
+                    )
+                }
             }
         }
     }
@@ -53,7 +65,6 @@ internal fun LazyListScope.mdbListSettingsContent(
                 MdbListApiKeyRow(
                     isTablet = isTablet,
                     value = settings.apiKey,
-                    enabled = settings.enabled,
                     onApiKeyCommitted = MdbListSettingsRepository::setApiKey,
                 )
             }
@@ -69,6 +80,7 @@ internal fun LazyListScope.mdbListSettingsContent(
                 ProviderRows(
                     isTablet = isTablet,
                     settings = settings,
+                    controlsEnabled = providerControlsEnabled,
                 )
             }
         }
@@ -79,6 +91,7 @@ internal fun LazyListScope.mdbListSettingsContent(
 private fun ProviderRows(
     isTablet: Boolean,
     settings: MdbListSettings,
+    controlsEnabled: Boolean,
 ) {
     val providers = listOf(
         MdbListMetadataService.PROVIDER_IMDB to "IMDb",
@@ -94,7 +107,7 @@ private fun ProviderRows(
         SettingsSwitchRow(
             title = providerLabel,
             checked = settings.isProviderEnabled(providerId),
-            enabled = settings.enabled,
+            enabled = controlsEnabled,
             isTablet = isTablet,
             onCheckedChange = { checked ->
                 MdbListSettingsRepository.setProviderEnabled(providerId, checked)
@@ -110,12 +123,12 @@ private fun ProviderRows(
 private fun MdbListApiKeyRow(
     isTablet: Boolean,
     value: String,
-    enabled: Boolean,
     onApiKeyCommitted: (String) -> Unit,
 ) {
     val horizontalPadding = if (isTablet) 20.dp else 16.dp
     val verticalPadding = if (isTablet) 16.dp else 14.dp
     var draft by rememberSaveable(value) { mutableStateOf(value) }
+    val normalizedDraft = draft.trim()
 
     Column(
         modifier = Modifier
@@ -141,11 +154,7 @@ private fun MdbListApiKeyRow(
             value = draft,
             onValueChange = {
                 draft = it
-                if (enabled) {
-                    onApiKeyCommitted(it)
-                }
             },
-            enabled = enabled,
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             label = { Text("API key") },
@@ -158,5 +167,35 @@ private fun MdbListApiKeyRow(
                 disabledContainerColor = MaterialTheme.colorScheme.surface,
             ),
         )
+
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Button(
+                onClick = {
+                    draft = normalizedDraft
+                    onApiKeyCommitted(normalizedDraft)
+                },
+                enabled = normalizedDraft != value,
+            ) {
+                Text("Save Key")
+            }
+        }
     }
+}
+
+@Composable
+private fun MdbListInfoRow(
+    isTablet: Boolean,
+    text: String,
+) {
+    val horizontalPadding = if (isTablet) 20.dp else 16.dp
+    val verticalPadding = if (isTablet) 14.dp else 12.dp
+
+    Text(
+        text = text,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = horizontalPadding, vertical = verticalPadding),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }

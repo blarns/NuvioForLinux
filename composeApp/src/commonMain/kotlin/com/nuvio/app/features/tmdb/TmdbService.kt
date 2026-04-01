@@ -16,7 +16,7 @@ object TmdbService {
     private val cacheMutex = Mutex()
 
     suspend fun ensureTmdbId(videoId: String, mediaType: String): String? {
-        if (TmdbConfig.API_KEY.isBlank()) return null
+        val apiKey = currentApiKey() ?: return null
 
         val normalized = videoId
             .removePrefix("tmdb:")
@@ -30,11 +30,11 @@ object TmdbService {
         if (normalized.all(Char::isDigit)) return normalized
         if (!normalized.startsWith("tt", ignoreCase = true)) return null
 
-        return imdbToTmdb(imdbId = normalized, mediaType = mediaType)
+        return imdbToTmdb(imdbId = normalized, mediaType = mediaType, apiKey = apiKey)
     }
 
     suspend fun tmdbToImdb(tmdbId: Int, mediaType: String): String? {
-        if (TmdbConfig.API_KEY.isBlank()) return null
+        val apiKey = currentApiKey() ?: return null
 
         val cacheKey = "$tmdbId:${normalizeMediaType(mediaType)}"
         cacheMutex.withLock {
@@ -45,7 +45,7 @@ object TmdbService {
             "tv" -> "tv/$tmdbId/external_ids"
             else -> "movie/$tmdbId/external_ids"
         }
-        val body = fetch<TmdbExternalIdsResponse>(endpoint) ?: return null
+        val body = fetch<TmdbExternalIdsResponse>(endpoint = endpoint, apiKey = apiKey) ?: return null
         val imdbId = body.imdbId?.trim()?.takeIf(String::isNotBlank) ?: return null
 
         cacheMutex.withLock {
@@ -55,7 +55,7 @@ object TmdbService {
         return imdbId
     }
 
-    private suspend fun imdbToTmdb(imdbId: String, mediaType: String): String? {
+    private suspend fun imdbToTmdb(imdbId: String, mediaType: String, apiKey: String): String? {
         val normalizedType = normalizeMediaType(mediaType)
         val cacheKey = "$imdbId:$normalizedType"
         cacheMutex.withLock {
@@ -64,6 +64,7 @@ object TmdbService {
 
         val body = fetch<TmdbFindResponse>(
             endpoint = "find/$imdbId",
+            apiKey = apiKey,
             query = mapOf("external_source" to "imdb_id"),
         ) ?: return null
 
@@ -87,15 +88,19 @@ object TmdbService {
 
     private suspend inline fun <reified T> fetch(
         endpoint: String,
+        apiKey: String,
         query: Map<String, String> = emptyMap(),
     ): T? {
-        val url = buildTmdbUrl(endpoint = endpoint, query = query)
+        val url = buildTmdbUrl(endpoint = endpoint, apiKey = apiKey, query = query)
         return runCatching {
             json.decodeFromString<T>(httpGetText(url))
         }.onFailure { error ->
             log.w { "TMDB request failed for $endpoint: ${error.message}" }
         }.getOrNull()
     }
+
+    private fun currentApiKey(): String? =
+        TmdbSettingsRepository.snapshot().apiKey.trim().takeIf(String::isNotBlank)
 
     internal fun normalizeMediaType(mediaType: String): String =
         when (mediaType.trim().lowercase()) {
@@ -107,9 +112,10 @@ object TmdbService {
 
 internal fun buildTmdbUrl(
     endpoint: String,
+    apiKey: String,
     query: Map<String, String> = emptyMap(),
 ): String {
-    val params = linkedMapOf("api_key" to TmdbConfig.API_KEY)
+    val params = linkedMapOf("api_key" to apiKey)
     query.forEach { (key, value) ->
         if (value.isNotBlank()) {
             params[key] = value

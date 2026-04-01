@@ -33,7 +33,7 @@ object TmdbMetadataService {
         fallbackItemId: String,
         settings: TmdbSettings,
     ): MetaDetails {
-        if (!settings.enabled || TmdbConfig.API_KEY.isBlank()) return meta
+        if (!settings.enabled || !settings.hasApiKey) return meta
 
         val tmdbType = normalizeMetaType(meta.type)
         val tmdbId = TmdbService.ensureTmdbId(meta.id, tmdbType)
@@ -376,7 +376,8 @@ object TmdbMetadataService {
         endpoint: String,
         query: Map<String, String> = emptyMap(),
     ): T? {
-        val url = buildTmdbUrl(endpoint = endpoint, query = query)
+        val apiKey = TmdbSettingsRepository.snapshot().apiKey.trim().takeIf(String::isNotBlank) ?: return null
+        val url = buildTmdbUrl(endpoint = endpoint, apiKey = apiKey, query = query)
         return runCatching {
             json.decodeFromString<T>(httpGetText(url))
         }.onFailure { error ->

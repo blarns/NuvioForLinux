@@ -38,18 +38,7 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
             )
         }
 
-        outDir.resolve("com/nuvio/app/features/tmdb").apply {
-            mkdirs()
-            resolve("TmdbConfig.kt").writeText(
-                """
-                |package com.nuvio.app.features.tmdb
-                |
-                |object TmdbConfig {
-                |    const val API_KEY = "${props.getProperty("TMDB_API_KEY", "")}" 
-                |}
-                """.trimMargin()
-            )
-        }
+        outDir.resolve("com/nuvio/app/features/tmdb/TmdbConfig.kt").delete()
 
         outDir.resolve("com/nuvio/app/features/trakt").apply {
             mkdirs()

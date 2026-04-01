@@ -10,25 +10,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.features.trakt.TraktAuthRepository
 import com.nuvio.app.features.trakt.TraktBrandAsset
@@ -115,7 +107,6 @@ private fun TraktConnectionCard(
     uiState: TraktAuthUiState,
 ) {
     val uriHandler = LocalUriHandler.current
-    var codeDraft by rememberSaveable { mutableStateOf("") }
     val horizontalPadding = if (isTablet) 20.dp else 16.dp
     val verticalPadding = if (isTablet) 18.dp else 16.dp
 
@@ -196,16 +187,6 @@ private fun TraktConnectionCard(
                 ) {
                     Text("Cancel")
                 }
-
-                TraktCodeLoginBlock(
-                    isTablet = isTablet,
-                    value = codeDraft,
-                    enabled = !uiState.isLoading,
-                    onValueChange = { codeDraft = it },
-                    onSubmit = {
-                        TraktAuthRepository.onConnectWithCodeRequested(codeDraft)
-                    },
-                )
             }
 
             TraktConnectionMode.DISCONNECTED -> {
@@ -243,16 +224,6 @@ private fun TraktConnectionCard(
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
-
-                TraktCodeLoginBlock(
-                    isTablet = isTablet,
-                    value = codeDraft,
-                    enabled = uiState.credentialsConfigured && !uiState.isLoading,
-                    onValueChange = { codeDraft = it },
-                    onSubmit = {
-                        TraktAuthRepository.onConnectWithCodeRequested(codeDraft)
-                    },
-                )
             }
         }
 
@@ -269,60 +240,6 @@ private fun TraktConnectionCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
             )
-        }
-    }
-}
-
-@Composable
-private fun TraktCodeLoginBlock(
-    isTablet: Boolean,
-    value: String,
-    enabled: Boolean,
-    onValueChange: (String) -> Unit,
-    onSubmit: () -> Unit,
-) {
-    val spacing = if (isTablet) 10.dp else 8.dp
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(spacing),
-    ) {
-        Text(
-            text = "Or sign in using code",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.Medium,
-        )
-        Text(
-            text = "Paste the Trakt callback URL or the authorization code.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = enabled,
-            singleLine = true,
-            label = { Text("Authorization code or callback URL") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
-                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f),
-                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                disabledContainerColor = MaterialTheme.colorScheme.surface,
-            ),
-        )
-        Button(
-            onClick = onSubmit,
-            enabled = enabled && value.isNotBlank(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            ),
-        ) {
-            Text("Connect with Code")
         }
     }
 }

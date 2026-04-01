@@ -11,6 +11,9 @@ data class MdbListSettings(
     val useLetterboxd: Boolean = true,
     val useAudience: Boolean = true,
 ) {
+    val hasApiKey: Boolean
+        get() = apiKey.isNotBlank()
+
     fun isProviderEnabled(providerId: String): Boolean =
         when (providerId) {
             MdbListMetadataService.PROVIDER_IMDB -> useImdb
