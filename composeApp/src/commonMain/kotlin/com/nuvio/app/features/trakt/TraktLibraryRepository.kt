@@ -1,16 +1,24 @@
 package com.nuvio.app.features.trakt
 
 import co.touchlab.kermit.Logger
+import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.httpGetTextWithHeaders
 import com.nuvio.app.features.addons.httpPostJsonWithHeaders
+import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.library.LibraryItem
 import com.nuvio.app.features.tmdb.TmdbService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -20,6 +28,8 @@ import kotlinx.serialization.json.Json
 private const val BASE_URL = "https://api.trakt.tv"
 private const val WATCHLIST_KEY = "trakt:watchlist"
 private const val PERSONAL_LIST_PREFIX = "trakt:list:"
+private const val METADATA_FETCH_TIMEOUT_MS = 3_500L
+private const val METADATA_FETCH_CONCURRENCY = 5
 
 data class TraktLibraryUiState(
     val listTabs: List<TraktListTab> = emptyList(),
@@ -64,6 +74,11 @@ object TraktLibraryRepository {
 
     suspend fun refreshNow() {
         ensureLoaded()
+        AddonRepository.initialize()
+        withTimeoutOrNull(4_000L) {
+            AddonRepository.awaitManifestsLoaded()
+        }
+
         val headers = TraktAuthRepository.authorizedHeaders()
         if (headers == null) {
             _uiState.value = TraktLibraryUiState()
@@ -161,8 +176,10 @@ object TraktLibraryRepository {
             entriesByList[tab.key] = fetchPersonalListItems(headers, listId)
         }
 
+        val hydratedEntriesByList = hydrateEntriesFromAddonMeta(entriesByList)
+
         val membershipByContent = mutableMapOf<String, MutableSet<String>>()
-        entriesByList.forEach { (listKey, entries) ->
+        hydratedEntriesByList.forEach { (listKey, entries) ->
             entries.forEach { entry ->
                 membershipByContent
                     .getOrPut(contentKey(entry.id, entry.type)) { mutableSetOf() }
@@ -170,17 +187,101 @@ object TraktLibraryRepository {
             }
         }
 
-        val allItems = entriesByList.values
+        val allItems = hydratedEntriesByList.values
             .flatten()
             .distinctBy { contentKey(it.id, it.type) }
             .sortedByDescending { it.savedAtEpochMs }
 
         TraktLibraryUiState(
             listTabs = allTabs,
-            entriesByList = entriesByList,
+            entriesByList = hydratedEntriesByList,
             allItems = allItems,
             membershipByContent = membershipByContent.mapValues { it.value.toSet() },
         )
+    }
+
+    private suspend fun hydrateEntriesFromAddonMeta(
+        entriesByList: Map<String, List<LibraryItem>>,
+    ): Map<String, List<LibraryItem>> = coroutineScope {
+        if (entriesByList.isEmpty()) return@coroutineScope entriesByList
+
+        val uniqueItems = entriesByList.values
+            .flatten()
+            .distinctBy { contentKey(it.id, it.type) }
+        if (uniqueItems.isEmpty()) return@coroutineScope entriesByList
+
+        val semaphore = Semaphore(METADATA_FETCH_CONCURRENCY)
+        val hydratedByKey = uniqueItems
+            .map { item ->
+                async {
+                    semaphore.withPermit {
+                        val hydrated = hydrateItemFromAddonMeta(item)
+                        contentKey(item.id, item.type) to hydrated
+                    }
+                }
+            }
+            .awaitAll()
+            .toMap()
+
+        entriesByList.mapValues { (_, entries) ->
+            entries.map { entry -> hydratedByKey[contentKey(entry.id, entry.type)] ?: entry }
+        }
+    }
+
+    private suspend fun hydrateItemFromAddonMeta(item: LibraryItem): LibraryItem {
+        if (
+            !item.poster.isNullOrBlank() &&
+            !item.banner.isNullOrBlank() &&
+            !item.logo.isNullOrBlank() &&
+            !item.description.isNullOrBlank() &&
+            !item.imdbRating.isNullOrBlank() &&
+            item.genres.isNotEmpty()
+        ) {
+            return item
+        }
+
+        val typeCandidates = if (normalizeType(item.type) == "movie") {
+            listOf("movie")
+        } else {
+            listOf("series", "tv")
+        }
+
+        val idCandidates = buildList {
+            add(item.id)
+            if (item.id.startsWith("tmdb:")) {
+                add(item.id.substringAfter(':'))
+            }
+            if (item.id.startsWith("trakt:")) {
+                add(item.id.substringAfter(':'))
+            }
+        }.distinct()
+
+        if (idCandidates.isEmpty()) {
+            return item
+        }
+
+        for (type in typeCandidates) {
+            for (id in idCandidates) {
+                val meta = withTimeoutOrNull(METADATA_FETCH_TIMEOUT_MS) {
+                    MetaDetailsRepository.fetch(type = type, id = id)
+                }
+                if (meta == null) continue
+
+                val shouldOverrideName = item.name.isBlank() || item.name == item.id
+                return item.copy(
+                    name = if (shouldOverrideName) meta.name else item.name,
+                    poster = item.poster.orValidImageUrl(meta.poster),
+                    banner = item.banner.orValidImageUrl(meta.background),
+                    logo = item.logo.orValidImageUrl(meta.logo),
+                    description = item.description.orIfBlank(meta.description),
+                    releaseInfo = item.releaseInfo.orIfBlank(meta.releaseInfo),
+                    imdbRating = item.imdbRating.orIfBlank(meta.imdbRating),
+                    genres = if (item.genres.isEmpty()) meta.genres else item.genres,
+                )
+            }
+        }
+
+        return item
     }
 
     private suspend fun fetchPersonalLists(headers: Map<String, String>): List<TraktListTab> {
@@ -334,9 +435,9 @@ object TraktLibraryRepository {
             ?: ids?.trakt?.let { "trakt:$it" }
             ?: return null
 
-        val poster = media.images?.poster?.firstOrNull()
-        val banner = media.images?.fanart?.firstOrNull() ?: media.images?.banner?.firstOrNull()
-        val logo = media.images?.logo?.firstOrNull()
+        val poster = media.images?.poster.firstNonBlankImageUrl()
+        val banner = media.images?.banner.firstNonBlankImageUrl()
+        val logo = media.images?.logo.firstNonBlankImageUrl()
 
         val savedAt = item.listedAt?.takeIf { it.isNotBlank() }?.hashCode()?.toLong()?.let { kotlin.math.abs(it) }
             ?: TraktPlatformClock.nowEpochMs()
@@ -372,6 +473,34 @@ object TraktLibraryRepository {
         if (releaseInfo.isNullOrBlank()) return null
         val yearText = Regex("(19|20)\\d{2}").find(releaseInfo)?.value ?: return null
         return yearText.toIntOrNull()
+    }
+
+    private fun String?.orIfBlank(fallback: String?): String? {
+        val current = this?.trim().takeUnless { it.isNullOrBlank() }
+        if (current != null) return current
+        return fallback?.trim().takeUnless { it.isNullOrBlank() }
+    }
+
+    private fun String?.orValidImageUrl(fallback: String?): String? {
+        val current = this.normalizeImageUrl()
+        if (current != null) return current
+        return fallback.normalizeImageUrl()
+    }
+
+    private fun List<String>?.firstNonBlankImageUrl(): String? {
+        return this
+            ?.asSequence()
+            ?.mapNotNull { it.normalizeImageUrl() }
+            ?.firstOrNull()
+    }
+
+    private fun String?.normalizeImageUrl(): String? {
+        val value = this?.trim().takeUnless { it.isNullOrBlank() } ?: return null
+        val normalized = if (value.startsWith("//")) "https:$value" else value
+        return normalized.takeIf {
+            it.startsWith("https://", ignoreCase = true) ||
+                it.startsWith("http://", ignoreCase = true)
+        }
     }
 
     private val imdbRegex = Regex("tt\\d+")
