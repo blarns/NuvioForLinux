@@ -22,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,9 +34,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.max
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.ui.AppTheme
-import com.nuvio.app.core.ui.PlatformBackHandler
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioScreenHeader
+import com.nuvio.app.core.ui.PlatformBackHandler
+import com.nuvio.app.features.addons.AddonRepository
+import com.nuvio.app.features.home.HomeCatalogSettingsItem
+import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.mdblist.MdbListSettings
 import com.nuvio.app.features.mdblist.MdbListSettingsRepository
 import com.nuvio.app.features.player.PlayerSettingsRepository
@@ -43,6 +47,8 @@ import com.nuvio.app.features.trakt.TraktAuthUiState
 import com.nuvio.app.features.trakt.TraktAuthRepository
 import com.nuvio.app.features.tmdb.TmdbSettings
 import com.nuvio.app.features.tmdb.TmdbSettingsRepository
+import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepository
+import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesUiState
 
 @Composable
 fun SettingsScreen(
@@ -80,6 +86,21 @@ fun SettingsScreen(
             TraktAuthRepository.ensureLoaded()
             TraktAuthRepository.uiState
         }.collectAsStateWithLifecycle()
+        val addonsUiState by remember {
+            AddonRepository.initialize()
+            AddonRepository.uiState
+        }.collectAsStateWithLifecycle()
+        val homescreenSettingsUiState by remember {
+            HomeCatalogSettingsRepository.uiState
+        }.collectAsStateWithLifecycle()
+        val continueWatchingPreferencesUiState by remember {
+            ContinueWatchingPreferencesRepository.ensureLoaded()
+            ContinueWatchingPreferencesRepository.uiState
+        }.collectAsStateWithLifecycle()
+
+        LaunchedEffect(addonsUiState.addons) {
+            HomeCatalogSettingsRepository.syncCatalogs(addonsUiState.addons)
+        }
 
         var currentPage by rememberSaveable { mutableStateOf(SettingsPage.Root.name) }
         val page = remember(currentPage) { SettingsPage.valueOf(currentPage) }
@@ -111,11 +132,10 @@ fun SettingsScreen(
                 tmdbSettings = tmdbSettings,
                 mdbListSettings = mdbListSettings,
                 traktAuthUiState = traktAuthUiState,
+                homescreenHeroEnabled = homescreenSettingsUiState.heroEnabled,
+                homescreenItems = homescreenSettingsUiState.items,
+                continueWatchingPreferencesUiState = continueWatchingPreferencesUiState,
                 onSwitchProfile = onSwitchProfile,
-                onHomescreenClick = onHomescreenClick,
-                onContinueWatchingClick = onContinueWatchingClick,
-                onAddonsClick = onAddonsClick,
-                onAccountClick = onAccountClick,
             )
         } else {
             MobileSettingsScreen(
@@ -138,6 +158,9 @@ fun SettingsScreen(
                 tmdbSettings = tmdbSettings,
                 mdbListSettings = mdbListSettings,
                 traktAuthUiState = traktAuthUiState,
+                homescreenHeroEnabled = homescreenSettingsUiState.heroEnabled,
+                homescreenItems = homescreenSettingsUiState.items,
+                continueWatchingPreferencesUiState = continueWatchingPreferencesUiState,
                 onSwitchProfile = onSwitchProfile,
                 onHomescreenClick = onHomescreenClick,
                 onContinueWatchingClick = onContinueWatchingClick,
@@ -169,6 +192,9 @@ private fun MobileSettingsScreen(
     tmdbSettings: TmdbSettings,
     mdbListSettings: MdbListSettings,
     traktAuthUiState: TraktAuthUiState,
+    homescreenHeroEnabled: Boolean,
+    homescreenItems: List<HomeCatalogSettingsItem>,
+    continueWatchingPreferencesUiState: ContinueWatchingPreferencesUiState,
     onSwitchProfile: (() -> Unit)? = null,
     onHomescreenClick: () -> Unit = {},
     onContinueWatchingClick: () -> Unit = {},
@@ -194,6 +220,9 @@ private fun MobileSettingsScreen(
                 onAccountClick = onAccountClick,
                 onSwitchProfileClick = onSwitchProfile,
             )
+            SettingsPage.Account -> accountSettingsContent(
+                isTablet = false,
+            )
             SettingsPage.Playback -> playbackSettingsContent(
                 isTablet = false,
                 showLoadingOverlay = showLoadingOverlay,
@@ -215,10 +244,22 @@ private fun MobileSettingsScreen(
                 onAmoledToggle = onAmoledToggle,
                 onContinueWatchingClick = onContinueWatchingClick,
             )
+            SettingsPage.ContinueWatching -> continueWatchingSettingsContent(
+                isTablet = false,
+                isVisible = continueWatchingPreferencesUiState.isVisible,
+                style = continueWatchingPreferencesUiState.style,
+                upNextFromFurthestEpisode = continueWatchingPreferencesUiState.upNextFromFurthestEpisode,
+            )
             SettingsPage.ContentDiscovery -> contentDiscoveryContent(
                 isTablet = false,
                 onAddonsClick = onAddonsClick,
                 onHomescreenClick = onHomescreenClick,
+            )
+            SettingsPage.Addons -> addonsSettingsContent()
+            SettingsPage.Homescreen -> homescreenSettingsContent(
+                isTablet = false,
+                heroEnabled = homescreenHeroEnabled,
+                items = homescreenItems,
             )
             SettingsPage.Integrations -> integrationsContent(
                 isTablet = false,
@@ -263,16 +304,26 @@ private fun TabletSettingsScreen(
     tmdbSettings: TmdbSettings,
     mdbListSettings: MdbListSettings,
     traktAuthUiState: TraktAuthUiState,
+    homescreenHeroEnabled: Boolean,
+    homescreenItems: List<HomeCatalogSettingsItem>,
+    continueWatchingPreferencesUiState: ContinueWatchingPreferencesUiState,
     onSwitchProfile: (() -> Unit)? = null,
-    onHomescreenClick: () -> Unit = {},
-    onContinueWatchingClick: () -> Unit = {},
-    onAddonsClick: () -> Unit = {},
-    onAccountClick: () -> Unit = {},
 ) {
     var selectedCategory by rememberSaveable { mutableStateOf(SettingsCategory.General.name) }
     val activeCategory = SettingsCategory.valueOf(selectedCategory)
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val topOffset = max(statusBarPadding + 24.dp, 48.dp) + 64.dp
+
+    LaunchedEffect(page) {
+        if (page.opensInlineOnTablet) {
+            selectedCategory = page.category.name
+        }
+    }
+
+    fun openInlinePage(page: SettingsPage) {
+        selectedCategory = page.category.name
+        onPageChange(page)
+    }
 
     Row(modifier = Modifier.fillMaxSize()) {
         Surface(
@@ -337,14 +388,17 @@ private fun TabletSettingsScreen(
             when (page) {
                 SettingsPage.Root -> settingsRootContent(
                     isTablet = true,
-                    onPlaybackClick = { onPageChange(SettingsPage.Playback) },
-                    onAppearanceClick = { onPageChange(SettingsPage.Appearance) },
-                    onContentDiscoveryClick = { onPageChange(SettingsPage.ContentDiscovery) },
-                    onIntegrationsClick = { onPageChange(SettingsPage.Integrations) },
-                    onAccountClick = onAccountClick,
+                    onPlaybackClick = { openInlinePage(SettingsPage.Playback) },
+                    onAppearanceClick = { openInlinePage(SettingsPage.Appearance) },
+                    onContentDiscoveryClick = { openInlinePage(SettingsPage.ContentDiscovery) },
+                    onIntegrationsClick = { openInlinePage(SettingsPage.Integrations) },
+                    onAccountClick = { openInlinePage(SettingsPage.Account) },
                     onSwitchProfileClick = onSwitchProfile,
                     showAccountSection = activeCategory == SettingsCategory.Account,
                     showGeneralSection = activeCategory == SettingsCategory.General,
+                )
+                SettingsPage.Account -> accountSettingsContent(
+                    isTablet = true,
                 )
                 SettingsPage.Playback -> playbackSettingsContent(
                     isTablet = true,
@@ -365,12 +419,24 @@ private fun TabletSettingsScreen(
                     onThemeSelected = onThemeSelected,
                     amoledEnabled = amoledEnabled,
                     onAmoledToggle = onAmoledToggle,
-                    onContinueWatchingClick = onContinueWatchingClick,
+                    onContinueWatchingClick = { openInlinePage(SettingsPage.ContinueWatching) },
+                )
+                SettingsPage.ContinueWatching -> continueWatchingSettingsContent(
+                    isTablet = true,
+                    isVisible = continueWatchingPreferencesUiState.isVisible,
+                    style = continueWatchingPreferencesUiState.style,
+                    upNextFromFurthestEpisode = continueWatchingPreferencesUiState.upNextFromFurthestEpisode,
                 )
                 SettingsPage.ContentDiscovery -> contentDiscoveryContent(
                     isTablet = true,
-                    onAddonsClick = onAddonsClick,
-                    onHomescreenClick = onHomescreenClick,
+                    onAddonsClick = { openInlinePage(SettingsPage.Addons) },
+                    onHomescreenClick = { openInlinePage(SettingsPage.Homescreen) },
+                )
+                SettingsPage.Addons -> addonsSettingsContent()
+                SettingsPage.Homescreen -> homescreenSettingsContent(
+                    isTablet = true,
+                    heroEnabled = homescreenHeroEnabled,
+                    items = homescreenItems,
                 )
                 SettingsPage.Integrations -> integrationsContent(
                     isTablet = true,

@@ -15,25 +15,72 @@ internal enum class SettingsCategory(
 
 internal enum class SettingsPage(
     val title: String,
+    val category: SettingsCategory,
+    val parentPage: SettingsPage?,
 ) {
-    Root("Settings"),
-    Playback("Playback"),
-    Appearance("Appearance"),
-    ContentDiscovery("Content & Discovery"),
-    Integrations("Integrations"),
-    TmdbEnrichment("TMDB Enrichment"),
-    MdbListRatings("MDBList Ratings"),
-    TraktAuthentication("Trakt"),
+    Root(
+        title = "Settings",
+        category = SettingsCategory.General,
+        parentPage = null,
+    ),
+    Account(
+        title = "Account",
+        category = SettingsCategory.Account,
+        parentPage = Root,
+    ),
+    Playback(
+        title = "Playback",
+        category = SettingsCategory.General,
+        parentPage = Root,
+    ),
+    Appearance(
+        title = "Appearance",
+        category = SettingsCategory.General,
+        parentPage = Root,
+    ),
+    ContinueWatching(
+        title = "Continue Watching",
+        category = SettingsCategory.General,
+        parentPage = Appearance,
+    ),
+    ContentDiscovery(
+        title = "Content & Discovery",
+        category = SettingsCategory.General,
+        parentPage = Root,
+    ),
+    Addons(
+        title = "Addons",
+        category = SettingsCategory.General,
+        parentPage = ContentDiscovery,
+    ),
+    Homescreen(
+        title = "Homescreen",
+        category = SettingsCategory.General,
+        parentPage = ContentDiscovery,
+    ),
+    Integrations(
+        title = "Integrations",
+        category = SettingsCategory.General,
+        parentPage = Root,
+    ),
+    TmdbEnrichment(
+        title = "TMDB Enrichment",
+        category = SettingsCategory.General,
+        parentPage = Integrations,
+    ),
+    MdbListRatings(
+        title = "MDBList Ratings",
+        category = SettingsCategory.General,
+        parentPage = Integrations,
+    ),
+    TraktAuthentication(
+        title = "Trakt",
+        category = SettingsCategory.General,
+        parentPage = Integrations,
+    ),
 }
 
-internal fun SettingsPage.previousPage(): SettingsPage? =
-    when (this) {
-        SettingsPage.Root -> null
-        SettingsPage.Playback -> SettingsPage.Root
-        SettingsPage.Appearance -> SettingsPage.Root
-        SettingsPage.ContentDiscovery -> SettingsPage.Root
-        SettingsPage.Integrations -> SettingsPage.Root
-        SettingsPage.TmdbEnrichment -> SettingsPage.Integrations
-        SettingsPage.MdbListRatings -> SettingsPage.Integrations
-        SettingsPage.TraktAuthentication -> SettingsPage.Integrations
-    }
+internal val SettingsPage.opensInlineOnTablet: Boolean
+    get() = parentPage != null
+
+internal fun SettingsPage.previousPage(): SettingsPage? = parentPage
