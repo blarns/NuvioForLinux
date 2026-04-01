@@ -10,6 +10,7 @@ internal actual object PlatformLocalAccountDataCleaner {
         "nuvio_player_settings",
         "nuvio_profile_cache",
         "nuvio_theme_settings",
+        "nuvio_mdblist_settings",
         "nuvio_watched",
         "nuvio_stream_link_cache",
         "nuvio_continue_watching_preferences",

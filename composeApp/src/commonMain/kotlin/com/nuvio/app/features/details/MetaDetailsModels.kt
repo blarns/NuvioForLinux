@@ -18,6 +18,7 @@ data class MetaDetails(
     val imdbRating: String? = null,
     val ageRating: String? = null,
     val runtime: String? = null,
+    val externalRatings: List<MetaExternalRating> = emptyList(),
     val genres: List<String> = emptyList(),
     val director: List<String> = emptyList(),
     val writer: List<String> = emptyList(),
@@ -35,6 +36,11 @@ data class MetaDetails(
     val trailers: List<MetaTrailer> = emptyList(),
     val links: List<MetaLink> = emptyList(),
     val videos: List<MetaVideo> = emptyList(),
+)
+
+data class MetaExternalRating(
+    val source: String,
+    val value: Double,
 )
 
 data class MetaTrailer(

@@ -26,6 +26,15 @@ internal actual object PlatformLocalAccountDataCleaner {
         "subtitle_bottom_offset",
         "stream_reuse_last_link_enabled",
         "stream_reuse_last_link_cache_hours",
+        "mdblist_enabled",
+        "mdblist_api_key",
+        "mdblist_use_imdb",
+        "mdblist_use_tmdb",
+        "mdblist_use_tomatoes",
+        "mdblist_use_metacritic",
+        "mdblist_use_trakt",
+        "mdblist_use_letterboxd",
+        "mdblist_use_audience",
     )
 
     actual fun wipe() {

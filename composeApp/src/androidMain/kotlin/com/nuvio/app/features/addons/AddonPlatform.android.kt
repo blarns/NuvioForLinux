@@ -2,11 +2,18 @@ package com.nuvio.app.features.addons
 
 import android.content.Context
 import android.content.SharedPreferences
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.io.BufferedReader
-import java.net.HttpURLConnection
-import java.net.URL
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.android.Android
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.request.accept
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.isSuccess
 
 actual object AddonStorage {
     private const val preferencesName = "nuvio_addons"
@@ -35,27 +42,45 @@ actual object AddonStorage {
     }
 }
 
-actual suspend fun httpGetText(url: String): String =
-    withContext(Dispatchers.IO) {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        connection.requestMethod = "GET"
-        connection.connectTimeout = 10_000
-        connection.readTimeout = 10_000
-        connection.setRequestProperty("Accept", "application/json")
+private val addonHttpClient = HttpClient(Android) {
+    install(HttpTimeout) {
+        requestTimeoutMillis = 10_000
+        connectTimeoutMillis = 10_000
+        socketTimeoutMillis = 10_000
+    }
+    expectSuccess = false
+}
 
-        try {
-            val statusCode = connection.responseCode
-            val stream = if (statusCode in 200..299) {
-                connection.inputStream
-            } else {
-                connection.errorStream ?: connection.inputStream
+actual suspend fun httpGetText(url: String): String =
+    addonHttpClient
+        .get(url) {
+            accept(ContentType.Application.Json)
+        }
+        .let { response ->
+            val payload = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                error("Request failed with HTTP ${response.status.value}")
             }
-            val payload = stream.bufferedReader().use(BufferedReader::readText)
-            if (statusCode !in 200..299) {
-                error("Request failed with HTTP $statusCode")
+            if (payload.isBlank()) {
+                throw IllegalStateException("Empty response body")
             }
             payload
-        } finally {
-            connection.disconnect()
         }
-    }
+
+actual suspend fun httpPostJson(url: String, body: String): String =
+    addonHttpClient
+        .post(url) {
+            accept(ContentType.Application.Json)
+            header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+            setBody(body)
+        }
+        .let { response ->
+            val payload = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                error("Request failed with HTTP ${response.status.value}")
+            }
+            if (payload.isBlank()) {
+                throw IllegalStateException("Empty response body")
+            }
+            payload
+        }

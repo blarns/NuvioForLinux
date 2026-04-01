@@ -1,8 +1,10 @@
 package com.nuvio.app.features.details.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,8 +12,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -29,7 +33,27 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nuvio.app.features.details.MetaDetails
+import com.nuvio.app.features.details.MetaExternalRating
 import com.nuvio.app.features.details.formatMetaReleaseLineForDetails
+import com.nuvio.app.features.mdblist.MdbListMetadataService.PROVIDER_AUDIENCE
+import com.nuvio.app.features.mdblist.MdbListMetadataService.PROVIDER_IMDB
+import com.nuvio.app.features.mdblist.MdbListMetadataService.PROVIDER_LETTERBOXD
+import com.nuvio.app.features.mdblist.MdbListMetadataService.PROVIDER_METACRITIC
+import com.nuvio.app.features.mdblist.MdbListMetadataService.PROVIDER_TMDB
+import com.nuvio.app.features.mdblist.MdbListMetadataService.PROVIDER_TOMATOES
+import com.nuvio.app.features.mdblist.MdbListMetadataService.PROVIDER_TRAKT
+import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.rating_audience_score
+import nuvio.composeapp.generated.resources.rating_imdb
+import nuvio.composeapp.generated.resources.rating_letterboxd
+import nuvio.composeapp.generated.resources.rating_metacritic
+import nuvio.composeapp.generated.resources.rating_rotten_tomatoes
+import nuvio.composeapp.generated.resources.rating_tmdb
+import nuvio.composeapp.generated.resources.rating_trakt
+import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.painterResource
+import kotlin.math.absoluteValue
+import kotlin.math.roundToInt
 
 @Composable
 fun DetailMetaInfo(
@@ -43,10 +67,11 @@ fun DetailMetaInfo(
         val releaseLine = formatMetaReleaseLineForDetails(meta)
         val runtimeText = meta.runtime?.trim()?.takeIf { it.isNotBlank() }?.uppercase()
         val ageBadge = meta.ageRating?.trim()?.takeIf { it.isNotBlank() }
+        val hasMdbImdbRating = meta.externalRatings.any { it.source == PROVIDER_IMDB }
         val hasMetaRow = releaseLine != null ||
             runtimeText != null ||
             ageBadge != null ||
-            meta.imdbRating != null
+            (meta.imdbRating != null && !hasMdbImdbRating)
         if (hasMetaRow) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -71,7 +96,7 @@ fun DetailMetaInfo(
                 ageBadge?.let { badge ->
                     DetailHeroMetaBadge(text = badge)
                 }
-                if (meta.imdbRating != null) {
+                if (meta.imdbRating != null && !hasMdbImdbRating) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -100,6 +125,12 @@ fun DetailMetaInfo(
                     }
                 }
             }
+        }
+
+        if (meta.externalRatings.isNotEmpty()) {
+            DetailRatingsRow(
+                ratings = meta.externalRatings,
+            )
         }
 
         if (meta.director.isNotEmpty()) {
@@ -133,6 +164,47 @@ fun DetailMetaInfo(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.clickable { expanded = !expanded },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailRatingsRow(
+    ratings: List<MetaExternalRating>,
+) {
+    val orderedRatings = remember(ratings) {
+        val bySource = ratings.associateBy { it.source }
+        ratingVisuals.mapNotNull { visuals ->
+            bySource[visuals.source]?.let { rating -> visuals to rating }
+        }
+    }
+
+    if (orderedRatings.isEmpty()) return
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        orderedRatings.forEach { (visuals, rating) ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Image(
+                    painter = painterResource(visuals.logo),
+                    contentDescription = visuals.displayName,
+                    modifier = Modifier.size(width = visuals.logoWidth, height = 16.dp),
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = visuals.format(rating.value),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = visuals.valueColor,
+                    fontWeight = FontWeight.Bold,
                 )
             }
         }
@@ -185,3 +257,82 @@ private fun DetailHeroMetaBadge(
 
 private val ImdbYellow = Color(0xFFF5C518)
 private val ImdbBlack = Color(0xFF000000)
+
+private data class RatingVisuals(
+    val source: String,
+    val displayName: String,
+    val logo: DrawableResource,
+    val logoWidth: androidx.compose.ui.unit.Dp,
+    val valueColor: Color,
+    val format: (Double) -> String,
+)
+
+private val ratingVisuals = listOf(
+    RatingVisuals(
+        source = PROVIDER_IMDB,
+        displayName = "IMDb",
+        logo = Res.drawable.rating_imdb,
+        logoWidth = 30.dp,
+        valueColor = Color(0xFFF5C518),
+        format = ::formatOneDecimal,
+    ),
+    RatingVisuals(
+        source = PROVIDER_TMDB,
+        displayName = "TMDB",
+        logo = Res.drawable.rating_tmdb,
+        logoWidth = 16.dp,
+        valueColor = Color(0xFF01B4E4),
+        format = ::formatWhole,
+    ),
+    RatingVisuals(
+        source = PROVIDER_TOMATOES,
+        displayName = "Rotten Tomatoes",
+        logo = Res.drawable.rating_rotten_tomatoes,
+        logoWidth = 16.dp,
+        valueColor = Color(0xFFFA320A),
+        format = ::formatPercent,
+    ),
+    RatingVisuals(
+        source = PROVIDER_METACRITIC,
+        displayName = "Metacritic",
+        logo = Res.drawable.rating_metacritic,
+        logoWidth = 16.dp,
+        valueColor = Color(0xFFFFCC33),
+        format = ::formatWhole,
+    ),
+    RatingVisuals(
+        source = PROVIDER_TRAKT,
+        displayName = "Trakt",
+        logo = Res.drawable.rating_trakt,
+        logoWidth = 16.dp,
+        valueColor = Color(0xFFED1C24),
+        format = ::formatWhole,
+    ),
+    RatingVisuals(
+        source = PROVIDER_LETTERBOXD,
+        displayName = "Letterboxd",
+        logo = Res.drawable.rating_letterboxd,
+        logoWidth = 16.dp,
+        valueColor = Color(0xFF00E054),
+        format = ::formatOneDecimal,
+    ),
+    RatingVisuals(
+        source = PROVIDER_AUDIENCE,
+        displayName = "Audience Score",
+        logo = Res.drawable.rating_audience_score,
+        logoWidth = 16.dp,
+        valueColor = Color(0xFFFA320A),
+        format = ::formatPercent,
+    ),
+)
+
+private fun formatOneDecimal(value: Double): String {
+    val rounded = (value * 10.0).roundToInt()
+    val whole = rounded / 10
+    val decimal = (rounded % 10).absoluteValue
+    return "$whole.$decimal"
+}
+
+private fun formatWhole(value: Double): String = value.roundToInt().toString()
+
+private fun formatPercent(value: Double): String = "${value.roundToInt()}%"

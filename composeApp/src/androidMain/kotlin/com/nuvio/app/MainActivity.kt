@@ -10,6 +10,7 @@ import com.nuvio.app.core.storage.PlatformLocalAccountDataCleaner
 import com.nuvio.app.features.addons.AddonStorage
 import com.nuvio.app.features.library.LibraryStorage
 import com.nuvio.app.features.home.HomeCatalogSettingsStorage
+import com.nuvio.app.features.mdblist.MdbListSettingsStorage
 import com.nuvio.app.features.player.PlayerSettingsStorage
 import com.nuvio.app.features.profiles.ProfileStorage
 import com.nuvio.app.features.details.SeasonViewModeStorage
@@ -43,6 +44,7 @@ class MainActivity : ComponentActivity() {
         SeasonViewModeStorage.initialize(applicationContext)
         ThemeSettingsStorage.initialize(applicationContext)
         TmdbSettingsStorage.initialize(applicationContext)
+        MdbListSettingsStorage.initialize(applicationContext)
         ContinueWatchingPreferencesStorage.initialize(applicationContext)
         WatchProgressStorage.initialize(applicationContext)
         StreamLinkCacheStorage.initialize(applicationContext)

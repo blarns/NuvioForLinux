@@ -19,6 +19,7 @@ internal enum class SettingsPage(
     Appearance("Appearance"),
     ContentDiscovery("Content & Discovery"),
     TmdbEnrichment("TMDB Enrichment"),
+    MdbListRatings("MDBList Ratings"),
 }
 
 internal fun SettingsPage.previousPage(): SettingsPage? =
@@ -28,4 +29,5 @@ internal fun SettingsPage.previousPage(): SettingsPage? =
         SettingsPage.Appearance -> SettingsPage.Root
         SettingsPage.ContentDiscovery -> SettingsPage.Root
         SettingsPage.TmdbEnrichment -> SettingsPage.ContentDiscovery
+        SettingsPage.MdbListRatings -> SettingsPage.ContentDiscovery
     }

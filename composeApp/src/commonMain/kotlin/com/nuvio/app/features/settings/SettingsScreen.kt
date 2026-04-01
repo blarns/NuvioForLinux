@@ -36,6 +36,8 @@ import com.nuvio.app.core.ui.AppTheme
 import com.nuvio.app.core.ui.PlatformBackHandler
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioScreenHeader
+import com.nuvio.app.features.mdblist.MdbListSettings
+import com.nuvio.app.features.mdblist.MdbListSettingsRepository
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.tmdb.TmdbSettings
 import com.nuvio.app.features.tmdb.TmdbSettingsRepository
@@ -68,6 +70,10 @@ fun SettingsScreen(
             TmdbSettingsRepository.ensureLoaded()
             TmdbSettingsRepository.uiState
         }.collectAsStateWithLifecycle()
+        val mdbListSettings by remember {
+            MdbListSettingsRepository.ensureLoaded()
+            MdbListSettingsRepository.uiState
+        }.collectAsStateWithLifecycle()
 
         var currentPage by rememberSaveable { mutableStateOf(SettingsPage.Root.name) }
         val page = remember(currentPage) { SettingsPage.valueOf(currentPage) }
@@ -97,6 +103,7 @@ fun SettingsScreen(
                 amoledEnabled = amoledEnabled,
                 onAmoledToggle = ThemeSettingsRepository::setAmoled,
                 tmdbSettings = tmdbSettings,
+                mdbListSettings = mdbListSettings,
                 onSwitchProfile = onSwitchProfile,
                 onHomescreenClick = onHomescreenClick,
                 onContinueWatchingClick = onContinueWatchingClick,
@@ -122,6 +129,7 @@ fun SettingsScreen(
                 amoledEnabled = amoledEnabled,
                 onAmoledToggle = ThemeSettingsRepository::setAmoled,
                 tmdbSettings = tmdbSettings,
+                mdbListSettings = mdbListSettings,
                 onSwitchProfile = onSwitchProfile,
                 onHomescreenClick = onHomescreenClick,
                 onContinueWatchingClick = onContinueWatchingClick,
@@ -151,6 +159,7 @@ private fun MobileSettingsScreen(
     amoledEnabled: Boolean,
     onAmoledToggle: (Boolean) -> Unit,
     tmdbSettings: TmdbSettings,
+    mdbListSettings: MdbListSettings,
     onSwitchProfile: (() -> Unit)? = null,
     onHomescreenClick: () -> Unit = {},
     onContinueWatchingClick: () -> Unit = {},
@@ -201,10 +210,15 @@ private fun MobileSettingsScreen(
                 onAddonsClick = onAddonsClick,
                 onHomescreenClick = onHomescreenClick,
                 onTmdbClick = { onPageChange(SettingsPage.TmdbEnrichment) },
+                onMdbListClick = { onPageChange(SettingsPage.MdbListRatings) },
             )
             SettingsPage.TmdbEnrichment -> tmdbSettingsContent(
                 isTablet = false,
                 settings = tmdbSettings,
+            )
+            SettingsPage.MdbListRatings -> mdbListSettingsContent(
+                isTablet = false,
+                settings = mdbListSettings,
             )
         }
     }
@@ -229,6 +243,7 @@ private fun TabletSettingsScreen(
     amoledEnabled: Boolean,
     onAmoledToggle: (Boolean) -> Unit,
     tmdbSettings: TmdbSettings,
+    mdbListSettings: MdbListSettings,
     onSwitchProfile: (() -> Unit)? = null,
     onHomescreenClick: () -> Unit = {},
     onContinueWatchingClick: () -> Unit = {},
@@ -328,10 +343,15 @@ private fun TabletSettingsScreen(
                     onAddonsClick = onAddonsClick,
                     onHomescreenClick = onHomescreenClick,
                     onTmdbClick = { onPageChange(SettingsPage.TmdbEnrichment) },
+                    onMdbListClick = { onPageChange(SettingsPage.MdbListRatings) },
                 )
                 SettingsPage.TmdbEnrichment -> tmdbSettingsContent(
                     isTablet = true,
                     settings = tmdbSettings,
+                )
+                SettingsPage.MdbListRatings -> mdbListSettingsContent(
+                    isTablet = true,
+                    settings = mdbListSettings,
                 )
             }
         }

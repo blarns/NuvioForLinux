@@ -1,15 +1,18 @@
 package com.nuvio.app.features.addons
 
-import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.addressOf
-import kotlinx.cinterop.usePinned
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import platform.Foundation.NSData
-import platform.Foundation.NSURL
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.darwin.Darwin
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.request.accept
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.isSuccess
 import platform.Foundation.NSUserDefaults
-import platform.Foundation.dataWithContentsOfURL
-import platform.posix.memcpy
 
 actual object AddonStorage {
     private const val addonUrlsKey = "installed_manifest_urls"
@@ -31,26 +34,45 @@ actual object AddonStorage {
     }
 }
 
+private val addonHttpClient = HttpClient(Darwin) {
+    install(HttpTimeout) {
+        requestTimeoutMillis = 10_000
+        connectTimeoutMillis = 10_000
+        socketTimeoutMillis = 10_000
+    }
+    expectSuccess = false
+}
+
 actual suspend fun httpGetText(url: String): String =
-    withContext(Dispatchers.Default) {
-        val nsUrl = NSURL(string = url)
-
-        val data = NSData.dataWithContentsOfURL(nsUrl)
-            ?: throw IllegalStateException("Request failed")
-        val payload = data.toByteArray().decodeToString()
-
-        if (payload.isBlank()) {
-            throw IllegalStateException("Empty response body")
+    addonHttpClient
+        .get(url) {
+            accept(ContentType.Application.Json)
+        }
+        .let { response ->
+            val payload = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                error("Request failed with HTTP ${response.status.value}")
+            }
+            if (payload.isBlank()) {
+                throw IllegalStateException("Empty response body")
+            }
+            payload
         }
 
-        payload
-    }
-
-@OptIn(ExperimentalForeignApi::class)
-private fun NSData.toByteArray(): ByteArray =
-    ByteArray(length.toInt()).apply {
-        if (isEmpty()) return@apply
-        usePinned { pinned ->
-            memcpy(pinned.addressOf(0), bytes, length)
+actual suspend fun httpPostJson(url: String, body: String): String =
+    addonHttpClient
+        .post(url) {
+            accept(ContentType.Application.Json)
+            header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+            setBody(body)
         }
-    }
+        .let { response ->
+            val payload = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                error("Request failed with HTTP ${response.status.value}")
+            }
+            if (payload.isBlank()) {
+                throw IllegalStateException("Empty response body")
+            }
+            payload
+        }

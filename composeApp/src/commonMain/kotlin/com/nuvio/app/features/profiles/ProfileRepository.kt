@@ -7,6 +7,7 @@ import com.nuvio.app.core.network.SupabaseProvider
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.library.LibraryRepository
+import com.nuvio.app.features.mdblist.MdbListSettingsRepository
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.search.SearchHistoryRepository
 import com.nuvio.app.features.settings.ThemeSettingsRepository
@@ -125,6 +126,7 @@ object ProfileRepository {
         HomeCatalogSettingsRepository.onProfileChanged()
         ContinueWatchingPreferencesRepository.onProfileChanged()
         TmdbSettingsRepository.onProfileChanged()
+        MdbListSettingsRepository.onProfileChanged()
         SearchHistoryRepository.onProfileChanged()
     }
 

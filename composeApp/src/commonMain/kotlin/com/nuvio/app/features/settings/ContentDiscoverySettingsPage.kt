@@ -4,6 +4,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.MovieFilter
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Tune
 
 internal fun LazyListScope.contentDiscoveryContent(
@@ -11,6 +12,7 @@ internal fun LazyListScope.contentDiscoveryContent(
     onAddonsClick: () -> Unit,
     onHomescreenClick: () -> Unit,
     onTmdbClick: () -> Unit,
+    onMdbListClick: () -> Unit,
 ) {
     item {
         SettingsSection(
@@ -40,6 +42,14 @@ internal fun LazyListScope.contentDiscoveryContent(
                     icon = Icons.Rounded.MovieFilter,
                     isTablet = isTablet,
                     onClick = onTmdbClick,
+                )
+                SettingsGroupDivider(isTablet = isTablet)
+                SettingsNavigationRow(
+                    title = "MDBList Ratings",
+                    description = "Add IMDb, Rotten Tomatoes, Metacritic, and other external ratings to details pages.",
+                    icon = Icons.Rounded.Star,
+                    isTablet = isTablet,
+                    onClick = onMdbListClick,
                 )
             }
         }

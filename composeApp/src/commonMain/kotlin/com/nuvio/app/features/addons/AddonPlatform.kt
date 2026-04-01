@@ -6,3 +6,5 @@ internal expect object AddonStorage {
 }
 
 expect suspend fun httpGetText(url: String): String
+
+expect suspend fun httpPostJson(url: String, body: String): String
