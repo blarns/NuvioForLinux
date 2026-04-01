@@ -68,6 +68,7 @@ fun SearchScreen(
     val recentSearches by SearchHistoryRepository.uiState.collectAsStateWithLifecycle()
     val watchedUiState by WatchedRepository.uiState.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
+    var lastRequestedQuery by rememberSaveable { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
     val headerTitle by remember(query, listState) {
         derivedStateOf {
@@ -109,9 +110,11 @@ fun SearchScreen(
     LaunchedEffect(query, addonRefreshKey) {
         val normalizedQuery = query.trim()
         if (normalizedQuery.isBlank()) {
+            lastRequestedQuery = null
             SearchRepository.clear()
         } else {
             delay(350)
+            lastRequestedQuery = normalizedQuery
             SearchRepository.search(
                 query = normalizedQuery,
                 addons = addonsUiState.addons,
@@ -134,9 +137,11 @@ fun SearchScreen(
             }
     }
 
-    LaunchedEffect(query, uiState.sections) {
+    LaunchedEffect(query, lastRequestedQuery, uiState.isLoading, uiState.sections) {
         val normalizedQuery = query.trim()
-        if (normalizedQuery.isBlank() || uiState.sections.isEmpty()) return@LaunchedEffect
+        if (normalizedQuery.isBlank()) return@LaunchedEffect
+        if (lastRequestedQuery != normalizedQuery) return@LaunchedEffect
+        if (uiState.isLoading || uiState.sections.isEmpty()) return@LaunchedEffect
         SearchHistoryRepository.recordSearch(normalizedQuery)
     }
 

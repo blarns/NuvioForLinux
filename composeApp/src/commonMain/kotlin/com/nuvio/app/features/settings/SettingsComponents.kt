@@ -35,7 +35,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -183,6 +185,7 @@ internal fun SettingsNavigationRow(
     title: String,
     description: String,
     icon: ImageVector? = null,
+    iconPainter: Painter? = null,
     isTablet: Boolean,
     onClick: () -> Unit,
 ) {
@@ -205,7 +208,7 @@ internal fun SettingsNavigationRow(
                 .widthIn(max = if (isTablet) 560.dp else 320.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (icon != null) {
+            if (icon != null || iconPainter != null) {
                 Surface(
                     modifier = Modifier.size(iconSize),
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
@@ -216,11 +219,20 @@ internal fun SettingsNavigationRow(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
+                        if (iconPainter != null) {
+                            androidx.compose.foundation.Image(
+                                painter = iconPainter,
+                                contentDescription = null,
+                                modifier = Modifier.size(if (isTablet) 28.dp else 24.dp),
+                                contentScale = ContentScale.Fit,
+                            )
+                        } else if (icon != null) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.width(if (isTablet) 16.dp else 14.dp))

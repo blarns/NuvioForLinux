@@ -4,6 +4,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.People
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -13,6 +14,7 @@ internal fun LazyListScope.settingsRootContent(
     onPlaybackClick: () -> Unit,
     onAppearanceClick: () -> Unit,
     onContentDiscoveryClick: () -> Unit,
+    onIntegrationsClick: () -> Unit,
     onAccountClick: () -> Unit,
     onSwitchProfileClick: (() -> Unit)? = null,
 ) {
@@ -70,6 +72,14 @@ internal fun LazyListScope.settingsRootContent(
                     icon = Icons.Rounded.Extension,
                     isTablet = isTablet,
                     onClick = onContentDiscoveryClick,
+                )
+                SettingsGroupDivider(isTablet = isTablet)
+                SettingsNavigationRow(
+                    title = "Integrations",
+                    description = "Connect TMDB, Trakt, and MDBList services.",
+                    icon = Icons.Rounded.Link,
+                    isTablet = isTablet,
+                    onClick = onIntegrationsClick,
                 )
             }
         }

@@ -18,6 +18,7 @@ internal enum class SettingsPage(
     Playback("Playback"),
     Appearance("Appearance"),
     ContentDiscovery("Content & Discovery"),
+    Integrations("Integrations"),
     TmdbEnrichment("TMDB Enrichment"),
     MdbListRatings("MDBList Ratings"),
     TraktAuthentication("Trakt"),
@@ -29,7 +30,8 @@ internal fun SettingsPage.previousPage(): SettingsPage? =
         SettingsPage.Playback -> SettingsPage.Root
         SettingsPage.Appearance -> SettingsPage.Root
         SettingsPage.ContentDiscovery -> SettingsPage.Root
-        SettingsPage.TmdbEnrichment -> SettingsPage.ContentDiscovery
-        SettingsPage.MdbListRatings -> SettingsPage.ContentDiscovery
-        SettingsPage.TraktAuthentication -> SettingsPage.ContentDiscovery
+        SettingsPage.Integrations -> SettingsPage.Root
+        SettingsPage.TmdbEnrichment -> SettingsPage.Integrations
+        SettingsPage.MdbListRatings -> SettingsPage.Integrations
+        SettingsPage.TraktAuthentication -> SettingsPage.Integrations
     }

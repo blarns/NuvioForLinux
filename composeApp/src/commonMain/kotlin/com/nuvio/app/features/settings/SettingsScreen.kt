@@ -190,6 +190,7 @@ private fun MobileSettingsScreen(
                 onPlaybackClick = { onPageChange(SettingsPage.Playback) },
                 onAppearanceClick = { onPageChange(SettingsPage.Appearance) },
                 onContentDiscoveryClick = { onPageChange(SettingsPage.ContentDiscovery) },
+                onIntegrationsClick = { onPageChange(SettingsPage.Integrations) },
                 onAccountClick = onAccountClick,
                 onSwitchProfileClick = onSwitchProfile,
             )
@@ -218,6 +219,9 @@ private fun MobileSettingsScreen(
                 isTablet = false,
                 onAddonsClick = onAddonsClick,
                 onHomescreenClick = onHomescreenClick,
+            )
+            SettingsPage.Integrations -> integrationsContent(
+                isTablet = false,
                 onTmdbClick = { onPageChange(SettingsPage.TmdbEnrichment) },
                 onMdbListClick = { onPageChange(SettingsPage.MdbListRatings) },
                 onTraktClick = { onPageChange(SettingsPage.TraktAuthentication) },
@@ -329,6 +333,7 @@ private fun TabletSettingsScreen(
                     onPlaybackClick = { onPageChange(SettingsPage.Playback) },
                     onAppearanceClick = { onPageChange(SettingsPage.Appearance) },
                     onContentDiscoveryClick = { onPageChange(SettingsPage.ContentDiscovery) },
+                    onIntegrationsClick = { onPageChange(SettingsPage.Integrations) },
                     onAccountClick = onAccountClick,
                     onSwitchProfileClick = onSwitchProfile,
                 )
@@ -357,6 +362,9 @@ private fun TabletSettingsScreen(
                     isTablet = true,
                     onAddonsClick = onAddonsClick,
                     onHomescreenClick = onHomescreenClick,
+                )
+                SettingsPage.Integrations -> integrationsContent(
+                    isTablet = true,
                     onTmdbClick = { onPageChange(SettingsPage.TmdbEnrichment) },
                     onMdbListClick = { onPageChange(SettingsPage.MdbListRatings) },
                     onTraktClick = { onPageChange(SettingsPage.TraktAuthentication) },
