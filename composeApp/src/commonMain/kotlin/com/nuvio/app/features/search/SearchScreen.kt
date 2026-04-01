@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -32,6 +33,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -145,13 +147,22 @@ fun SearchScreen(
         SearchHistoryRepository.recordSearch(normalizedQuery)
     }
 
-    NuvioScreen(
-        horizontalPadding = 0.dp,
-        listState = listState,
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
     ) {
+        val discoverColumns = remember(maxWidth) {
+            discoverColumnCountForWidth(maxWidth)
+        }
+
+        NuvioScreen(
+            horizontalPadding = 0.dp,
+            listState = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+        ) {
         stickyHeader {
             androidx.compose.foundation.layout.Column(
                 modifier = Modifier
@@ -184,16 +195,17 @@ fun SearchScreen(
                     )
                 }
             }
-            discoverContent(
-                state = discoverUiState,
-                onTypeSelected = SearchRepository::selectDiscoverType,
-                onCatalogSelected = SearchRepository::selectDiscoverCatalog,
-                onGenreSelected = SearchRepository::selectDiscoverGenre,
-                watchedKeys = watchedUiState.watchedKeys,
-                onPosterClick = onPosterClick,
-                onPosterLongClick = onPosterLongClick,
-            )
-        } else {
+                discoverContent(
+                    state = discoverUiState,
+                    columns = discoverColumns,
+                    onTypeSelected = SearchRepository::selectDiscoverType,
+                    onCatalogSelected = SearchRepository::selectDiscoverCatalog,
+                    onGenreSelected = SearchRepository::selectDiscoverGenre,
+                    watchedKeys = watchedUiState.watchedKeys,
+                    onPosterClick = onPosterClick,
+                    onPosterLongClick = onPosterLongClick,
+                )
+            } else {
             when {
                 uiState.isLoading && uiState.sections.isEmpty() -> {
                     items(2) {
@@ -228,6 +240,16 @@ fun SearchScreen(
         }
     }
 }
+}
+
+private fun discoverColumnCountForWidth(screenWidth: Dp): Int =
+    when {
+        screenWidth >= 1400.dp -> 7
+        screenWidth >= 1200.dp -> 6
+        screenWidth >= 1000.dp -> 5
+        screenWidth >= 840.dp -> 4
+        else -> 3
+    }
 
 @Composable
 private fun SearchEmptyStateCard(

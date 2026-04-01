@@ -51,6 +51,7 @@ import com.nuvio.app.features.watching.application.WatchingState
 
 internal fun LazyListScope.discoverContent(
     state: DiscoverUiState,
+    columns: Int,
     onTypeSelected: (String) -> Unit,
     onCatalogSelected: (String) -> Unit,
     onGenreSelected: (String?) -> Unit,
@@ -87,7 +88,10 @@ internal fun LazyListScope.discoverContent(
     when {
         state.isLoading && state.items.isEmpty() -> {
             items(2) {
-                DiscoverSkeletonRow(modifier = Modifier.padding(horizontal = 16.dp))
+                DiscoverSkeletonRow(
+                    columns = columns,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
             }
         }
 
@@ -102,9 +106,10 @@ internal fun LazyListScope.discoverContent(
         }
 
         else -> {
-            items(state.items.chunked(3)) { rowItems ->
+            items(state.items.chunked(columns)) { rowItems ->
                 DiscoverGridRow(
                     items = rowItems,
+                    columns = columns,
                     modifier = Modifier.padding(horizontal = 16.dp),
                     watchedKeys = watchedKeys,
                     onPosterClick = onPosterClick,
@@ -234,6 +239,7 @@ private fun DiscoverDropdownChip(
 @Composable
 private fun DiscoverGridRow(
     items: List<MetaPreview>,
+    columns: Int,
     modifier: Modifier = Modifier,
     watchedKeys: Set<String> = emptySet(),
     onPosterClick: ((MetaPreview) -> Unit)? = null,
@@ -256,7 +262,7 @@ private fun DiscoverGridRow(
                 onLongClick = onPosterLongClick?.let { { it(item) } },
             )
         }
-        repeat(3 - items.size) {
+        repeat(columns - items.size) {
             Spacer(modifier = Modifier.weight(1f))
         }
     }
@@ -321,12 +327,15 @@ private fun DiscoverPosterTile(
 }
 
 @Composable
-private fun DiscoverSkeletonRow(modifier: Modifier = Modifier) {
+private fun DiscoverSkeletonRow(
+    columns: Int,
+    modifier: Modifier = Modifier,
+) {
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        repeat(3) {
+        repeat(columns) {
             Box(
                 modifier = Modifier
                     .weight(1f)
