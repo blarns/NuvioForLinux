@@ -26,6 +26,7 @@ import com.nuvio.app.features.home.components.HomePosterCard
 fun LibraryScreen(
     modifier: Modifier = Modifier,
     onPosterClick: ((LibraryItem) -> Unit)? = null,
+    onSectionViewAllClick: ((LibrarySection) -> Unit)? = null,
 ) {
     val uiState by remember {
         LibraryRepository.ensureLoaded()
@@ -74,6 +75,7 @@ fun LibraryScreen(
                 librarySections(
                     sections = uiState.sections,
                     onPosterClick = onPosterClick,
+                    onSectionViewAllClick = onSectionViewAllClick,
                     onPosterLongClick = { item ->
                         if (!isTraktSource) {
                             pendingRemovalItem = item
@@ -101,17 +103,24 @@ fun LibraryScreen(
 private fun LazyListScope.librarySections(
     sections: List<LibrarySection>,
     onPosterClick: ((LibraryItem) -> Unit)?,
+    onSectionViewAllClick: ((LibrarySection) -> Unit)?,
     onPosterLongClick: (LibraryItem) -> Unit,
 ) {
     items(
         items = sections,
         key = { section -> section.type },
     ) { section ->
+        val previewItems = section.items.take(LIBRARY_SECTION_PREVIEW_LIMIT)
         NuvioShelfSection(
             title = section.displayTitle,
-            entries = section.items,
+            entries = previewItems,
             headerHorizontalPadding = 16.dp,
             rowContentPadding = PaddingValues(horizontal = 16.dp),
+            onViewAllClick = if (section.items.size > LIBRARY_SECTION_PREVIEW_LIMIT) {
+                onSectionViewAllClick?.let { { it(section) } }
+            } else {
+                null
+            },
             viewAllPillSize = NuvioViewAllPillSize.Compact,
             key = { item -> "${item.type}:${item.id}" },
         ) { item ->
@@ -123,3 +132,5 @@ private fun LazyListScope.librarySections(
         }
     }
 }
+
+private const val LIBRARY_SECTION_PREVIEW_LIMIT = 18

@@ -1,5 +1,7 @@
 package com.nuvio.app.features.catalog
 
+import com.nuvio.app.features.library.LibraryRepository
+import com.nuvio.app.features.library.toMetaPreview
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -8,6 +10,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+const val INTERNAL_LIBRARY_MANIFEST_URL = "nuvio://library"
 
 object CatalogRepository {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -36,6 +40,10 @@ object CatalogRepository {
             return
         }
         activeRequest = request
+        if (manifestUrl == INTERNAL_LIBRARY_MANIFEST_URL) {
+            fetchInternalLibrary(request)
+            return
+        }
         fetchPage(request = request, reset = true)
     }
 
@@ -50,6 +58,44 @@ object CatalogRepository {
         activeJob?.cancel()
         activeRequest = null
         _uiState.value = CatalogUiState()
+    }
+
+    private fun fetchInternalLibrary(request: CatalogRequest) {
+        activeJob?.cancel()
+        _uiState.value = _uiState.value.copy(
+            isLoading = true,
+            errorMessage = null,
+        )
+
+        activeJob = scope.launch {
+            runCatching {
+                LibraryRepository.ensureLoaded()
+                LibraryRepository.uiState.value.sections
+                    .firstOrNull { it.type == request.catalogId }
+                    ?.items
+                    .orEmpty()
+                    .map { it.toMetaPreview() }
+            }.fold(
+                onSuccess = { items ->
+                    if (activeRequest != request) return@fold
+                    _uiState.value = CatalogUiState(
+                        items = items,
+                        isLoading = false,
+                        nextSkip = null,
+                        errorMessage = null,
+                    )
+                },
+                onFailure = { error ->
+                    if (activeRequest != request) return@fold
+                    _uiState.value = CatalogUiState(
+                        items = emptyList(),
+                        isLoading = false,
+                        nextSkip = null,
+                        errorMessage = error.message ?: "Unable to load catalog items.",
+                    )
+                },
+            )
+        }
     }
 
     private fun fetchPage(

@@ -66,6 +66,7 @@ import com.nuvio.app.core.ui.NuvioTheme
 import com.nuvio.app.features.auth.AuthScreen
 import com.nuvio.app.features.catalog.CatalogRepository
 import com.nuvio.app.features.catalog.CatalogScreen
+import com.nuvio.app.features.catalog.INTERNAL_LIBRARY_MANIFEST_URL
 import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.details.MetaDetailsScreen
 import com.nuvio.app.features.home.HomeCatalogSection
@@ -73,6 +74,8 @@ import com.nuvio.app.features.home.HomeScreen
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.library.LibraryItem
 import com.nuvio.app.features.library.LibraryRepository
+import com.nuvio.app.features.library.LibrarySection
+import com.nuvio.app.features.library.LibrarySourceMode
 import com.nuvio.app.features.library.LibraryScreen
 import com.nuvio.app.features.library.toLibraryItem
 import com.nuvio.app.features.player.PlayerLaunch
@@ -340,6 +343,23 @@ private fun MainAppContent(
             )
         }
 
+        val onLibrarySectionViewAllClick: (LibrarySection) -> Unit = { section ->
+            navController.navigate(
+                CatalogRoute(
+                    title = section.displayTitle,
+                    subtitle = if (libraryUiState.sourceMode == LibrarySourceMode.TRAKT) {
+                        "Trakt Library"
+                    } else {
+                        "Library"
+                    },
+                    manifestUrl = INTERNAL_LIBRARY_MANIFEST_URL,
+                    type = section.items.firstOrNull()?.type ?: "movie",
+                    catalogId = section.type,
+                    supportsPagination = false,
+                ),
+            )
+        }
+
         val onContinueWatchingClick: (ContinueWatchingItem) -> Unit = { item ->
             val streamContextId = item.pauseDescription
                 ?.takeIf { it.isNotBlank() }
@@ -460,6 +480,7 @@ private fun MainAppContent(
                             onLibraryPosterClick = { item ->
                                 navController.navigate(DetailRoute(type = item.type, id = item.id))
                             },
+                            onLibrarySectionViewAllClick = onLibrarySectionViewAllClick,
                             onContinueWatchingClick = onContinueWatchingClick,
                             onContinueWatchingLongPress = onContinueWatchingLongPress,
                             onSwitchProfile = onSwitchProfile,
@@ -758,6 +779,7 @@ private fun AppTabHost(
     onPosterClick: ((MetaPreview) -> Unit)? = null,
     onPosterLongClick: ((MetaPreview) -> Unit)? = null,
     onLibraryPosterClick: ((LibraryItem) -> Unit)? = null,
+    onLibrarySectionViewAllClick: ((LibrarySection) -> Unit)? = null,
     onContinueWatchingClick: ((ContinueWatchingItem) -> Unit)? = null,
     onContinueWatchingLongPress: ((ContinueWatchingItem) -> Unit)? = null,
     onSwitchProfile: (() -> Unit)? = null,
@@ -796,6 +818,7 @@ private fun AppTabHost(
             LibraryScreen(
                 modifier = Modifier.fillMaxSize(),
                 onPosterClick = onLibraryPosterClick,
+                onSectionViewAllClick = onLibrarySectionViewAllClick,
             )
         }
         keepAliveTab(
