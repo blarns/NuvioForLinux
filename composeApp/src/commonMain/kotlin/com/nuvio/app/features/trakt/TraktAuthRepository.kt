@@ -85,31 +85,6 @@ object TraktAuthRepository {
         return buildAuthorizationUrl(oauthState)
     }
 
-    fun onConnectWithCodeRequested(rawInput: String) {
-        ensureLoaded()
-        if (!hasRequiredCredentials()) {
-            publish(errorMessage = "Missing Trakt credentials")
-            return
-        }
-
-        val code = extractAuthorizationCode(rawInput)
-        if (code.isNullOrBlank()) {
-            publish(errorMessage = "Paste a valid Trakt authorization code or callback URL")
-            return
-        }
-
-        scope.launch {
-            publish(
-                isLoading = true,
-                statusMessage = "Completing Trakt sign in",
-                errorMessage = null,
-            )
-            clearPendingAuthorization()
-            persist()
-            exchangeAuthorizationCode(code)
-        }
-    }
-
     fun pendingAuthorizationUrl(): String? {
         ensureLoaded()
         val oauthState = authState.pendingAuthorizationState ?: return null
@@ -449,25 +424,6 @@ object TraktAuthRepository {
         val encodedRedirectUri = TraktConfig.REDIRECT_URI.encodeURLParameter()
         val encodedState = state.encodeURLParameter()
         return "$AUTHORIZE_URL?response_type=$responseType&client_id=$encodedClientId&redirect_uri=$encodedRedirectUri&state=$encodedState"
-    }
-
-    private fun extractAuthorizationCode(rawInput: String): String? {
-        val input = rawInput.trim()
-        if (input.isBlank()) return null
-
-        val urlCode = runCatching {
-            Url(input)
-        }.getOrNull()?.parameters?.get("code")?.trim()
-        if (!urlCode.isNullOrBlank()) return urlCode
-
-        val regexCode = Regex("[?&]code=([^&]+)")
-            .find(input)
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.trim()
-        if (!regexCode.isNullOrBlank()) return regexCode
-
-        return input
     }
 
     private fun generateOauthState(): String {
