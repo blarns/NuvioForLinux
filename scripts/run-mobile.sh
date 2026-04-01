@@ -21,9 +21,9 @@ Usage:
   ./scripts/run-mobile.sh ios s
   ./scripts/run-mobile.sh ios p
 
-Builds the debug app for the selected platform, installs it on the first running
-Android emulator, a booted iOS simulator, or the configured iOS physical device,
-and launches the app.
+Builds the debug app for the selected platform, installs it on all available
+Android emulators, a booted iOS simulator, or the configured iOS physical
+device, and launches the app.
 EOF
 }
 
@@ -34,8 +34,31 @@ require_command() {
   fi
 }
 
-first_booted_android_emulator() {
-  adb devices | awk '$2 == "device" && $1 ~ /^emulator-/ { print $1; exit }'
+android_emulator_avds() {
+  emulator -list-avds
+}
+
+booted_android_emulator_serials() {
+  adb devices | awk '$2 == "device" && $1 ~ /^emulator-/ { print $1 }'
+}
+
+wait_for_android_emulator() {
+  local serial="$1"
+  local boot_completed=""
+
+  adb -s "$serial" wait-for-device >/dev/null
+
+  until [[ "$boot_completed" == "1" ]]; do
+    boot_completed="$(adb -s "$serial" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
+    sleep 1
+  done
+}
+
+boot_android_emulator() {
+  local avd_name="$1"
+
+  echo "Opening Android emulator $avd_name..." >&2
+  emulator "@$avd_name" >/dev/null 2>&1 &
 }
 
 first_booted_ios_simulator() {
@@ -68,15 +91,54 @@ if physical:
 
 run_android() {
   require_command adb
+  require_command emulator
 
-  local serial
-  serial="$(first_booted_android_emulator)"
+  local booted_serials=()
+  local serial=""
+  while IFS= read -r serial; do
+    [[ -n "$serial" ]] || continue
+    booted_serials+=("$serial")
+  done < <(booted_android_emulator_serials)
 
-  if [[ -z "$serial" ]]; then
-    echo "No running Android emulator found." >&2
-    echo "Start an emulator first, then rerun: ./scripts/run-mobile.sh android" >&2
-    exit 1
+  if [[ ${#booted_serials[@]} -gt 0 ]]; then
+    echo "Using running Android emulators: ${booted_serials[*]}"
+  else
+  local avds=()
+  while IFS= read -r avd_name; do
+    [[ -n "$avd_name" ]] || continue
+    avds+=("$avd_name")
+  done < <(android_emulator_avds)
+
+    if [[ ${#avds[@]} -eq 0 ]]; then
+      echo "No Android emulators available." >&2
+      echo "Create an AVD first, then rerun: ./scripts/run-mobile.sh android" >&2
+      exit 1
+    fi
+
+    local avd_name
+    for avd_name in "${avds[@]}"; do
+      boot_android_emulator "$avd_name"
+    done
+
+    echo "Waiting for Android emulators to boot..."
+    while IFS= read -r serial; do
+      [[ -n "$serial" ]] || continue
+      booted_serials+=("$serial")
+    done < <(booted_android_emulator_serials)
+
+    while [[ ${#booted_serials[@]} -lt ${#avds[@]} ]]; do
+      sleep 2
+      booted_serials=()
+      while IFS= read -r serial; do
+        [[ -n "$serial" ]] || continue
+        booted_serials+=("$serial")
+      done < <(booted_android_emulator_serials)
+    done
   fi
+
+  for serial in "${booted_serials[@]}"; do
+    wait_for_android_emulator "$serial"
+  done
 
   echo "Building Android debug APK..."
   "$GRADLEW" :composeApp:assembleDebug
@@ -89,11 +151,13 @@ run_android() {
     exit 1
   fi
 
-  echo "Installing on emulator $serial..."
-  adb -s "$serial" install -r "$apk_path"
+  for serial in "${booted_serials[@]}"; do
+    echo "Installing on emulator $serial..."
+    adb -s "$serial" install -r "$apk_path"
 
-  echo "Launching app..."
-  adb -s "$serial" shell am start -n "$ANDROID_APP_ID/$ANDROID_ACTIVITY"
+    echo "Launching app on $serial..."
+    adb -s "$serial" shell am start -n "$ANDROID_APP_ID/$ANDROID_ACTIVITY"
+  done
 }
 
 run_ios_simulator() {

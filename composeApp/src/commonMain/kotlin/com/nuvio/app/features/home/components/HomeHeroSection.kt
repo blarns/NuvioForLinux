@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
@@ -35,6 +36,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.nuvio.app.core.format.formatReleaseDateForDisplay
@@ -45,6 +47,17 @@ import kotlin.math.abs
 private const val HERO_BACKGROUND_PARALLAX = 0.055f
 private const val HERO_BACKGROUND_SCALE = 1.14f
 private const val HERO_CONTENT_PARALLAX = 0.18f
+
+internal data class HomeHeroLayout(
+    val isTablet: Boolean,
+    val heroHeight: Dp,
+    val contentMaxWidth: Dp,
+    val contentWidthFraction: Float,
+    val contentHorizontalPadding: Dp,
+    val contentVerticalPadding: Dp,
+    val bottomFadeHeight: Dp,
+    val logoWidthFraction: Float,
+)
 
 @Composable
 fun HomeHeroSection(
@@ -62,7 +75,7 @@ fun HomeHeroSection(
             .fillMaxWidth()
             .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)),
     ) {
-        val heroHeight = (maxWidth.value * 1.22f).dp.coerceIn(440.dp, 800.dp)
+        val layout = homeHeroLayout(maxWidth.value)
         val heroWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
         val currentPage = pagerState.currentPage.coerceIn(items.indices)
         val visiblePages = listOf(
@@ -93,7 +106,7 @@ fun HomeHeroSection(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(heroHeight),
+                .height(layout.heroHeight),
         ) {
             HorizontalPager(
                 state = pagerState,
@@ -119,6 +132,7 @@ fun HomeHeroSection(
                                 scaleX = HERO_BACKGROUND_SCALE
                                 scaleY = HERO_BACKGROUND_SCALE
                             },
+                        alignment = if (layout.isTablet) Alignment.TopCenter else Alignment.Center,
                         contentScale = ContentScale.Crop,
                     )
                 }
@@ -141,7 +155,7 @@ fun HomeHeroSection(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(220.dp)
+                        .height(layout.bottomFadeHeight)
                         .align(Alignment.BottomCenter)
                         .background(
                             Brush.verticalGradient(
@@ -157,12 +171,17 @@ fun HomeHeroSection(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                        .padding(
+                            horizontal = layout.contentHorizontalPadding,
+                            vertical = layout.contentVerticalPadding,
+                        ),
+                    horizontalAlignment = if (layout.isTablet) Alignment.Start else Alignment.CenterHorizontally,
                 ) {
                     Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .fillMaxWidth(layout.contentWidthFraction)
+                            .widthIn(max = layout.contentMaxWidth),
+                        contentAlignment = if (layout.isTablet) Alignment.CenterStart else Alignment.Center,
                     ) {
                         visiblePages.forEach { layer ->
                             Box(
@@ -173,32 +192,35 @@ fun HomeHeroSection(
                             ) {
                                 HeroContentBlock(
                                     item = items[layer.page],
+                                    layout = layout,
                                     onItemClick = onItemClick,
                                 )
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Surface(
-                        modifier = Modifier
-                            .clickable(enabled = onItemClick != null) {
-                                onItemClick?.invoke(currentItem)
-                            },
-                        color = MaterialTheme.colorScheme.onBackground,
-                        contentColor = MaterialTheme.colorScheme.background,
-                        shape = RoundedCornerShape(40.dp),
-                    ) {
-                        Text(
-                            text = "View Details",
-                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 12.dp),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                        )
+                    if (!layout.isTablet) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Surface(
+                            modifier = Modifier
+                                .clickable(enabled = onItemClick != null) {
+                                    onItemClick?.invoke(currentItem)
+                                },
+                            color = MaterialTheme.colorScheme.onBackground,
+                            contentColor = MaterialTheme.colorScheme.background,
+                            shape = RoundedCornerShape(40.dp),
+                        ) {
+                            Text(
+                                text = "View Details",
+                                modifier = Modifier.padding(horizontal = 28.dp, vertical = 12.dp),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
                     }
 
                     if (items.size > 1) {
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(if (layout.isTablet) 14.dp else 12.dp))
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -254,12 +276,12 @@ fun HomeHeroReservedSpace(modifier: Modifier = Modifier) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)),
     ) {
-        val heroHeight = (maxWidth.value * 1.22f).dp.coerceIn(440.dp, 800.dp)
+        val layout = homeHeroLayout(maxWidth.value)
 
         Spacer(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(heroHeight),
+                .height(layout.heroHeight),
         )
     }
 }
@@ -267,33 +289,42 @@ fun HomeHeroReservedSpace(modifier: Modifier = Modifier) {
 @Composable
 private fun HeroContentBlock(
     item: MetaPreview,
+    layout: HomeHeroLayout,
     onItemClick: ((MetaPreview) -> Unit)?,
 ) {
     Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = if (layout.isTablet) Alignment.Start else Alignment.CenterHorizontally,
     ) {
         if (item.logo != null) {
             AsyncImage(
                 model = item.logo,
                 contentDescription = item.name,
                 modifier = Modifier
-                    .fillMaxWidth(0.62f)
+                    .fillMaxWidth(layout.logoWidthFraction)
                     .aspectRatio(2.6f)
-                    .clickable(enabled = onItemClick != null) {
+                    .clickable(enabled = !layout.isTablet && onItemClick != null) {
                         onItemClick?.invoke(item)
                     },
+                alignment = if (layout.isTablet) Alignment.CenterStart else Alignment.Center,
                 contentScale = ContentScale.Fit,
             )
         } else {
             Text(
                 text = item.name,
-                modifier = Modifier.clickable(enabled = onItemClick != null) {
-                    onItemClick?.invoke(item)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = !layout.isTablet && onItemClick != null) {
+                        onItemClick?.invoke(item)
+                    },
+                style = if (layout.isTablet) {
+                    MaterialTheme.typography.displaySmall
+                } else {
+                    MaterialTheme.typography.displaySmall
                 },
-                style = MaterialTheme.typography.displaySmall,
                 color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Black,
-                textAlign = TextAlign.Center,
+                textAlign = if (layout.isTablet) TextAlign.Start else TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -301,7 +332,12 @@ private fun HeroContentBlock(
 
         Spacer(modifier = Modifier.height(12.dp))
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = if (layout.isTablet) {
+                Arrangement.spacedBy(8.dp, Alignment.Start)
+            } else {
+                Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+            },
             verticalAlignment = Alignment.CenterVertically,
         ) {
             HeroMetaText(text = item.type.replaceFirstChar(Char::uppercase))
@@ -328,6 +364,50 @@ private fun HeroMetaText(text: String) {
         overflow = TextOverflow.Ellipsis,
     )
 }
+
+internal fun homeHeroLayout(maxWidthDp: Float): HomeHeroLayout =
+    when {
+        maxWidthDp >= 1200f -> HomeHeroLayout(
+            isTablet = true,
+            heroHeight = (maxWidthDp * 0.42f).dp.coerceIn(360.dp, 440.dp),
+            contentMaxWidth = 640.dp,
+            contentWidthFraction = 0.56f,
+            contentHorizontalPadding = 56.dp,
+            contentVerticalPadding = 22.dp,
+            bottomFadeHeight = 190.dp,
+            logoWidthFraction = 0.58f,
+        )
+        maxWidthDp >= 840f -> HomeHeroLayout(
+            isTablet = true,
+            heroHeight = (maxWidthDp * 0.46f).dp.coerceIn(340.dp, 420.dp),
+            contentMaxWidth = 560.dp,
+            contentWidthFraction = 0.62f,
+            contentHorizontalPadding = 40.dp,
+            contentVerticalPadding = 20.dp,
+            bottomFadeHeight = 180.dp,
+            logoWidthFraction = 0.56f,
+        )
+        maxWidthDp >= 600f -> HomeHeroLayout(
+            isTablet = true,
+            heroHeight = (maxWidthDp * 0.58f).dp.coerceIn(320.dp, 380.dp),
+            contentMaxWidth = 520.dp,
+            contentWidthFraction = 0.72f,
+            contentHorizontalPadding = 32.dp,
+            contentVerticalPadding = 18.dp,
+            bottomFadeHeight = 170.dp,
+            logoWidthFraction = 0.54f,
+        )
+        else -> HomeHeroLayout(
+            isTablet = false,
+            heroHeight = (maxWidthDp * 1.22f).dp.coerceIn(440.dp, 800.dp),
+            contentMaxWidth = 480.dp,
+            contentWidthFraction = 1f,
+            contentHorizontalPadding = 24.dp,
+            contentVerticalPadding = 16.dp,
+            bottomFadeHeight = 220.dp,
+            logoWidthFraction = 0.62f,
+        )
+    }
 
 @Composable
 private fun HeroMetaDot() {

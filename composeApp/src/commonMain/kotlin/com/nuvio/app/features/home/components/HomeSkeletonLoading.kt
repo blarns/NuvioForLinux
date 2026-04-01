@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -65,13 +66,13 @@ fun HomeSkeletonHero(modifier: Modifier = Modifier) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)),
     ) {
-        val heroHeight = (maxWidth.value * 1.22f).dp.coerceIn(440.dp, 800.dp)
+        val layout = homeHeroLayout(maxWidth.value)
         val containerWidth = maxWidth
 
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(heroHeight)
+                .height(layout.heroHeight)
                 .background(brush),
         ) {
             Box(
@@ -92,7 +93,7 @@ fun HomeSkeletonHero(modifier: Modifier = Modifier) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(220.dp)
+                    .height(layout.bottomFadeHeight)
                     .align(Alignment.BottomCenter)
                     .background(
                         Brush.verticalGradient(
@@ -108,38 +109,52 @@ fun HomeSkeletonHero(modifier: Modifier = Modifier) {
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
+                    .padding(
+                        horizontal = layout.contentHorizontalPadding,
+                        vertical = layout.contentVerticalPadding,
+                    ),
+                horizontalAlignment = if (layout.isTablet) Alignment.Start else Alignment.CenterHorizontally,
             ) {
-                // Logo placeholder — matches fillMaxWidth(0.62f) + aspectRatio(2.6f)
-                SkeletonBlock(
-                    brush = brush,
-                    width = (containerWidth.value * 0.62f).dp,
-                    height = ((containerWidth.value * 0.62f) / 2.6f).dp,
-                    cornerRadius = 12.dp,
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                // Meta info row: type · genre · year
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth(layout.contentWidthFraction)
+                        .widthIn(max = layout.contentMaxWidth),
+                    horizontalAlignment = if (layout.isTablet) Alignment.Start else Alignment.CenterHorizontally,
                 ) {
-                    SkeletonBlock(brush = brush, width = 52.dp, height = 14.dp, cornerRadius = 999.dp)
-                    SkeletonDot(brush = brush)
-                    SkeletonBlock(brush = brush, width = 72.dp, height = 14.dp, cornerRadius = 999.dp)
-                    SkeletonDot(brush = brush)
-                    SkeletonBlock(brush = brush, width = 40.dp, height = 14.dp, cornerRadius = 999.dp)
+                    val logoWidth = containerWidth
+                        .times(layout.contentWidthFraction * layout.logoWidthFraction)
+                        .coerceAtMost(layout.contentMaxWidth * layout.logoWidthFraction)
+
+                    SkeletonBlock(
+                        brush = brush,
+                        width = logoWidth,
+                        height = logoWidth / 2.6f,
+                        cornerRadius = 12.dp,
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        SkeletonBlock(brush = brush, width = 52.dp, height = 14.dp, cornerRadius = 999.dp)
+                        SkeletonDot(brush = brush)
+                        SkeletonBlock(brush = brush, width = 72.dp, height = 14.dp, cornerRadius = 999.dp)
+                        SkeletonDot(brush = brush)
+                        SkeletonBlock(brush = brush, width = 40.dp, height = 14.dp, cornerRadius = 999.dp)
+                    }
                 }
-                Spacer(modifier = Modifier.height(14.dp))
-                // "View Details" button placeholder
-                SkeletonBlock(
-                    brush = brush,
-                    width = 160.dp,
-                    height = 48.dp,
-                    cornerRadius = 40.dp,
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                // Pager dots
+                if (!layout.isTablet) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    SkeletonBlock(
+                        brush = brush,
+                        width = 160.dp,
+                        height = 48.dp,
+                        cornerRadius = 40.dp,
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                } else {
+                    Spacer(modifier = Modifier.height(14.dp))
+                }
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
