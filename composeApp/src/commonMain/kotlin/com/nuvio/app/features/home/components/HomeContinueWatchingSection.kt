@@ -56,12 +56,13 @@ fun HomeContinueWatchingSection(
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val layout = rememberContinueWatchingLayout(maxWidth.value)
+        val sectionPadding = homeSectionHorizontalPaddingForWidth(maxWidth.value)
         NuvioShelfSection(
             title = "Continue Watching",
             entries = items,
             modifier = Modifier.fillMaxWidth(),
-            headerHorizontalPadding = layout.sectionPadding,
-            rowContentPadding = PaddingValues(horizontal = layout.sectionPadding),
+            headerHorizontalPadding = sectionPadding,
+            rowContentPadding = PaddingValues(horizontal = sectionPadding),
             itemSpacing = layout.itemGap,
             key = { item -> item.videoId },
         ) { item ->
@@ -460,7 +461,6 @@ private fun UpNextBadge(
 }
 
 private data class ContinueWatchingLayout(
-    val sectionPadding: Dp,
     val itemGap: Dp,
     val wideCardWidth: Dp,
     val wideCardHeight: Dp,
@@ -482,7 +482,6 @@ private data class ContinueWatchingLayout(
 private fun rememberContinueWatchingLayout(maxWidthDp: Float): ContinueWatchingLayout =
     when {
         maxWidthDp >= 1440f -> ContinueWatchingLayout(
-            sectionPadding = 32.dp,
             itemGap = 20.dp,
             wideCardWidth = 400.dp,
             wideCardHeight = 160.dp,
@@ -501,7 +500,6 @@ private fun rememberContinueWatchingLayout(maxWidthDp: Float): ContinueWatchingL
             posterBadgeTextSize = 12.sp,
         )
         maxWidthDp >= 1024f -> ContinueWatchingLayout(
-            sectionPadding = 28.dp,
             itemGap = 18.dp,
             wideCardWidth = 350.dp,
             wideCardHeight = 140.dp,
@@ -520,7 +518,6 @@ private fun rememberContinueWatchingLayout(maxWidthDp: Float): ContinueWatchingL
             posterBadgeTextSize = 10.sp,
         )
         maxWidthDp >= 768f -> ContinueWatchingLayout(
-            sectionPadding = 24.dp,
             itemGap = 16.dp,
             wideCardWidth = 320.dp,
             wideCardHeight = 130.dp,
@@ -539,7 +536,6 @@ private fun rememberContinueWatchingLayout(maxWidthDp: Float): ContinueWatchingL
             posterBadgeTextSize = 10.sp,
         )
         else -> ContinueWatchingLayout(
-            sectionPadding = 16.dp,
             itemGap = 16.dp,
             wideCardWidth = 280.dp,
             wideCardHeight = 120.dp,
