@@ -119,7 +119,6 @@ internal fun PlayerControlsShell(
                 seasonNumber = seasonNumber,
                 episodeNumber = episodeNumber,
                 episodeTitle = episodeTitle,
-                backendLabel = "Android · Media3 ExoPlayer",
                 metrics = metrics,
                 onBack = onBack,
                 modifier = Modifier
@@ -171,7 +170,6 @@ private fun PlayerHeader(
     seasonNumber: Int?,
     episodeNumber: Int?,
     episodeTitle: String?,
-    backendLabel: String,
     metrics: PlayerLayoutMetrics,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -236,13 +234,6 @@ private fun PlayerHeader(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                Text(
-                    text = backendLabel,
-                    style = typeScale.labelXs,
-                    color = Color.White.copy(alpha = 0.9f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
             }
 
             NuvioBackButton(

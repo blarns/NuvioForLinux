@@ -749,7 +749,20 @@ private fun MainAppContent(
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
-                composable<PlayerRoute> { backStackEntry ->
+                composable<PlayerRoute>(
+                    enterTransition = {
+                        if (isIos) fadeIn(animationSpec = tween(220)) else null
+                    },
+                    exitTransition = {
+                        if (isIos) fadeOut(animationSpec = tween(220)) else null
+                    },
+                    popEnterTransition = {
+                        if (isIos) fadeIn(animationSpec = tween(220)) else null
+                    },
+                    popExitTransition = {
+                        if (isIos) fadeOut(animationSpec = tween(220)) else null
+                    },
+                ) { backStackEntry ->
                     val route = backStackEntry.toRoute<PlayerRoute>()
                     val launch = remember(route.launchId) { PlayerLaunchStore.get(route.launchId) }
                     if (launch == null) {

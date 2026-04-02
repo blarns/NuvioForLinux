@@ -56,10 +56,12 @@ object PluginRepository {
 
     fun initialize() {
         val effectiveProfileId = resolveEffectiveProfileId(ProfileRepository.activeProfileId)
+        val shouldRefreshStoredRepos = !initialized || currentProfileId != effectiveProfileId
         ensureStateLoadedForProfile(effectiveProfileId)
+        if (!shouldRefreshStoredRepos) return
 
         _uiState.value.repositories.forEach { repo ->
-            refreshRepository(repo.manifestUrl)
+            refreshRepositoryInternal(repo.manifestUrl, pushAfterRefresh = false, ensureInitialized = false)
         }
     }
 
@@ -184,12 +186,22 @@ object PluginRepository {
     fun refreshAll() {
         initialize()
         _uiState.value.repositories.forEach { repo ->
-            refreshRepository(repo.manifestUrl)
+            refreshRepositoryInternal(repo.manifestUrl, pushAfterRefresh = false, ensureInitialized = false)
         }
     }
 
     fun refreshRepository(manifestUrl: String, pushAfterRefresh: Boolean = false) {
-        initialize()
+        refreshRepositoryInternal(manifestUrl, pushAfterRefresh, ensureInitialized = true)
+    }
+
+    private fun refreshRepositoryInternal(
+        manifestUrl: String,
+        pushAfterRefresh: Boolean,
+        ensureInitialized: Boolean,
+    ) {
+        if (ensureInitialized) {
+            initialize()
+        }
         val existingJob = activeRefreshJobs[manifestUrl]
         if (existingJob?.isActive == true) return
 
