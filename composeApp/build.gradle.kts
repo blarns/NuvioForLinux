@@ -145,6 +145,8 @@ kotlin {
             implementation(libs.supabase.postgrest)
             implementation(libs.supabase.auth)
             implementation(libs.supabase.functions)
+            implementation(libs.quickjs.kt)
+            implementation(libs.ksoup)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)

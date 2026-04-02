@@ -3,11 +3,13 @@ package com.nuvio.app.features.settings
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material.icons.rounded.Tune
 
 internal fun LazyListScope.contentDiscoveryContent(
     isTablet: Boolean,
     onAddonsClick: () -> Unit,
+    onPluginsClick: () -> Unit,
     onHomescreenClick: () -> Unit,
 ) {
     item {
@@ -22,6 +24,13 @@ internal fun LazyListScope.contentDiscoveryContent(
                     icon = Icons.Rounded.Extension,
                     isTablet = isTablet,
                     onClick = onAddonsClick,
+                )
+                SettingsNavigationRow(
+                    title = "Plugins",
+                    description = "Install JavaScript scraper repositories and test providers internally.",
+                    icon = Icons.Rounded.Hub,
+                    isTablet = isTablet,
+                    onClick = onPluginsClick,
                 )
             }
         }

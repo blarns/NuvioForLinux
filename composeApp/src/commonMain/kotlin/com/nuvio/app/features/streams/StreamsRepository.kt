@@ -4,6 +4,9 @@ import co.touchlab.kermit.Logger
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.httpGetText
 import com.nuvio.app.features.details.MetaDetailsRepository
+import com.nuvio.app.features.plugins.PluginRepository
+import com.nuvio.app.features.plugins.PluginRuntimeResult
+import com.nuvio.app.features.plugins.PluginScraper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -25,16 +28,16 @@ object StreamsRepository {
     private var activeRequestKey: String? = null
 
   
-    fun load(type: String, videoId: String) {
-        load(type = type, videoId = videoId, forceRefresh = false)
+    fun load(type: String, videoId: String, season: Int? = null, episode: Int? = null) {
+        load(type = type, videoId = videoId, season = season, episode = episode, forceRefresh = false)
     }
 
-    fun reload(type: String, videoId: String) {
-        load(type = type, videoId = videoId, forceRefresh = true)
+    fun reload(type: String, videoId: String, season: Int? = null, episode: Int? = null) {
+        load(type = type, videoId = videoId, season = season, episode = episode, forceRefresh = true)
     }
 
-    private fun load(type: String, videoId: String, forceRefresh: Boolean) {
-        val requestKey = "$type::$videoId"
+    private fun load(type: String, videoId: String, season: Int?, episode: Int?, forceRefresh: Boolean) {
+        val requestKey = "$type::$videoId::$season::$episode"
         val currentState = _uiState.value
         if (
             !forceRefresh &&
@@ -67,7 +70,10 @@ object StreamsRepository {
         }
 
         val installedAddons = AddonRepository.uiState.value.addons
-        if (installedAddons.isEmpty()) {
+        PluginRepository.initialize()
+        val pluginScrapers = PluginRepository.getEnabledScrapersForType(type)
+
+        if (installedAddons.isEmpty() && pluginScrapers.isEmpty()) {
             _uiState.value = StreamsUiState(
                 isAnyLoading = false,
                 emptyStateReason = StreamsEmptyStateReason.NoAddonsInstalled,
@@ -88,7 +94,7 @@ object StreamsRepository {
 
         log.d { "Found ${streamAddons.size} addons for stream type=$type id=$videoId" }
 
-        if (streamAddons.isEmpty()) {
+        if (streamAddons.isEmpty() && pluginScrapers.isEmpty()) {
             _uiState.value = StreamsUiState(
                 isAnyLoading = false,
                 emptyStateReason = StreamsEmptyStateReason.NoCompatibleAddons,
@@ -104,16 +110,23 @@ object StreamsRepository {
                 streams = emptyList(),
                 isLoading = true,
             )
+        } + pluginScrapers.map { scraper ->
+            AddonStreamGroup(
+                addonName = scraper.name,
+                addonId = "plugin:${scraper.id}",
+                streams = emptyList(),
+                isLoading = true,
+            )
         }
         _uiState.value = StreamsUiState(
             groups = initialGroups,
-            activeAddonIds = streamAddons.map { it.id }.toSet(),
+            activeAddonIds = initialGroups.map { it.addonId }.toSet(),
             isAnyLoading = true,
             emptyStateReason = null,
         )
 
         activeJob = scope.launch {
-            val jobs = streamAddons.map { manifest ->
+            val addonJobs = streamAddons.map { manifest ->
                 async {
                     val encodedId = videoId.encodeForPath()
                     val baseUrl = manifest.transportUrl
@@ -152,6 +165,38 @@ object StreamsRepository {
                     )
                 }
             }
+
+            val pluginJobs = pluginScrapers.map { scraper ->
+                async {
+                    PluginRepository.executeScraper(
+                        scraper = scraper,
+                        tmdbId = videoId.toPluginTmdbId(),
+                        mediaType = type,
+                        season = season,
+                        episode = episode,
+                    ).fold(
+                        onSuccess = { results ->
+                            AddonStreamGroup(
+                                addonName = scraper.name,
+                                addonId = "plugin:${scraper.id}",
+                                streams = results.map { it.toStreamItem(scraper) },
+                                isLoading = false,
+                            )
+                        },
+                        onFailure = { error ->
+                            AddonStreamGroup(
+                                addonName = scraper.name,
+                                addonId = "plugin:${scraper.id}",
+                                streams = emptyList(),
+                                isLoading = false,
+                                error = error.message,
+                            )
+                        },
+                    )
+                }
+            }
+
+            val jobs = addonJobs + pluginJobs
 
             // Collect results as they arrive and update state incrementally
             jobs.forEach { deferred ->
@@ -196,4 +241,28 @@ private fun List<AddonStreamGroup>.toEmptyStateReason(anyLoading: Boolean): Stre
     } else {
         StreamsEmptyStateReason.NoStreamsFound
     }
+}
+
+private fun String.toPluginTmdbId(): String {
+    return when {
+        startsWith("tmdb:") -> removePrefix("tmdb:").substringBefore(":").ifBlank { this }
+        startsWith("tmdb/") -> removePrefix("tmdb/").substringBefore('/').ifBlank { this }
+        else -> this
+    }
+}
+
+private fun PluginRuntimeResult.toStreamItem(scraper: PluginScraper): StreamItem {
+    val subtitleParts = listOfNotNull(
+        quality?.takeIf { it.isNotBlank() },
+        size?.takeIf { it.isNotBlank() },
+        language?.takeIf { it.isNotBlank() },
+    )
+    return StreamItem(
+        name = name ?: title,
+        description = subtitleParts.joinToString(" • ").ifBlank { null },
+        url = url,
+        infoHash = infoHash,
+        addonName = scraper.name,
+        addonId = "plugin:${scraper.id}",
+    )
 }

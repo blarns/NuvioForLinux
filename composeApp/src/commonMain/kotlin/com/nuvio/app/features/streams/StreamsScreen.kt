@@ -131,7 +131,12 @@ fun StreamsScreen(
     }
 
     LaunchedEffect(type, videoId) {
-        StreamsRepository.load(type, videoId)
+        StreamsRepository.load(
+            type = type,
+            videoId = videoId,
+            season = seasonNumber,
+            episode = episodeNumber,
+        )
     }
 
     LaunchedEffect(uiState.groups, storedProgress?.providerAddonId, preferredFilterApplied) {
@@ -210,7 +215,16 @@ fun StreamsScreen(
                         color = MaterialTheme.colorScheme.background.copy(alpha = 0.45f),
                         shape = CircleShape,
                     )
-                    .clickable(onClick = { StreamsRepository.reload(type, videoId) }),
+                    .clickable(
+                        onClick = {
+                            StreamsRepository.reload(
+                                type = type,
+                                videoId = videoId,
+                                season = seasonNumber,
+                                episode = episodeNumber,
+                            )
+                        },
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(

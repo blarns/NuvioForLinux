@@ -5,6 +5,14 @@ internal expect object AddonStorage {
     fun saveInstalledAddonUrls(profileId: Int, urls: List<String>)
 }
 
+data class RawHttpResponse(
+    val status: Int,
+    val statusText: String,
+    val url: String,
+    val body: String,
+    val headers: Map<String, String>,
+)
+
 expect suspend fun httpGetText(url: String): String
 
 expect suspend fun httpPostJson(url: String, body: String): String
@@ -19,3 +27,10 @@ expect suspend fun httpPostJsonWithHeaders(
     body: String,
     headers: Map<String, String>,
 ): String
+
+expect suspend fun httpRequestRaw(
+    method: String,
+    url: String,
+    headers: Map<String, String>,
+    body: String,
+): RawHttpResponse

@@ -16,6 +16,7 @@ internal actual object PlatformLocalAccountDataCleaner {
         "nuvio_stream_link_cache",
         "nuvio_continue_watching_preferences",
         "nuvio_watch_progress",
+        "nuvio_plugins",
     )
 
     private var appContext: Context? = null

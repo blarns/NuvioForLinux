@@ -53,6 +53,11 @@ internal enum class SettingsPage(
         category = SettingsCategory.General,
         parentPage = ContentDiscovery,
     ),
+    Plugins(
+        title = "Plugins",
+        category = SettingsCategory.General,
+        parentPage = ContentDiscovery,
+    ),
     Homescreen(
         title = "Homescreen",
         category = SettingsCategory.General,

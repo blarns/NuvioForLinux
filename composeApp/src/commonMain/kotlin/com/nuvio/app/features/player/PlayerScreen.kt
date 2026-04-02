@@ -520,7 +520,12 @@ fun PlayerScreen(
         fun openSourcesPanel() {
             val type = contentType ?: parentMetaType
             val vid = activeVideoId ?: return
-            PlayerStreamsRepository.loadSources(type, vid)
+            PlayerStreamsRepository.loadSources(
+                type = type,
+                videoId = vid,
+                season = activeSeasonNumber,
+                episode = activeEpisodeNumber,
+            )
             showSourcesPanel = true
             showEpisodesPanel = false
             controlsVisible = false
@@ -961,7 +966,13 @@ fun PlayerScreen(
                 onReload = {
                     val type = contentType ?: parentMetaType
                     val vid = activeVideoId ?: return@PlayerSourcesPanel
-                    PlayerStreamsRepository.loadSources(type, vid, forceRefresh = true)
+                    PlayerStreamsRepository.loadSources(
+                        type = type,
+                        videoId = vid,
+                        season = activeSeasonNumber,
+                        episode = activeEpisodeNumber,
+                        forceRefresh = true,
+                    )
                 },
                 onDismiss = {
                     showSourcesPanel = false
@@ -982,7 +993,12 @@ fun PlayerScreen(
                     onSeasonSelected = { /* season tab change handled internally */ },
                     onEpisodeSelected = { episode ->
                         val type = contentType ?: parentMetaType
-                        PlayerStreamsRepository.loadEpisodeStreams(type, episode.id)
+                        PlayerStreamsRepository.loadEpisodeStreams(
+                            type = type,
+                            videoId = episode.id,
+                            season = episode.season,
+                            episode = episode.episode,
+                        )
                         episodeStreamsPanelState = EpisodeStreamsPanelState(
                             showStreams = true,
                             selectedEpisode = episode,
@@ -999,7 +1015,13 @@ fun PlayerScreen(
                     onReloadEpisodeStreams = {
                         val episode = episodeStreamsPanelState.selectedEpisode ?: return@PlayerEpisodesPanel
                         val type = contentType ?: parentMetaType
-                        PlayerStreamsRepository.loadEpisodeStreams(type, episode.id, forceRefresh = true)
+                        PlayerStreamsRepository.loadEpisodeStreams(
+                            type = type,
+                            videoId = episode.id,
+                            season = episode.season,
+                            episode = episode.episode,
+                            forceRefresh = true,
+                        )
                     },
                     onDismiss = {
                         showEpisodesPanel = false

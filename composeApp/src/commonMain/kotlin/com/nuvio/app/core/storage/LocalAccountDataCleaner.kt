@@ -8,6 +8,7 @@ import com.nuvio.app.features.home.HomeRepository
 import com.nuvio.app.features.library.LibraryRepository
 import com.nuvio.app.features.player.PlayerLaunchStore
 import com.nuvio.app.features.player.PlayerSettingsRepository
+import com.nuvio.app.features.plugins.PluginRepository
 import com.nuvio.app.features.player.SubtitleRepository
 import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.search.SearchRepository
@@ -25,6 +26,7 @@ internal object LocalAccountDataCleaner {
 
         ProfileRepository.clearInMemory()
         AddonRepository.clearLocalState()
+        PluginRepository.clearLocalState()
         HomeRepository.clear()
         HomeCatalogSettingsRepository.clearLocalState()
         LibraryRepository.clearLocalState()

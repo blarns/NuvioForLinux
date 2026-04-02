@@ -13,6 +13,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioScreenHeader
 import com.nuvio.app.features.addons.AddonRepository
+import com.nuvio.app.features.plugins.PluginRepository
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepository
 
@@ -99,6 +100,29 @@ fun AddonsSettingsScreen(
             )
         }
         addonsSettingsContent()
+    }
+}
+
+@Composable
+fun PluginsSettingsScreen(
+    onBack: () -> Unit,
+) {
+    LaunchedEffect(Unit) {
+        PluginRepository.initialize()
+    }
+
+    NuvioScreen(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
+        stickyHeader {
+            NuvioScreenHeader(
+                title = "Plugins",
+                onBack = onBack,
+            )
+        }
+        pluginsSettingsContent()
     }
 }
 

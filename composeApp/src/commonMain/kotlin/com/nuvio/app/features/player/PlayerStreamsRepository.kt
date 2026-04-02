@@ -4,7 +4,11 @@ import co.touchlab.kermit.Logger
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.httpGetText
 import com.nuvio.app.features.details.MetaDetailsRepository
+import com.nuvio.app.features.plugins.PluginRepository
+import com.nuvio.app.features.plugins.PluginRuntimeResult
+import com.nuvio.app.features.plugins.PluginScraper
 import com.nuvio.app.features.streams.AddonStreamGroup
+import com.nuvio.app.features.streams.StreamItem
 import com.nuvio.app.features.streams.StreamParser
 import com.nuvio.app.features.streams.StreamsUiState
 import kotlinx.coroutines.CoroutineScope
@@ -38,10 +42,18 @@ object PlayerStreamsRepository {
     private var episodeStreamsJob: Job? = null
     private var episodeStreamsRequestKey: String? = null
 
-    fun loadSources(type: String, videoId: String, forceRefresh: Boolean = false) {
+    fun loadSources(
+        type: String,
+        videoId: String,
+        season: Int? = null,
+        episode: Int? = null,
+        forceRefresh: Boolean = false,
+    ) {
         fetchStreams(
             type = type,
             videoId = videoId,
+            season = season,
+            episode = episode,
             forceRefresh = forceRefresh,
             stateFlow = _sourceState,
             requestKeyHolder = { sourceRequestKey },
@@ -51,10 +63,18 @@ object PlayerStreamsRepository {
         )
     }
 
-    fun loadEpisodeStreams(type: String, videoId: String, forceRefresh: Boolean = false) {
+    fun loadEpisodeStreams(
+        type: String,
+        videoId: String,
+        season: Int? = null,
+        episode: Int? = null,
+        forceRefresh: Boolean = false,
+    ) {
         fetchStreams(
             type = type,
             videoId = videoId,
+            season = season,
+            episode = episode,
             forceRefresh = forceRefresh,
             stateFlow = _episodeStreamsState,
             requestKeyHolder = { episodeStreamsRequestKey },
@@ -88,6 +108,8 @@ object PlayerStreamsRepository {
     private fun fetchStreams(
         type: String,
         videoId: String,
+        season: Int?,
+        episode: Int?,
         forceRefresh: Boolean,
         stateFlow: MutableStateFlow<StreamsUiState>,
         requestKeyHolder: () -> String?,
@@ -95,7 +117,7 @@ object PlayerStreamsRepository {
         jobHolder: () -> Job?,
         setJob: (Job) -> Unit,
     ) {
-        val requestKey = "$type::$videoId"
+        val requestKey = "$type::$videoId::$season::$episode"
         val current = stateFlow.value
         if (
             !forceRefresh &&
@@ -127,7 +149,10 @@ object PlayerStreamsRepository {
         }
 
         val installedAddons = AddonRepository.uiState.value.addons
-        if (installedAddons.isEmpty()) {
+        PluginRepository.initialize()
+        val pluginScrapers = PluginRepository.getEnabledScrapersForType(type)
+
+        if (installedAddons.isEmpty() && pluginScrapers.isEmpty()) {
             stateFlow.value = StreamsUiState(
                 isAnyLoading = false,
                 emptyStateReason = com.nuvio.app.features.streams.StreamsEmptyStateReason.NoAddonsInstalled,
@@ -146,7 +171,7 @@ object PlayerStreamsRepository {
                 }
             }
 
-        if (streamAddons.isEmpty()) {
+        if (streamAddons.isEmpty() && pluginScrapers.isEmpty()) {
             stateFlow.value = StreamsUiState(
                 isAnyLoading = false,
                 emptyStateReason = com.nuvio.app.features.streams.StreamsEmptyStateReason.NoCompatibleAddons,
@@ -161,15 +186,22 @@ object PlayerStreamsRepository {
                 streams = emptyList(),
                 isLoading = true,
             )
+        } + pluginScrapers.map { scraper ->
+            AddonStreamGroup(
+                addonName = scraper.name,
+                addonId = "plugin:${scraper.id}",
+                streams = emptyList(),
+                isLoading = true,
+            )
         }
         stateFlow.value = StreamsUiState(
             groups = initialGroups,
-            activeAddonIds = streamAddons.map { it.id }.toSet(),
+            activeAddonIds = initialGroups.map { it.addonId }.toSet(),
             isAnyLoading = true,
         )
 
         val job = scope.launch {
-            val jobs = streamAddons.map { manifest ->
+            val addonJobs = streamAddons.map { manifest ->
                 async {
                     val encodedId = videoId.replace("%", "%25").replace(" ", "%20")
                     val baseUrl = manifest.transportUrl
@@ -191,6 +223,39 @@ object PlayerStreamsRepository {
                     )
                 }
             }
+
+            val pluginJobs = pluginScrapers.map { scraper ->
+                async {
+                    PluginRepository.executeScraper(
+                        scraper = scraper,
+                        tmdbId = videoId.toPluginTmdbId(),
+                        mediaType = type,
+                        season = season,
+                        episode = episode,
+                    ).fold(
+                        onSuccess = { results ->
+                            AddonStreamGroup(
+                                addonName = scraper.name,
+                                addonId = "plugin:${scraper.id}",
+                                streams = results.map { it.toStreamItem(scraper) },
+                                isLoading = false,
+                            )
+                        },
+                        onFailure = { err ->
+                            log.w(err) { "Plugin scraper failed: ${scraper.name}" }
+                            AddonStreamGroup(
+                                addonName = scraper.name,
+                                addonId = "plugin:${scraper.id}",
+                                streams = emptyList(),
+                                isLoading = false,
+                                error = err.message,
+                            )
+                        },
+                    )
+                }
+            }
+
+            val jobs = addonJobs + pluginJobs
             jobs.forEach { deferred ->
                 val result = deferred.await()
                 stateFlow.update { current ->
@@ -211,5 +276,29 @@ object PlayerStreamsRepository {
             }
         }
         setJob(job)
+    }
+}
+
+private fun PluginRuntimeResult.toStreamItem(scraper: PluginScraper): StreamItem {
+    val subtitleParts = listOfNotNull(
+        quality?.takeIf { it.isNotBlank() },
+        size?.takeIf { it.isNotBlank() },
+        language?.takeIf { it.isNotBlank() },
+    )
+    return StreamItem(
+        name = name ?: title,
+        description = subtitleParts.joinToString(" • ").ifBlank { null },
+        url = url,
+        infoHash = infoHash,
+        addonName = scraper.name,
+        addonId = "plugin:${scraper.id}",
+    )
+}
+
+private fun String.toPluginTmdbId(): String {
+    return when {
+        startsWith("tmdb:") -> removePrefix("tmdb:").substringBefore(":").ifBlank { this }
+        startsWith("tmdb/") -> removePrefix("tmdb/").substringBefore('/').ifBlank { this }
+        else -> this
     }
 }

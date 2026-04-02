@@ -6,6 +6,7 @@ internal actual object PlatformLocalAccountDataCleaner {
     private val plainKeys = listOf("profile_payload")
     private val profileIndexedPrefixes = listOf(
         "installed_manifest_urls_",
+        "plugins_state_",
         "library_payload_",
         "watched_payload_",
         "watch_progress_payload_",

@@ -57,6 +57,7 @@ fun SettingsScreen(
     onHomescreenClick: () -> Unit = {},
     onContinueWatchingClick: () -> Unit = {},
     onAddonsClick: () -> Unit = {},
+    onPluginsClick: () -> Unit = {},
     onAccountClick: () -> Unit = {},
 ) {
     BoxWithConstraints(
@@ -165,6 +166,7 @@ fun SettingsScreen(
                 onHomescreenClick = onHomescreenClick,
                 onContinueWatchingClick = onContinueWatchingClick,
                 onAddonsClick = onAddonsClick,
+                onPluginsClick = onPluginsClick,
                 onAccountClick = onAccountClick,
             )
         }
@@ -199,6 +201,7 @@ private fun MobileSettingsScreen(
     onHomescreenClick: () -> Unit = {},
     onContinueWatchingClick: () -> Unit = {},
     onAddonsClick: () -> Unit = {},
+    onPluginsClick: () -> Unit = {},
     onAccountClick: () -> Unit = {},
 ) {
     NuvioScreen {
@@ -253,9 +256,11 @@ private fun MobileSettingsScreen(
             SettingsPage.ContentDiscovery -> contentDiscoveryContent(
                 isTablet = false,
                 onAddonsClick = onAddonsClick,
+                onPluginsClick = onPluginsClick,
                 onHomescreenClick = onHomescreenClick,
             )
             SettingsPage.Addons -> addonsSettingsContent()
+            SettingsPage.Plugins -> pluginsSettingsContent()
             SettingsPage.Homescreen -> homescreenSettingsContent(
                 isTablet = false,
                 heroEnabled = homescreenHeroEnabled,
@@ -430,9 +435,11 @@ private fun TabletSettingsScreen(
                 SettingsPage.ContentDiscovery -> contentDiscoveryContent(
                     isTablet = true,
                     onAddonsClick = { openInlinePage(SettingsPage.Addons) },
+                    onPluginsClick = { openInlinePage(SettingsPage.Plugins) },
                     onHomescreenClick = { openInlinePage(SettingsPage.Homescreen) },
                 )
                 SettingsPage.Addons -> addonsSettingsContent()
+                SettingsPage.Plugins -> pluginsSettingsContent()
                 SettingsPage.Homescreen -> homescreenSettingsContent(
                     isTablet = true,
                     heroEnabled = homescreenHeroEnabled,

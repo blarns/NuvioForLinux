@@ -101,6 +101,7 @@ import com.nuvio.app.features.settings.SettingsScreen
 import com.nuvio.app.features.settings.HomescreenSettingsScreen
 import com.nuvio.app.features.settings.ContinueWatchingSettingsScreen
 import com.nuvio.app.features.settings.AddonsSettingsScreen
+import com.nuvio.app.features.settings.PluginsSettingsScreen
 import com.nuvio.app.features.settings.AccountSettingsScreen
 import com.nuvio.app.features.settings.ThemeSettingsRepository
 import com.nuvio.app.features.streams.StreamContext
@@ -135,6 +136,9 @@ object ContinueWatchingSettingsRoute
 
 @Serializable
 object AddonsSettingsRoute
+
+@Serializable
+object PluginsSettingsRoute
 
 @Serializable
 object AccountSettingsRoute
@@ -506,6 +510,7 @@ private fun MainAppContent(
                                     onHomescreenSettingsClick = { navController.navigate(HomescreenSettingsRoute) },
                                     onContinueWatchingSettingsClick = { navController.navigate(ContinueWatchingSettingsRoute) },
                                     onAddonsSettingsClick = { navController.navigate(AddonsSettingsRoute) },
+                                    onPluginsSettingsClick = { navController.navigate(PluginsSettingsRoute) },
                                     onAccountSettingsClick = { navController.navigate(AccountSettingsRoute) },
                                     onInitialHomeContentRendered = { initialHomeReady = true },
                                 )
@@ -816,6 +821,11 @@ private fun MainAppContent(
                         onBack = { navController.popBackStack() },
                     )
                 }
+                composable<PluginsSettingsRoute> {
+                    PluginsSettingsScreen(
+                        onBack = { navController.popBackStack() },
+                    )
+                }
                 composable<AccountSettingsRoute> {
                     AccountSettingsScreen(
                         onBack = { navController.popBackStack() },
@@ -883,6 +893,7 @@ private fun AppTabHost(
     onHomescreenSettingsClick: () -> Unit = {},
     onContinueWatchingSettingsClick: () -> Unit = {},
     onAddonsSettingsClick: () -> Unit = {},
+    onPluginsSettingsClick: () -> Unit = {},
     onAccountSettingsClick: () -> Unit = {},
     onInitialHomeContentRendered: () -> Unit = {},
 ) {
@@ -927,6 +938,7 @@ private fun AppTabHost(
                 onHomescreenClick = onHomescreenSettingsClick,
                 onContinueWatchingClick = onContinueWatchingSettingsClick,
                 onAddonsClick = onAddonsSettingsClick,
+                onPluginsClick = onPluginsSettingsClick,
                 onAccountClick = onAccountSettingsClick,
             )
         }

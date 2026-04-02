@@ -9,10 +9,13 @@ import io.ktor.client.request.accept
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
+import io.ktor.client.request.request
 import io.ktor.client.request.setBody
+import io.ktor.client.request.url
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.isSuccess
 
 actual object AddonStorage {
@@ -130,4 +133,33 @@ actual suspend fun httpPostJsonWithHeaders(
                 throw IllegalStateException("Empty response body")
             }
             payload
+        }
+
+actual suspend fun httpRequestRaw(
+    method: String,
+    url: String,
+    headers: Map<String, String>,
+    body: String,
+): RawHttpResponse =
+    addonHttpClient
+        .request {
+            url(url)
+            this.method = HttpMethod.parse(method.uppercase())
+            headers.forEach { (key, value) ->
+                header(key, value)
+            }
+            if (this.method == HttpMethod.Post || this.method == HttpMethod.Put || this.method == HttpMethod.Patch) {
+                setBody(body)
+            }
+        }
+        .let { response ->
+            RawHttpResponse(
+                status = response.status.value,
+                statusText = response.status.description,
+                url = response.call.request.url.toString(),
+                body = response.bodyAsText(),
+                headers = response.headers.entries().associate { (name, values) ->
+                    name.lowercase() to values.joinToString(",")
+                },
+            )
         }
