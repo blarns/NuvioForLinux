@@ -3,6 +3,7 @@ package com.nuvio.app.features.details.components
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.ui.NuvioShelfSection
 import com.nuvio.app.features.home.MetaPreview
@@ -16,6 +17,7 @@ fun DetailPosterRailSection(
     items: List<MetaPreview>,
     watchedKeys: Set<String>,
     modifier: Modifier = Modifier,
+    headerHorizontalPadding: Dp = 0.dp,
     onPosterClick: ((MetaPreview) -> Unit)? = null,
     onPosterLongClick: ((MetaPreview) -> Unit)? = null,
 ) {
@@ -25,6 +27,7 @@ fun DetailPosterRailSection(
         title = title,
         entries = items,
         modifier = modifier,
+        headerHorizontalPadding = headerHorizontalPadding,
         rowContentPadding = PaddingValues(0.dp),
         showHeaderAccent = false,
         key = { item -> item.stableKey() },

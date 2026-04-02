@@ -79,6 +79,8 @@ import com.nuvio.app.features.catalog.CatalogScreen
 import com.nuvio.app.features.catalog.INTERNAL_LIBRARY_MANIFEST_URL
 import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.details.MetaDetailsScreen
+import com.nuvio.app.features.details.MetaPerson
+import com.nuvio.app.features.details.PersonDetailScreen
 import com.nuvio.app.features.home.HomeCatalogSection
 import com.nuvio.app.features.home.HomeScreen
 import com.nuvio.app.features.home.MetaPreview
@@ -133,6 +135,13 @@ object TabsRoute
 
 @Serializable
 data class DetailRoute(val type: String, val id: String)
+
+@Serializable
+data class PersonDetailRoute(
+    val personId: Int,
+    val personName: String,
+    val preferCrew: Boolean = false,
+)
 
 @Serializable
 object HomescreenSettingsRoute
@@ -586,6 +595,53 @@ private fun MainAppContent(
                             navController.popBackStack()
                         },
                         onPlay = onPlay,
+                        onOpenMeta = { preview ->
+                            coroutineScope.launch {
+                                val resolvedId = if (preview.id.startsWith("tmdb:")) {
+                                    val tmdbId = preview.id.removePrefix("tmdb:").toIntOrNull()
+                                    tmdbId?.let {
+                                        TmdbService.tmdbToImdb(
+                                            tmdbId = it,
+                                            mediaType = preview.type,
+                                        )
+                                    } ?: preview.id
+                                } else {
+                                    preview.id
+                                }
+                                navController.navigate(
+                                    DetailRoute(
+                                        type = preview.type,
+                                        id = resolvedId,
+                                    ),
+                                )
+                            }
+                        },
+                        onCastClick = { person ->
+                            val tmdbId = person.tmdbId
+                            if (tmdbId != null && tmdbId > 0) {
+                                navController.navigate(
+                                    PersonDetailRoute(
+                                        personId = tmdbId,
+                                        personName = person.name,
+                                        preferCrew = person.role?.let {
+                                            it.equals("Director", ignoreCase = true) ||
+                                                it.equals("Writer", ignoreCase = true) ||
+                                                it.equals("Creator", ignoreCase = true)
+                                        } ?: false,
+                                    ),
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                composable<PersonDetailRoute> { backStackEntry ->
+                    val route = backStackEntry.toRoute<PersonDetailRoute>()
+                    PersonDetailScreen(
+                        personId = route.personId,
+                        personName = route.personName,
+                        preferCrew = route.preferCrew,
+                        onBack = { navController.popBackStack() },
                         onOpenMeta = { preview ->
                             coroutineScope.launch {
                                 val resolvedId = if (preview.id.startsWith("tmdb:")) {

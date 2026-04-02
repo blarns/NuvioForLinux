@@ -7,6 +7,7 @@ import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.MetaPerson
 import com.nuvio.app.features.details.MetaTrailer
 import com.nuvio.app.features.details.MetaVideo
+import com.nuvio.app.features.details.PersonDetail
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.PosterShape
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +28,166 @@ object TmdbMetadataService {
     private val moreLikeThisCache = mutableMapOf<String, List<MetaPreview>>()
     private val collectionCache = mutableMapOf<String, Pair<String?, List<MetaPreview>>>()
     private val trailerCache = mutableMapOf<String, List<MetaTrailer>>()
+    private val personCache = mutableMapOf<String, PersonDetail>()
+
+    suspend fun fetchPersonDetail(
+        personId: Int,
+        preferCrewCredits: Boolean? = null,
+    ): PersonDetail? = withContext(Dispatchers.Default) {
+        val settings = TmdbSettingsRepository.snapshot()
+        if (!settings.enabled || !settings.hasApiKey) return@withContext null
+        val language = normalizeTmdbLanguage(settings.language)
+        val cacheKey = "$personId:${preferCrewCredits?.toString() ?: "auto"}:$language"
+        personCache[cacheKey]?.let { return@withContext it }
+
+        try {
+            val (person, credits) = coroutineScope {
+                val personDeferred = async {
+                    fetch<TmdbPersonResponse>(
+                        endpoint = "person/$personId",
+                        query = mapOf("language" to language),
+                    )
+                }
+                val creditsDeferred = async {
+                    fetch<TmdbPersonCombinedCreditsResponse>(
+                        endpoint = "person/$personId/combined_credits",
+                        query = mapOf("language" to language),
+                    )
+                }
+                personDeferred.await() to creditsDeferred.await()
+            }
+
+            if (person == null) return@withContext null
+
+            val biography = if (person.biography.isNullOrBlank() && language != "en") {
+                runCatching {
+                    fetch<TmdbPersonResponse>(
+                        endpoint = "person/$personId",
+                        query = mapOf("language" to "en"),
+                    )?.biography
+                }.getOrNull()
+            } else {
+                person.biography
+            }?.takeIf { it.isNotBlank() }
+
+            val preferCrew = preferCrewCredits ?: shouldPreferCrewCredits(person.knownForDepartment)
+
+            val castMovieCredits = mapPersonMovieCreditsFromCast(credits?.cast.orEmpty())
+            val crewMovieCredits = mapPersonMovieCreditsFromCrew(credits?.crew.orEmpty())
+            val movieCredits = when {
+                preferCrew && crewMovieCredits.isNotEmpty() -> crewMovieCredits
+                castMovieCredits.isNotEmpty() -> castMovieCredits
+                else -> crewMovieCredits
+            }
+
+            val castTvCredits = mapPersonTvCreditsFromCast(credits?.cast.orEmpty())
+            val crewTvCredits = mapPersonTvCreditsFromCrew(credits?.crew.orEmpty())
+            val tvCredits = when {
+                preferCrew && crewTvCredits.isNotEmpty() -> crewTvCredits
+                castTvCredits.isNotEmpty() -> castTvCredits
+                else -> crewTvCredits
+            }
+
+            val detail = PersonDetail(
+                tmdbId = person.id ?: personId,
+                name = person.name ?: "Unknown",
+                biography = biography,
+                birthday = person.birthday?.takeIf { it.isNotBlank() },
+                deathday = person.deathday?.takeIf { it.isNotBlank() },
+                placeOfBirth = person.placeOfBirth?.takeIf { it.isNotBlank() },
+                profilePhoto = buildImageUrl(person.profilePath, "w500"),
+                knownFor = person.knownForDepartment?.takeIf { it.isNotBlank() },
+                movieCredits = movieCredits,
+                tvCredits = tvCredits,
+            )
+            personCache[cacheKey] = detail
+            detail
+        } catch (e: Exception) {
+            log.w(e) { "Failed to fetch person detail for $personId" }
+            null
+        }
+    }
+
+    private fun shouldPreferCrewCredits(knownForDepartment: String?): Boolean {
+        val department = knownForDepartment?.trim()?.lowercase() ?: return false
+        return department.isNotBlank() && department != "acting" && department != "actors"
+    }
+
+    private fun mapPersonMovieCreditsFromCast(cast: List<TmdbPersonCreditCast>): List<MetaPreview> {
+        val seen = mutableSetOf<Int>()
+        return cast
+            .filter { it.mediaType == "movie" && it.posterPath != null }
+            .sortedByDescending { it.voteAverage ?: 0.0 }
+            .mapNotNull { credit ->
+                if (!seen.add(credit.id)) return@mapNotNull null
+                val title = credit.title ?: credit.name ?: return@mapNotNull null
+                MetaPreview(
+                    id = "tmdb:${credit.id}",
+                    type = "movie",
+                    name = title,
+                    poster = buildImageUrl(credit.posterPath, "w500"),
+                    description = credit.overview?.takeIf { it.isNotBlank() },
+                    releaseInfo = credit.releaseDate?.take(4),
+                )
+            }
+    }
+
+    private fun mapPersonMovieCreditsFromCrew(crew: List<TmdbPersonCreditCrew>): List<MetaPreview> {
+        val seen = mutableSetOf<Int>()
+        return crew
+            .filter { it.mediaType == "movie" && it.posterPath != null }
+            .sortedByDescending { it.voteAverage ?: 0.0 }
+            .mapNotNull { credit ->
+                if (!seen.add(credit.id)) return@mapNotNull null
+                val title = credit.title ?: credit.name ?: return@mapNotNull null
+                MetaPreview(
+                    id = "tmdb:${credit.id}",
+                    type = "movie",
+                    name = title,
+                    poster = buildImageUrl(credit.posterPath, "w500"),
+                    description = credit.overview?.takeIf { it.isNotBlank() },
+                    releaseInfo = credit.releaseDate?.take(4),
+                )
+            }
+    }
+
+    private fun mapPersonTvCreditsFromCast(cast: List<TmdbPersonCreditCast>): List<MetaPreview> {
+        val seen = mutableSetOf<Int>()
+        return cast
+            .filter { it.mediaType == "tv" && it.posterPath != null }
+            .sortedByDescending { it.voteAverage ?: 0.0 }
+            .mapNotNull { credit ->
+                if (!seen.add(credit.id)) return@mapNotNull null
+                val title = credit.name ?: credit.title ?: return@mapNotNull null
+                MetaPreview(
+                    id = "tmdb:${credit.id}",
+                    type = "series",
+                    name = title,
+                    poster = buildImageUrl(credit.posterPath, "w500"),
+                    description = credit.overview?.takeIf { it.isNotBlank() },
+                    releaseInfo = credit.firstAirDate?.take(4),
+                )
+            }
+    }
+
+    private fun mapPersonTvCreditsFromCrew(crew: List<TmdbPersonCreditCrew>): List<MetaPreview> {
+        val seen = mutableSetOf<Int>()
+        return crew
+            .filter { it.mediaType == "tv" && it.posterPath != null }
+            .sortedByDescending { it.voteAverage ?: 0.0 }
+            .mapNotNull { credit ->
+                if (!seen.add(credit.id)) return@mapNotNull null
+                val title = credit.name ?: credit.title ?: return@mapNotNull null
+                MetaPreview(
+                    id = "tmdb:${credit.id}",
+                    type = "series",
+                    name = title,
+                    poster = buildImageUrl(credit.posterPath, "w500"),
+                    description = credit.overview?.takeIf { it.isNotBlank() },
+                    releaseInfo = credit.firstAirDate?.take(4),
+                )
+            }
+    }
 
     suspend fun enrichMeta(
         meta: MetaDetails,
@@ -671,6 +832,7 @@ private fun buildPeople(
                 name = name,
                 role = "Creator",
                 photo = buildImageUrl(creator.profilePath, "w500"),
+                tmdbId = creator.id,
             )
         }
     } else {
@@ -685,6 +847,7 @@ private fun buildPeople(
                 name = name,
                 role = "Director",
                 photo = buildImageUrl(crew.profilePath, "w500"),
+                tmdbId = crew.id,
             )
         }
 
@@ -699,6 +862,7 @@ private fun buildPeople(
                 name = name,
                 role = "Writer",
                 photo = buildImageUrl(crew.profilePath, "w500"),
+                tmdbId = crew.id,
             )
         }
 
@@ -709,6 +873,7 @@ private fun buildPeople(
                 name = name,
                 role = castMember.character?.trim()?.takeIf(String::isNotBlank),
                 photo = buildImageUrl(castMember.profilePath, "w500"),
+                tmdbId = castMember.id,
             )
         }
 
@@ -1062,4 +1227,54 @@ private data class TmdbEpisodeResponse(
     @SerialName("air_date") val airDate: String? = null,
     val runtime: Int? = null,
     @SerialName("episode_number") val episodeNumber: Int? = null,
+)
+
+// ─── Person Detail Models ───
+
+@Serializable
+private data class TmdbPersonResponse(
+    val id: Int? = null,
+    val name: String? = null,
+    val biography: String? = null,
+    val birthday: String? = null,
+    val deathday: String? = null,
+    @SerialName("place_of_birth") val placeOfBirth: String? = null,
+    @SerialName("profile_path") val profilePath: String? = null,
+    @SerialName("known_for_department") val knownForDepartment: String? = null,
+)
+
+@Serializable
+private data class TmdbPersonCombinedCreditsResponse(
+    val cast: List<TmdbPersonCreditCast> = emptyList(),
+    val crew: List<TmdbPersonCreditCrew> = emptyList(),
+)
+
+@Serializable
+private data class TmdbPersonCreditCast(
+    val id: Int = 0,
+    @SerialName("media_type") val mediaType: String? = null,
+    val title: String? = null,
+    val name: String? = null,
+    val character: String? = null,
+    @SerialName("poster_path") val posterPath: String? = null,
+    @SerialName("backdrop_path") val backdropPath: String? = null,
+    val overview: String? = null,
+    @SerialName("release_date") val releaseDate: String? = null,
+    @SerialName("first_air_date") val firstAirDate: String? = null,
+    @SerialName("vote_average") val voteAverage: Double? = null,
+)
+
+@Serializable
+private data class TmdbPersonCreditCrew(
+    val id: Int = 0,
+    @SerialName("media_type") val mediaType: String? = null,
+    val title: String? = null,
+    val name: String? = null,
+    val job: String? = null,
+    @SerialName("poster_path") val posterPath: String? = null,
+    @SerialName("backdrop_path") val backdropPath: String? = null,
+    val overview: String? = null,
+    @SerialName("release_date") val releaseDate: String? = null,
+    @SerialName("first_air_date") val firstAirDate: String? = null,
+    @SerialName("vote_average") val voteAverage: Double? = null,
 )

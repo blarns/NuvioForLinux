@@ -60,6 +60,7 @@ data class MetaPerson(
     val name: String,
     val role: String? = null,
     val photo: String? = null,
+    val tmdbId: Int? = null,
 )
 
 data class MetaCompany(

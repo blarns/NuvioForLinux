@@ -1,6 +1,7 @@
 package com.nuvio.app.features.details.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -31,6 +32,7 @@ import com.nuvio.app.features.details.MetaPerson
 fun DetailCastSection(
     cast: List<MetaPerson>,
     modifier: Modifier = Modifier,
+    onCastClick: ((MetaPerson) -> Unit)? = null,
 ) {
     if (cast.isEmpty()) return
 
@@ -51,6 +53,11 @@ fun DetailCastSection(
                     CastItem(
                         person = person,
                         sizing = sizing,
+                        onClick = if (onCastClick != null && person.tmdbId != null && person.tmdbId > 0) {
+                            { onCastClick(person) }
+                        } else {
+                            null
+                        },
                     )
                 }
             }
@@ -63,9 +70,12 @@ private fun CastItem(
     person: MetaPerson,
     modifier: Modifier = Modifier,
     sizing: CastSectionSizing,
+    onClick: (() -> Unit)? = null,
 ) {
     Column(
-        modifier = modifier.width(sizing.itemWidth),
+        modifier = modifier
+            .width(sizing.itemWidth)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {

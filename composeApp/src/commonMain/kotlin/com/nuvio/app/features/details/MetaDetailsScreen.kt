@@ -89,6 +89,7 @@ fun MetaDetailsScreen(
     onBack: () -> Unit,
     onPlay: ((type: String, videoId: String, parentMetaId: String, parentMetaType: String, title: String, logo: String?, poster: String?, background: String?, seasonNumber: Int?, episodeNumber: Int?, episodeTitle: String?, episodeThumbnail: String?, pauseDescription: String?, resumePositionMs: Long?) -> Unit)? = null,
     onOpenMeta: ((MetaPreview) -> Unit)? = null,
+    onCastClick: ((MetaPerson) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val uiState by MetaDetailsRepository.uiState.collectAsStateWithLifecycle()
@@ -514,6 +515,7 @@ fun MetaDetailsScreen(
                                     onEpisodeClick = onEpisodePlayClick,
                                     onEpisodeLongPress = { video -> selectedEpisodeForActions = video },
                                     onOpenMeta = onOpenMeta,
+                                    onCastClick = onCastClick,
                                 )
 
                                 Spacer(modifier = Modifier.height(32.dp + nuvioPlatformExtraBottomPadding))
@@ -752,6 +754,7 @@ private fun ConfiguredMetaSections(
     onEpisodeClick: (MetaVideo) -> Unit,
     onEpisodeLongPress: (MetaVideo) -> Unit,
     onOpenMeta: ((MetaPreview) -> Unit)?,
+    onCastClick: ((MetaPerson) -> Unit)?,
 ) {
     settings.items
         .filter { it.enabled }
@@ -779,7 +782,10 @@ private fun ConfiguredMetaSections(
                 }
 
                 MetaScreenSectionKey.CAST -> {
-                    DetailCastSection(cast = meta.cast)
+                    DetailCastSection(
+                        cast = meta.cast,
+                        onCastClick = onCastClick,
+                    )
                 }
 
                 MetaScreenSectionKey.COMMENTS -> {
