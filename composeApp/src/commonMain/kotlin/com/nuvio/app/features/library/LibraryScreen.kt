@@ -1,10 +1,14 @@
 package com.nuvio.app.features.library
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,10 +44,17 @@ fun LibraryScreen(
         horizontalPadding = 0.dp,
     ) {
         stickyHeader {
-            NuvioScreenHeader(
-                title = if (isTraktSource) "Trakt Library" else "Library",
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
+            androidx.compose.foundation.layout.Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background),
+            ) {
+                NuvioScreenHeader(
+                    title = if (isTraktSource) "Trakt Library" else "Library",
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+            }
         }
 
         when {
