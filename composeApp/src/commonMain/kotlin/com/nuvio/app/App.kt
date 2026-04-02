@@ -562,7 +562,6 @@ private fun MainAppContent(
                         type = route.type,
                         id = route.id,
                         onBack = {
-                            MetaDetailsRepository.clear()
                             navController.popBackStack()
                         },
                         onPlay = onPlay,

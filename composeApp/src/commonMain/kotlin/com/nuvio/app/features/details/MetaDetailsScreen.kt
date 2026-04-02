@@ -99,6 +99,7 @@ fun MetaDetailsScreen(
     modifier: Modifier = Modifier,
 ) {
     val uiState by MetaDetailsRepository.uiState.collectAsStateWithLifecycle()
+    val displayedMeta = MetaDetailsRepository.peek(type, id)
     val traktAuthUiState by remember {
         TraktAuthRepository.ensureLoaded()
         TraktAuthRepository.uiState
@@ -116,8 +117,7 @@ fun MetaDetailsScreen(
         WatchProgressRepository.uiState
     }.collectAsStateWithLifecycle()
     val screenAlpha = remember(type, id) { Animatable(0f) }
-    val requestedMeta = uiState.meta?.takeIf { it.type == type && it.id == id }
-    val needsFreshLoad = requestedMeta == null && !uiState.isLoading
+    val needsFreshLoad = displayedMeta == null && !uiState.isLoading
     var selectedEpisodeForActions by remember(type, id) { mutableStateOf<MetaVideo?>(null) }
     val commentsEnabled by remember {
         TraktCommentsSettings.ensureLoaded()
@@ -139,11 +139,11 @@ fun MetaDetailsScreen(
 
     val shouldShowComments = commentsEnabled &&
         traktAuthUiState.mode == TraktConnectionMode.CONNECTED &&
-        requestedMeta != null &&
-        requestedMeta.type.lowercase().let { it == "movie" || it == "series" || it == "show" || it == "tv" }
+        displayedMeta != null &&
+        displayedMeta.type.lowercase().let { it == "movie" || it == "series" || it == "show" || it == "tv" }
 
-    LaunchedEffect(requestedMeta?.id, shouldShowComments) {
-        if (!shouldShowComments || requestedMeta == null) {
+    LaunchedEffect(displayedMeta?.id, shouldShowComments) {
+        if (!shouldShowComments || displayedMeta == null) {
             comments = emptyList()
             commentsCurrentPage = 0
             commentsPageCount = 0
@@ -153,7 +153,7 @@ fun MetaDetailsScreen(
         isCommentsLoading = true
         commentsError = null
         try {
-            val result = TraktCommentsRepository.getCommentsPage(requestedMeta, page = 1)
+            val result = TraktCommentsRepository.getCommentsPage(displayedMeta, page = 1)
             comments = result.items
             commentsCurrentPage = result.currentPage
             commentsPageCount = result.pageCount
@@ -183,14 +183,14 @@ fun MetaDetailsScreen(
             .background(MaterialTheme.colorScheme.background),
     ) {
         when {
-            uiState.isLoading || (uiState.meta != null && requestedMeta == null) -> {
+            displayedMeta == null && uiState.isLoading -> {
                 CircularProgressIndicator(
                     modifier = Modifier.align(Alignment.Center),
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
 
-            uiState.errorMessage != null -> {
+            displayedMeta == null && uiState.errorMessage != null -> {
                 Column(
                     modifier = Modifier
                         .align(Alignment.Center)
@@ -211,8 +211,8 @@ fun MetaDetailsScreen(
                 }
             }
 
-            requestedMeta != null -> {
-                val meta = requestedMeta
+            displayedMeta != null -> {
+                val meta = displayedMeta
                 val todayIsoDate = CurrentDateProvider.todayIsoDate()
                 val isSaved = remember(libraryUiState.items, meta.id) {
                     libraryUiState.items.any { it.id == meta.id }
@@ -754,7 +754,7 @@ fun MetaDetailsScreen(
             }
         }
 
-        if (requestedMeta == null) {
+        if (displayedMeta == null) {
             NuvioBackButton(
                 onClick = onBack,
                 modifier = Modifier.padding(

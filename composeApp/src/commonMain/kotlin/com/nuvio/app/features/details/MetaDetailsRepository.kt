@@ -88,6 +88,12 @@ object MetaDetailsRepository {
         }
     }
 
+    fun peek(type: String, id: String): MetaDetails? {
+        val requestKey = "$type:$id"
+        return cachedMetaByRequestKey[requestKey]
+            ?: _uiState.value.meta?.takeIf { it.type == type && it.id == id }
+    }
+
     fun clear() {
         activeRequestKey = null
         cachedMetaByRequestKey.clear()
