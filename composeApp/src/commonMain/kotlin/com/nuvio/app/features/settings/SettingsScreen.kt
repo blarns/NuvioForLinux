@@ -45,6 +45,7 @@ import com.nuvio.app.features.mdblist.MdbListSettingsRepository
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.trakt.TraktAuthUiState
 import com.nuvio.app.features.trakt.TraktAuthRepository
+import com.nuvio.app.features.trakt.TraktCommentsSettings
 import com.nuvio.app.features.tmdb.TmdbSettings
 import com.nuvio.app.features.tmdb.TmdbSettingsRepository
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepository
@@ -86,6 +87,10 @@ fun SettingsScreen(
         val traktAuthUiState by remember {
             TraktAuthRepository.ensureLoaded()
             TraktAuthRepository.uiState
+        }.collectAsStateWithLifecycle()
+        val traktCommentsEnabled by remember {
+            TraktCommentsSettings.ensureLoaded()
+            TraktCommentsSettings.enabled
         }.collectAsStateWithLifecycle()
         val addonsUiState by remember {
             AddonRepository.initialize()
@@ -133,6 +138,7 @@ fun SettingsScreen(
                 tmdbSettings = tmdbSettings,
                 mdbListSettings = mdbListSettings,
                 traktAuthUiState = traktAuthUiState,
+                traktCommentsEnabled = traktCommentsEnabled,
                 homescreenHeroEnabled = homescreenSettingsUiState.heroEnabled,
                 homescreenItems = homescreenSettingsUiState.items,
                 continueWatchingPreferencesUiState = continueWatchingPreferencesUiState,
@@ -159,6 +165,7 @@ fun SettingsScreen(
                 tmdbSettings = tmdbSettings,
                 mdbListSettings = mdbListSettings,
                 traktAuthUiState = traktAuthUiState,
+                traktCommentsEnabled = traktCommentsEnabled,
                 homescreenHeroEnabled = homescreenSettingsUiState.heroEnabled,
                 homescreenItems = homescreenSettingsUiState.items,
                 continueWatchingPreferencesUiState = continueWatchingPreferencesUiState,
@@ -194,6 +201,7 @@ private fun MobileSettingsScreen(
     tmdbSettings: TmdbSettings,
     mdbListSettings: MdbListSettings,
     traktAuthUiState: TraktAuthUiState,
+    traktCommentsEnabled: Boolean,
     homescreenHeroEnabled: Boolean,
     homescreenItems: List<HomeCatalogSettingsItem>,
     continueWatchingPreferencesUiState: ContinueWatchingPreferencesUiState,
@@ -283,6 +291,8 @@ private fun MobileSettingsScreen(
             SettingsPage.TraktAuthentication -> traktSettingsContent(
                 isTablet = false,
                 uiState = traktAuthUiState,
+                commentsEnabled = traktCommentsEnabled,
+                onCommentsEnabledChange = TraktCommentsSettings::setEnabled,
             )
         }
     }
@@ -309,6 +319,7 @@ private fun TabletSettingsScreen(
     tmdbSettings: TmdbSettings,
     mdbListSettings: MdbListSettings,
     traktAuthUiState: TraktAuthUiState,
+    traktCommentsEnabled: Boolean,
     homescreenHeroEnabled: Boolean,
     homescreenItems: List<HomeCatalogSettingsItem>,
     continueWatchingPreferencesUiState: ContinueWatchingPreferencesUiState,
@@ -462,6 +473,8 @@ private fun TabletSettingsScreen(
                 SettingsPage.TraktAuthentication -> traktSettingsContent(
                     isTablet = true,
                     uiState = traktAuthUiState,
+                    commentsEnabled = traktCommentsEnabled,
+                    onCommentsEnabledChange = TraktCommentsSettings::setEnabled,
                 )
             }
         }

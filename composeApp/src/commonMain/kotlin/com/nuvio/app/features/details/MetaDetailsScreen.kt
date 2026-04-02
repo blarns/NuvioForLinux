@@ -54,8 +54,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.ui.NuvioBackButton
 import com.nuvio.app.core.ui.nuvioPlatformExtraBottomPadding
 import com.nuvio.app.features.details.components.DetailActionButtons
+import com.nuvio.app.features.details.components.CommentDetailSheet
 import com.nuvio.app.features.details.components.DetailAdditionalInfoSection
 import com.nuvio.app.features.details.components.DetailCastSection
+import com.nuvio.app.features.details.components.DetailCommentsSection
 import com.nuvio.app.features.details.components.DetailFloatingHeader
 import com.nuvio.app.features.details.components.DetailHero
 import com.nuvio.app.features.details.components.DetailMetaInfo
@@ -69,6 +71,9 @@ import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.library.LibraryRepository
 import com.nuvio.app.features.library.toLibraryItem
 import com.nuvio.app.features.trakt.TraktAuthRepository
+import com.nuvio.app.features.trakt.TraktCommentReview
+import com.nuvio.app.features.trakt.TraktCommentsRepository
+import com.nuvio.app.features.trakt.TraktCommentsSettings
 import com.nuvio.app.features.trakt.TraktConnectionMode
 import com.nuvio.app.features.trakt.TraktListTab
 import com.nuvio.app.features.trailer.TrailerPlaybackResolver
@@ -114,12 +119,49 @@ fun MetaDetailsScreen(
     val requestedMeta = uiState.meta?.takeIf { it.type == type && it.id == id }
     val needsFreshLoad = requestedMeta == null && !uiState.isLoading
     var selectedEpisodeForActions by remember(type, id) { mutableStateOf<MetaVideo?>(null) }
+    val commentsEnabled by remember {
+        TraktCommentsSettings.ensureLoaded()
+        TraktCommentsSettings.enabled
+    }.collectAsStateWithLifecycle()
+    var comments by remember(type, id) { mutableStateOf<List<TraktCommentReview>>(emptyList()) }
+    var commentsCurrentPage by remember(type, id) { mutableIntStateOf(0) }
+    var commentsPageCount by remember(type, id) { mutableIntStateOf(0) }
+    var isCommentsLoading by remember(type, id) { mutableStateOf(false) }
+    var isCommentsLoadingMore by remember(type, id) { mutableStateOf(false) }
+    var commentsError by remember(type, id) { mutableStateOf<String?>(null) }
+    var selectedComment by remember(type, id) { mutableStateOf<TraktCommentReview?>(null) }
     val detailsScope = rememberCoroutineScope()
     var showLibraryListPicker by remember(type, id) { mutableStateOf(false) }
     var pickerTabs by remember(type, id) { mutableStateOf<List<TraktListTab>>(emptyList()) }
     var pickerMembership by remember(type, id) { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     var pickerPending by remember(type, id) { mutableStateOf(false) }
     var pickerError by remember(type, id) { mutableStateOf<String?>(null) }
+
+    val shouldShowComments = commentsEnabled &&
+        traktAuthUiState.mode == TraktConnectionMode.CONNECTED &&
+        requestedMeta != null &&
+        requestedMeta.type.lowercase().let { it == "movie" || it == "series" || it == "show" || it == "tv" }
+
+    LaunchedEffect(requestedMeta?.id, shouldShowComments) {
+        if (!shouldShowComments || requestedMeta == null) {
+            comments = emptyList()
+            commentsCurrentPage = 0
+            commentsPageCount = 0
+            commentsError = null
+            return@LaunchedEffect
+        }
+        isCommentsLoading = true
+        commentsError = null
+        try {
+            val result = TraktCommentsRepository.getCommentsPage(requestedMeta, page = 1)
+            comments = result.items
+            commentsCurrentPage = result.currentPage
+            commentsPageCount = result.pageCount
+        } catch (e: Exception) {
+            commentsError = e.message ?: "Failed to load comments"
+        }
+        isCommentsLoading = false
+    }
 
     LaunchedEffect(type, id, needsFreshLoad) {
         if (!needsFreshLoad) {
@@ -405,6 +447,47 @@ fun MetaDetailsScreen(
 
                                 DetailCastSection(cast = meta.cast)
 
+                                if (shouldShowComments && (isCommentsLoading || comments.isNotEmpty() || !commentsError.isNullOrBlank())) {
+                                    DetailCommentsSection(
+                                        comments = comments,
+                                        isLoading = isCommentsLoading,
+                                        isLoadingMore = isCommentsLoadingMore,
+                                        canLoadMore = commentsCurrentPage < commentsPageCount,
+                                        error = commentsError,
+                                        onRetry = {
+                                            detailsScope.launch {
+                                                isCommentsLoading = true
+                                                commentsError = null
+                                                try {
+                                                    val result = TraktCommentsRepository.getCommentsPage(meta, page = 1, forceRefresh = true)
+                                                    comments = result.items
+                                                    commentsCurrentPage = result.currentPage
+                                                    commentsPageCount = result.pageCount
+                                                } catch (e: Exception) {
+                                                    commentsError = e.message ?: "Failed to load comments"
+                                                }
+                                                isCommentsLoading = false
+                                            }
+                                        },
+                                        onLoadMore = {
+                                            detailsScope.launch {
+                                                isCommentsLoadingMore = true
+                                                try {
+                                                    val nextPage = commentsCurrentPage + 1
+                                                    val result = TraktCommentsRepository.getCommentsPage(meta, page = nextPage)
+                                                    val existingIds = comments.map { it.id }.toSet()
+                                                    val newComments = result.items.filter { it.id !in existingIds }
+                                                    comments = comments + newComments
+                                                    commentsCurrentPage = result.currentPage
+                                                    commentsPageCount = result.pageCount
+                                                } catch (_: Exception) { }
+                                                isCommentsLoadingMore = false
+                                            }
+                                        },
+                                        onCommentClick = { review -> selectedComment = review },
+                                    )
+                                }
+
                                 if (hasTrailersSection) {
                                     DetailTrailersSection(
                                         trailers = meta.trailers,
@@ -628,6 +711,44 @@ fun MetaDetailsScreen(
                                 }
                             },
                         )
+
+                        selectedComment?.let { comment ->
+                            val commentIndex = comments.indexOfFirst { it.id == comment.id }.coerceAtLeast(0)
+                            CommentDetailSheet(
+                                comment = comment,
+                                currentIndex = commentIndex,
+                                totalCount = comments.size,
+                                canGoBack = commentIndex > 0,
+                                canGoForward = commentIndex < comments.size - 1,
+                                onPrevious = {
+                                    if (commentIndex > 0) {
+                                        selectedComment = comments[commentIndex - 1]
+                                    }
+                                },
+                                onNext = {
+                                    val nextIndex = commentIndex + 1
+                                    if (nextIndex < comments.size) {
+                                        selectedComment = comments[nextIndex]
+                                    }
+                                    if (nextIndex >= comments.size - 3 && commentsCurrentPage < commentsPageCount) {
+                                        detailsScope.launch {
+                                            isCommentsLoadingMore = true
+                                            try {
+                                                val nextPage = commentsCurrentPage + 1
+                                                val result = TraktCommentsRepository.getCommentsPage(meta, page = nextPage)
+                                                val existingIds = comments.map { it.id }.toSet()
+                                                val newComments = result.items.filter { it.id !in existingIds }
+                                                comments = comments + newComments
+                                                commentsCurrentPage = result.currentPage
+                                                commentsPageCount = result.pageCount
+                                            } catch (_: Exception) { }
+                                            isCommentsLoadingMore = false
+                                        }
+                                    }
+                                },
+                                onDismiss = { selectedComment = null },
+                            )
+                        }
                     }
                 }
             }

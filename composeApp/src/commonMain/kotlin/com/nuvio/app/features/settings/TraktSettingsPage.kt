@@ -28,6 +28,8 @@ import com.nuvio.app.features.trakt.traktBrandPainter
 internal fun LazyListScope.traktSettingsContent(
     isTablet: Boolean,
     uiState: TraktAuthUiState,
+    commentsEnabled: Boolean,
+    onCommentsEnabledChange: (Boolean) -> Unit,
 ) {
     item {
         SettingsGroup(isTablet = isTablet) {
@@ -45,6 +47,25 @@ internal fun LazyListScope.traktSettingsContent(
                     isTablet = isTablet,
                     uiState = uiState,
                 )
+            }
+        }
+    }
+
+    if (uiState.mode == TraktConnectionMode.CONNECTED) {
+        item {
+            SettingsSection(
+                title = "FEATURES",
+                isTablet = isTablet,
+            ) {
+                SettingsGroup(isTablet = isTablet) {
+                    SettingsSwitchRow(
+                        title = "Comments",
+                        description = "Show Trakt comments on movie and show details",
+                        checked = commentsEnabled,
+                        isTablet = isTablet,
+                        onCheckedChange = onCommentsEnabledChange,
+                    )
+                }
             }
         }
     }
