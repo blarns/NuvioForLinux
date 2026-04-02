@@ -82,6 +82,7 @@ import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watched.previousReleasedEpisodesBefore
 import com.nuvio.app.features.watched.releasedEpisodesForSeason
 import com.nuvio.app.features.watchprogress.CurrentDateProvider
+import com.nuvio.app.features.watchprogress.WatchProgressEntry
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepository
@@ -100,6 +101,10 @@ fun MetaDetailsScreen(
 ) {
     val uiState by MetaDetailsRepository.uiState.collectAsStateWithLifecycle()
     val displayedMeta = MetaDetailsRepository.peek(type, id)
+    val metaScreenSettingsUiState by remember {
+        MetaScreenSettingsRepository.ensureLoaded()
+        MetaScreenSettingsRepository.uiState
+    }.collectAsStateWithLifecycle()
     val traktAuthUiState by remember {
         TraktAuthRepository.ensureLoaded()
         TraktAuthRepository.uiState
@@ -343,6 +348,76 @@ fun MetaDetailsScreen(
                         else -> "Play"
                     }
                 }
+                val onPrimaryPlayClick: () -> Unit = {
+                    when {
+                        (meta.type == "series" || hasEpisodes) && seriesAction != null -> {
+                            onPlay?.invoke(
+                                meta.type,
+                                seriesStreamVideoId ?: seriesAction.videoId,
+                                meta.id,
+                                meta.type,
+                                meta.name,
+                                meta.logo,
+                                meta.poster,
+                                meta.background,
+                                seriesAction.seasonNumber,
+                                seriesAction.episodeNumber,
+                                seriesAction.episodeTitle,
+                                seriesAction.episodeThumbnail,
+                                seriesPauseDescription,
+                                seriesAction.resumePositionMs,
+                            )
+                        }
+
+                        else -> {
+                            onPlay?.invoke(
+                                meta.type,
+                                meta.id,
+                                meta.id,
+                                meta.type,
+                                meta.name,
+                                meta.logo,
+                                meta.poster,
+                                meta.background,
+                                null,
+                                null,
+                                null,
+                                null,
+                                meta.description,
+                                movieProgress?.lastPositionMs,
+                            )
+                        }
+                    }
+                }
+                val onEpisodePlayClick: (MetaVideo) -> Unit = { video ->
+                    val season = video.season
+                    val episode = video.episode
+                    val playbackVideoId = buildPlaybackVideoId(
+                        parentMetaId = meta.id,
+                        seasonNumber = season,
+                        episodeNumber = episode,
+                        fallbackVideoId = video.id,
+                    )
+                    val streamVideoId = video.id.takeIf { it.isNotBlank() } ?: playbackVideoId
+                    val savedProgress = watchProgressUiState.byVideoId[playbackVideoId]
+                        ?.takeUnless { it.isCompleted }
+                    onPlay?.invoke(
+                        meta.type,
+                        streamVideoId,
+                        meta.id,
+                        meta.type,
+                        meta.name,
+                        meta.logo,
+                        meta.poster,
+                        meta.background,
+                        season,
+                        episode,
+                        video.title,
+                        video.thumbnail,
+                        video.overview,
+                        savedProgress?.lastPositionMs,
+                    )
+                }
                 val scrollState = rememberScrollState()
                 val density = LocalDensity.current
                 val safeAreaTopPx = with(density) {
@@ -390,178 +465,65 @@ fun MetaDetailsScreen(
                                 verticalArrangement = Arrangement.spacedBy(20.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                             ) {
-                                DetailActionButtons(
-                                    playLabel = playButtonLabel,
-                                    saveLabel = if (isSaved) "Saved" else "Save",
-                                    isSaved = isSaved,
+                                ConfiguredMetaSections(
+                                    settings = metaScreenSettingsUiState,
+                                    meta = meta,
                                     isTablet = isTablet,
-                                    onPlayClick = {
-                                        when {
-                                            (meta.type == "series" || hasEpisodes) && seriesAction != null -> {
-                                                onPlay?.invoke(
-                                                    meta.type,
-                                                    seriesStreamVideoId ?: seriesAction.videoId,
-                                                    meta.id,
-                                                    meta.type,
-                                                    meta.name,
-                                                    meta.logo,
-                                                    meta.poster,
-                                                    meta.background,
-                                                    seriesAction.seasonNumber,
-                                                    seriesAction.episodeNumber,
-                                                    seriesAction.episodeTitle,
-                                                    seriesAction.episodeThumbnail,
-                                                    seriesPauseDescription,
-                                                    seriesAction.resumePositionMs,
-                                                )
+                                    playButtonLabel = playButtonLabel,
+                                    isSaved = isSaved,
+                                    onPrimaryPlayClick = onPrimaryPlayClick,
+                                    onSaveClick = toggleSaved,
+                                    hasProductionSection = hasProductionSection,
+                                    hasTrailersSection = hasTrailersSection,
+                                    hasEpisodes = hasEpisodes,
+                                    hasAdditionalInfoSection = hasAdditionalInfoSection,
+                                    hasCollectionSection = hasCollectionSection,
+                                    hasMoreLikeThisSection = hasMoreLikeThisSection,
+                                    shouldShowComments = shouldShowComments,
+                                    comments = comments,
+                                    isCommentsLoading = isCommentsLoading,
+                                    isCommentsLoadingMore = isCommentsLoadingMore,
+                                    commentsCurrentPage = commentsCurrentPage,
+                                    commentsPageCount = commentsPageCount,
+                                    commentsError = commentsError,
+                                    onRetryComments = {
+                                        detailsScope.launch {
+                                            isCommentsLoading = true
+                                            commentsError = null
+                                            try {
+                                                val result = TraktCommentsRepository.getCommentsPage(meta, page = 1, forceRefresh = true)
+                                                comments = result.items
+                                                commentsCurrentPage = result.currentPage
+                                                commentsPageCount = result.pageCount
+                                            } catch (e: Exception) {
+                                                commentsError = e.message ?: "Failed to load comments"
                                             }
-
-                                            else -> {
-                                                onPlay?.invoke(
-                                                    meta.type,
-                                                    meta.id,
-                                                    meta.id,
-                                                    meta.type,
-                                                    meta.name,
-                                                    meta.logo,
-                                                    meta.poster,
-                                                    meta.background,
-                                                    null,
-                                                    null,
-                                                    null,
-                                                    null,
-                                                    meta.description,
-                                                    movieProgress?.lastPositionMs,
-                                                )
-                                            }
+                                            isCommentsLoading = false
                                         }
                                     },
-                                    onSaveClick = toggleSaved,
-                                )
-
-                                DetailMetaInfo(meta = meta)
-
-                                if (hasEpisodes && hasProductionSection) {
-                                    DetailProductionSection(meta = meta)
-                                }
-
-                                DetailCastSection(cast = meta.cast)
-
-                                if (shouldShowComments && (isCommentsLoading || comments.isNotEmpty() || !commentsError.isNullOrBlank())) {
-                                    DetailCommentsSection(
-                                        comments = comments,
-                                        isLoading = isCommentsLoading,
-                                        isLoadingMore = isCommentsLoadingMore,
-                                        canLoadMore = commentsCurrentPage < commentsPageCount,
-                                        error = commentsError,
-                                        onRetry = {
-                                            detailsScope.launch {
-                                                isCommentsLoading = true
-                                                commentsError = null
-                                                try {
-                                                    val result = TraktCommentsRepository.getCommentsPage(meta, page = 1, forceRefresh = true)
-                                                    comments = result.items
-                                                    commentsCurrentPage = result.currentPage
-                                                    commentsPageCount = result.pageCount
-                                                } catch (e: Exception) {
-                                                    commentsError = e.message ?: "Failed to load comments"
-                                                }
-                                                isCommentsLoading = false
-                                            }
-                                        },
-                                        onLoadMore = {
-                                            detailsScope.launch {
-                                                isCommentsLoadingMore = true
-                                                try {
-                                                    val nextPage = commentsCurrentPage + 1
-                                                    val result = TraktCommentsRepository.getCommentsPage(meta, page = nextPage)
-                                                    val existingIds = comments.map { it.id }.toSet()
-                                                    val newComments = result.items.filter { it.id !in existingIds }
-                                                    comments = comments + newComments
-                                                    commentsCurrentPage = result.currentPage
-                                                    commentsPageCount = result.pageCount
-                                                } catch (_: Exception) { }
-                                                isCommentsLoadingMore = false
-                                            }
-                                        },
-                                        onCommentClick = { review -> selectedComment = review },
-                                    )
-                                }
-
-                                if (hasTrailersSection) {
-                                    DetailTrailersSection(
-                                        trailers = meta.trailers,
-                                        onTrailerClick = resolveTrailer,
-                                    )
-                                }
-
-                                if (!hasEpisodes && hasProductionSection) {
-                                    DetailProductionSection(meta = meta)
-                                }
-
-                                DetailSeriesContent(
-                                    meta = meta,
+                                    onLoadMoreComments = {
+                                        detailsScope.launch {
+                                            isCommentsLoadingMore = true
+                                            try {
+                                                val nextPage = commentsCurrentPage + 1
+                                                val result = TraktCommentsRepository.getCommentsPage(meta, page = nextPage)
+                                                val existingIds = comments.map { it.id }.toSet()
+                                                val newComments = result.items.filter { it.id !in existingIds }
+                                                comments = comments + newComments
+                                                commentsCurrentPage = result.currentPage
+                                                commentsPageCount = result.pageCount
+                                            } catch (_: Exception) { }
+                                            isCommentsLoadingMore = false
+                                        }
+                                    },
+                                    onCommentClick = { review -> selectedComment = review },
+                                    onTrailerClick = resolveTrailer,
                                     progressByVideoId = watchProgressUiState.byVideoId,
                                     watchedKeys = watchedUiState.watchedKeys,
-                                    onEpisodeClick = { video ->
-                                        val season = video.season
-                                        val episode = video.episode
-                                        val playbackVideoId = buildPlaybackVideoId(
-                                            parentMetaId = meta.id,
-                                            seasonNumber = season,
-                                            episodeNumber = episode,
-                                            fallbackVideoId = video.id,
-                                        )
-                                        val streamVideoId = video.id.takeIf { it.isNotBlank() } ?: playbackVideoId
-                                        val savedProgress = watchProgressUiState.byVideoId[playbackVideoId]
-                                            ?.takeUnless { it.isCompleted }
-                                        onPlay?.invoke(
-                                            meta.type,
-                                            streamVideoId,
-                                            meta.id,
-                                            meta.type,
-                                            meta.name,
-                                            meta.logo,
-                                            meta.poster,
-                                            meta.background,
-                                            season,
-                                            episode,
-                                            video.title,
-                                            video.thumbnail,
-                                            video.overview,
-                                            savedProgress?.lastPositionMs,
-                                        )
-                                    },
-                                    onEpisodeLongPress = { video ->
-                                        selectedEpisodeForActions = video
-                                    },
+                                    onEpisodeClick = onEpisodePlayClick,
+                                    onEpisodeLongPress = { video -> selectedEpisodeForActions = video },
+                                    onOpenMeta = onOpenMeta,
                                 )
-
-                                if (hasEpisodes && hasAdditionalInfoSection) {
-                                    DetailAdditionalInfoSection(meta = meta)
-                                }
-
-                                if (!hasEpisodes && hasAdditionalInfoSection) {
-                                    DetailAdditionalInfoSection(meta = meta)
-                                }
-
-                                if (!hasEpisodes && hasCollectionSection) {
-                                    DetailPosterRailSection(
-                                        title = meta.collectionName.orEmpty(),
-                                        items = meta.collectionItems,
-                                        watchedKeys = watchedUiState.watchedKeys,
-                                        onPosterClick = onOpenMeta,
-                                    )
-                                }
-
-                                if (hasMoreLikeThisSection) {
-                                    DetailPosterRailSection(
-                                        title = "More Like This",
-                                        items = meta.moreLikeThis,
-                                        watchedKeys = watchedUiState.watchedKeys,
-                                        onPosterClick = onOpenMeta,
-                                    )
-                                }
 
                                 Spacer(modifier = Modifier.height(32.dp + nuvioPlatformExtraBottomPadding))
                             }
@@ -766,6 +728,134 @@ fun MetaDetailsScreen(
             )
         }
     }
+}
+
+@Composable
+private fun ConfiguredMetaSections(
+    settings: MetaScreenSettingsUiState,
+    meta: MetaDetails,
+    isTablet: Boolean,
+    playButtonLabel: String,
+    isSaved: Boolean,
+    onPrimaryPlayClick: () -> Unit,
+    onSaveClick: () -> Unit,
+    hasProductionSection: Boolean,
+    hasTrailersSection: Boolean,
+    hasEpisodes: Boolean,
+    hasAdditionalInfoSection: Boolean,
+    hasCollectionSection: Boolean,
+    hasMoreLikeThisSection: Boolean,
+    shouldShowComments: Boolean,
+    comments: List<TraktCommentReview>,
+    isCommentsLoading: Boolean,
+    isCommentsLoadingMore: Boolean,
+    commentsCurrentPage: Int,
+    commentsPageCount: Int,
+    commentsError: String?,
+    onRetryComments: () -> Unit,
+    onLoadMoreComments: () -> Unit,
+    onCommentClick: (TraktCommentReview) -> Unit,
+    onTrailerClick: (MetaTrailer) -> Unit,
+    progressByVideoId: Map<String, WatchProgressEntry>,
+    watchedKeys: Set<String>,
+    onEpisodeClick: (MetaVideo) -> Unit,
+    onEpisodeLongPress: (MetaVideo) -> Unit,
+    onOpenMeta: ((MetaPreview) -> Unit)?,
+) {
+    settings.items
+        .filter { it.enabled }
+        .forEach { section ->
+            when (section.key) {
+                MetaScreenSectionKey.ACTIONS -> {
+                    DetailActionButtons(
+                        playLabel = playButtonLabel,
+                        saveLabel = if (isSaved) "Saved" else "Save",
+                        isSaved = isSaved,
+                        isTablet = isTablet,
+                        onPlayClick = onPrimaryPlayClick,
+                        onSaveClick = onSaveClick,
+                    )
+                }
+
+                MetaScreenSectionKey.OVERVIEW -> {
+                    DetailMetaInfo(meta = meta)
+                }
+
+                MetaScreenSectionKey.PRODUCTION -> {
+                    if (hasProductionSection) {
+                        DetailProductionSection(meta = meta)
+                    }
+                }
+
+                MetaScreenSectionKey.CAST -> {
+                    DetailCastSection(cast = meta.cast)
+                }
+
+                MetaScreenSectionKey.COMMENTS -> {
+                    if (shouldShowComments && (isCommentsLoading || comments.isNotEmpty() || !commentsError.isNullOrBlank())) {
+                        DetailCommentsSection(
+                            comments = comments,
+                            isLoading = isCommentsLoading,
+                            isLoadingMore = isCommentsLoadingMore,
+                            canLoadMore = commentsCurrentPage < commentsPageCount,
+                            error = commentsError,
+                            onRetry = onRetryComments,
+                            onLoadMore = onLoadMoreComments,
+                            onCommentClick = onCommentClick,
+                        )
+                    }
+                }
+
+                MetaScreenSectionKey.TRAILERS -> {
+                    if (hasTrailersSection) {
+                        DetailTrailersSection(
+                            trailers = meta.trailers,
+                            onTrailerClick = onTrailerClick,
+                        )
+                    }
+                }
+
+                MetaScreenSectionKey.EPISODES -> {
+                    if (hasEpisodes) {
+                        DetailSeriesContent(
+                            meta = meta,
+                            progressByVideoId = progressByVideoId,
+                            watchedKeys = watchedKeys,
+                            onEpisodeClick = onEpisodeClick,
+                            onEpisodeLongPress = onEpisodeLongPress,
+                        )
+                    }
+                }
+
+                MetaScreenSectionKey.DETAILS -> {
+                    if (hasAdditionalInfoSection) {
+                        DetailAdditionalInfoSection(meta = meta)
+                    }
+                }
+
+                MetaScreenSectionKey.COLLECTION -> {
+                    if (!hasEpisodes && hasCollectionSection) {
+                        DetailPosterRailSection(
+                            title = meta.collectionName.orEmpty(),
+                            items = meta.collectionItems,
+                            watchedKeys = watchedKeys,
+                            onPosterClick = onOpenMeta,
+                        )
+                    }
+                }
+
+                MetaScreenSectionKey.MORE_LIKE_THIS -> {
+                    if (hasMoreLikeThisSection) {
+                        DetailPosterRailSection(
+                            title = "More Like This",
+                            items = meta.moreLikeThis,
+                            watchedKeys = watchedKeys,
+                            onPosterClick = onOpenMeta,
+                        )
+                    }
+                }
+            }
+        }
 }
 
 private fun detailTabletContentMaxWidth(maxWidth: Dp, isTablet: Boolean): Dp =

@@ -152,12 +152,41 @@ object HomeCatalogSettingsRepository {
         }
     }
 
+    fun resetToDefaults() {
+        ensureLoaded()
+        heroEnabled = true
+        preferences.clear()
+        normalizePreferences()
+        publish()
+        persist()
+        HomeRepository.applyCurrentSettings()
+    }
+
     fun moveUp(key: String) {
         move(key = key, direction = -1)
     }
 
     fun moveDown(key: String) {
         move(key = key, direction = 1)
+    }
+
+    fun moveByIndex(fromIndex: Int, toIndex: Int) {
+        ensureLoaded()
+        if (definitions.isEmpty()) return
+        val orderedKeys = definitions
+            .sortedBy { definition -> preferences[definition.key]?.order ?: Int.MAX_VALUE }
+            .map { it.key }
+            .toMutableList()
+        if (fromIndex !in orderedKeys.indices || toIndex !in orderedKeys.indices) return
+        if (fromIndex == toIndex) return
+        orderedKeys.add(toIndex, orderedKeys.removeAt(fromIndex))
+        orderedKeys.forEachIndexed { index, itemKey ->
+            val current = preferences[itemKey] ?: return@forEachIndexed
+            preferences[itemKey] = current.copy(order = index)
+        }
+        publish()
+        persist()
+        HomeRepository.applyCurrentSettings()
     }
 
     private fun ensureLoaded() {

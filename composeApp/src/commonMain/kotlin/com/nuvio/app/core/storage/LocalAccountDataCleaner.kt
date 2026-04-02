@@ -3,6 +3,7 @@ package com.nuvio.app.core.storage
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.catalog.CatalogRepository
 import com.nuvio.app.features.details.MetaDetailsRepository
+import com.nuvio.app.features.details.MetaScreenSettingsRepository
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.HomeRepository
 import com.nuvio.app.features.library.LibraryRepository
@@ -29,6 +30,7 @@ internal object LocalAccountDataCleaner {
         PluginRepository.clearLocalState()
         HomeRepository.clear()
         HomeCatalogSettingsRepository.clearLocalState()
+        MetaScreenSettingsRepository.clearLocalState()
         LibraryRepository.clearLocalState()
         WatchProgressRepository.clearLocalState()
         WatchedRepository.clearLocalState()

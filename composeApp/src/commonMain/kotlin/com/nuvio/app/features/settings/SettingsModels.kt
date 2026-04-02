@@ -63,6 +63,11 @@ internal enum class SettingsPage(
         category = SettingsCategory.General,
         parentPage = ContentDiscovery,
     ),
+    MetaScreen(
+        title = "Meta Screen",
+        category = SettingsCategory.General,
+        parentPage = ContentDiscovery,
+    ),
     Integrations(
         title = "Integrations",
         category = SettingsCategory.General,

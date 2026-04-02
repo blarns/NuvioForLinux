@@ -11,6 +11,7 @@ internal fun LazyListScope.contentDiscoveryContent(
     onAddonsClick: () -> Unit,
     onPluginsClick: () -> Unit,
     onHomescreenClick: () -> Unit,
+    onMetaScreenClick: () -> Unit,
 ) {
     item {
         SettingsSection(
@@ -47,6 +48,13 @@ internal fun LazyListScope.contentDiscoveryContent(
                     icon = Icons.Rounded.Tune,
                     isTablet = isTablet,
                     onClick = onHomescreenClick,
+                )
+                SettingsNavigationRow(
+                    title = "Meta Screen",
+                    description = "Disable detail sections and reorder everything below Hero.",
+                    icon = Icons.Rounded.Tune,
+                    isTablet = isTablet,
+                    onClick = onMetaScreenClick,
                 )
             }
         }

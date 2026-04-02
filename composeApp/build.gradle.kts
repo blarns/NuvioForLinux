@@ -158,6 +158,7 @@ kotlin {
             implementation(libs.supabase.functions)
             implementation(libs.quickjs.kt)
             implementation(libs.ksoup)
+            implementation(libs.reorderable)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)

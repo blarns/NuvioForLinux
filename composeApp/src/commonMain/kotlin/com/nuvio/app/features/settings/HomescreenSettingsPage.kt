@@ -1,30 +1,42 @@
 package com.nuvio.app.features.settings
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.features.home.HomeCatalogSettingsItem
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.components.HomeEmptyStateCard
+import sh.calvin.reorderable.ReorderableCollectionItemScope
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
 internal fun LazyListScope.homescreenSettingsContent(
     isTablet: Boolean,
@@ -86,6 +98,11 @@ internal fun LazyListScope.homescreenSettingsContent(
                 title = "CATALOGS",
                 isTablet = isTablet,
             ) {
+                SettingsActionRow(
+                    label = "Reset",
+                    isTablet = isTablet,
+                    onClick = HomeCatalogSettingsRepository::resetToDefaults,
+                )
                 HomescreenCatalogList(
                     isTablet = isTablet,
                     items = items,
@@ -202,26 +219,46 @@ private fun HomescreenCatalogList(
     items: List<HomeCatalogSettingsItem>,
 ) {
     var expandedKey by remember { mutableStateOf<String?>(null) }
+    val hapticFeedback = LocalHapticFeedback.current
+    val lazyListState = rememberLazyListState()
+    val reorderableLazyListState = rememberReorderableLazyListState(
+        lazyListState = lazyListState,
+    ) { from, to ->
+        HomeCatalogSettingsRepository.moveByIndex(from.index, to.index)
+        hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+    }
 
     SettingsGroup(isTablet = isTablet) {
-        items.forEachIndexed { index, item ->
-            if (index > 0) {
-                SettingsGroupDivider(isTablet = isTablet)
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = if (isTablet) 760.dp else 560.dp),
+            state = lazyListState,
+        ) {
+            itemsIndexed(items, key = { _, item -> item.key }) { index, item ->
+                ReorderableItem(reorderableLazyListState, key = item.key) { isDragging ->
+                    val elevation by animateDpAsState(if (isDragging) 4.dp else 0.dp)
+
+                    Surface(shadowElevation = elevation) {
+                        Column {
+                            if (index > 0) {
+                                SettingsGroupDivider(isTablet = isTablet)
+                            }
+                            HomescreenCatalogRow(
+                                item = item,
+                                isTablet = isTablet,
+                                expanded = expandedKey == item.key,
+                                onExpandedChange = { shouldExpand ->
+                                    expandedKey = if (shouldExpand) item.key else null
+                                },
+                                onTitleChange = { HomeCatalogSettingsRepository.setCustomTitle(item.key, it) },
+                                onEnabledChange = { HomeCatalogSettingsRepository.setEnabled(item.key, it) },
+                                dragHandleScope = this@ReorderableItem,
+                            )
+                        }
+                    }
+                }
             }
-            HomescreenCatalogRow(
-                item = item,
-                isTablet = isTablet,
-                expanded = expandedKey == item.key,
-                canMoveUp = index > 0,
-                canMoveDown = index < items.lastIndex,
-                onExpandedChange = { shouldExpand ->
-                    expandedKey = if (shouldExpand) item.key else null
-                },
-                onTitleChange = { HomeCatalogSettingsRepository.setCustomTitle(item.key, it) },
-                onEnabledChange = { HomeCatalogSettingsRepository.setEnabled(item.key, it) },
-                onMoveUp = { HomeCatalogSettingsRepository.moveUp(item.key) },
-                onMoveDown = { HomeCatalogSettingsRepository.moveDown(item.key) },
-            )
         }
     }
 }

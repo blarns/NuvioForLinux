@@ -13,6 +13,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioScreenHeader
 import com.nuvio.app.features.addons.AddonRepository
+import com.nuvio.app.features.details.MetaScreenSettingsRepository
 import com.nuvio.app.features.plugins.PluginRepository
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepository
@@ -47,6 +48,33 @@ fun HomescreenSettingsScreen(
             isTablet = false,
             heroEnabled = homescreenSettingsUiState.heroEnabled,
             items = homescreenSettingsUiState.items,
+        )
+    }
+}
+
+@Composable
+fun MetaScreenSettingsScreen(
+    onBack: () -> Unit,
+) {
+    val metaScreenSettingsUiState by remember {
+        MetaScreenSettingsRepository.ensureLoaded()
+        MetaScreenSettingsRepository.uiState
+    }.collectAsStateWithLifecycle()
+
+    NuvioScreen(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
+        stickyHeader {
+            NuvioScreenHeader(
+                title = "Meta Screen",
+                onBack = onBack,
+            )
+        }
+        metaScreenSettingsContent(
+            isTablet = false,
+            uiState = metaScreenSettingsUiState,
         )
     }
 }

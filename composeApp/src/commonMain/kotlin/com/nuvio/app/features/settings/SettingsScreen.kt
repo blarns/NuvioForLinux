@@ -38,6 +38,8 @@ import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioScreenHeader
 import com.nuvio.app.core.ui.PlatformBackHandler
 import com.nuvio.app.features.addons.AddonRepository
+import com.nuvio.app.features.details.MetaScreenSettingsRepository
+import com.nuvio.app.features.details.MetaScreenSettingsUiState
 import com.nuvio.app.features.home.HomeCatalogSettingsItem
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.mdblist.MdbListSettings
@@ -56,6 +58,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     onSwitchProfile: (() -> Unit)? = null,
     onHomescreenClick: () -> Unit = {},
+    onMetaScreenClick: () -> Unit = {},
     onContinueWatchingClick: () -> Unit = {},
     onAddonsClick: () -> Unit = {},
     onPluginsClick: () -> Unit = {},
@@ -99,6 +102,10 @@ fun SettingsScreen(
         val homescreenSettingsUiState by remember {
             HomeCatalogSettingsRepository.uiState
         }.collectAsStateWithLifecycle()
+        val metaScreenSettingsUiState by remember {
+            MetaScreenSettingsRepository.ensureLoaded()
+            MetaScreenSettingsRepository.uiState
+        }.collectAsStateWithLifecycle()
         val continueWatchingPreferencesUiState by remember {
             ContinueWatchingPreferencesRepository.ensureLoaded()
             ContinueWatchingPreferencesRepository.uiState
@@ -141,6 +148,7 @@ fun SettingsScreen(
                 traktCommentsEnabled = traktCommentsEnabled,
                 homescreenHeroEnabled = homescreenSettingsUiState.heroEnabled,
                 homescreenItems = homescreenSettingsUiState.items,
+                metaScreenSettingsUiState = metaScreenSettingsUiState,
                 continueWatchingPreferencesUiState = continueWatchingPreferencesUiState,
                 onSwitchProfile = onSwitchProfile,
             )
@@ -168,9 +176,11 @@ fun SettingsScreen(
                 traktCommentsEnabled = traktCommentsEnabled,
                 homescreenHeroEnabled = homescreenSettingsUiState.heroEnabled,
                 homescreenItems = homescreenSettingsUiState.items,
+                metaScreenSettingsUiState = metaScreenSettingsUiState,
                 continueWatchingPreferencesUiState = continueWatchingPreferencesUiState,
                 onSwitchProfile = onSwitchProfile,
                 onHomescreenClick = onHomescreenClick,
+                onMetaScreenClick = onMetaScreenClick,
                 onContinueWatchingClick = onContinueWatchingClick,
                 onAddonsClick = onAddonsClick,
                 onPluginsClick = onPluginsClick,
@@ -204,9 +214,11 @@ private fun MobileSettingsScreen(
     traktCommentsEnabled: Boolean,
     homescreenHeroEnabled: Boolean,
     homescreenItems: List<HomeCatalogSettingsItem>,
+    metaScreenSettingsUiState: MetaScreenSettingsUiState,
     continueWatchingPreferencesUiState: ContinueWatchingPreferencesUiState,
     onSwitchProfile: (() -> Unit)? = null,
     onHomescreenClick: () -> Unit = {},
+    onMetaScreenClick: () -> Unit = {},
     onContinueWatchingClick: () -> Unit = {},
     onAddonsClick: () -> Unit = {},
     onPluginsClick: () -> Unit = {},
@@ -267,6 +279,7 @@ private fun MobileSettingsScreen(
                 onAddonsClick = onAddonsClick,
                 onPluginsClick = onPluginsClick,
                 onHomescreenClick = onHomescreenClick,
+                onMetaScreenClick = onMetaScreenClick,
             )
             SettingsPage.Addons -> addonsSettingsContent()
             SettingsPage.Plugins -> pluginsSettingsContent()
@@ -274,6 +287,10 @@ private fun MobileSettingsScreen(
                 isTablet = false,
                 heroEnabled = homescreenHeroEnabled,
                 items = homescreenItems,
+            )
+            SettingsPage.MetaScreen -> metaScreenSettingsContent(
+                isTablet = false,
+                uiState = metaScreenSettingsUiState,
             )
             SettingsPage.Integrations -> integrationsContent(
                 isTablet = false,
@@ -322,6 +339,7 @@ private fun TabletSettingsScreen(
     traktCommentsEnabled: Boolean,
     homescreenHeroEnabled: Boolean,
     homescreenItems: List<HomeCatalogSettingsItem>,
+    metaScreenSettingsUiState: MetaScreenSettingsUiState,
     continueWatchingPreferencesUiState: ContinueWatchingPreferencesUiState,
     onSwitchProfile: (() -> Unit)? = null,
 ) {
@@ -449,6 +467,7 @@ private fun TabletSettingsScreen(
                     onAddonsClick = { openInlinePage(SettingsPage.Addons) },
                     onPluginsClick = { openInlinePage(SettingsPage.Plugins) },
                     onHomescreenClick = { openInlinePage(SettingsPage.Homescreen) },
+                    onMetaScreenClick = { openInlinePage(SettingsPage.MetaScreen) },
                 )
                 SettingsPage.Addons -> addonsSettingsContent()
                 SettingsPage.Plugins -> pluginsSettingsContent()
@@ -456,6 +475,10 @@ private fun TabletSettingsScreen(
                     isTablet = true,
                     heroEnabled = homescreenHeroEnabled,
                     items = homescreenItems,
+                )
+                SettingsPage.MetaScreen -> metaScreenSettingsContent(
+                    isTablet = true,
+                    uiState = metaScreenSettingsUiState,
                 )
                 SettingsPage.Integrations -> integrationsContent(
                     isTablet = true,

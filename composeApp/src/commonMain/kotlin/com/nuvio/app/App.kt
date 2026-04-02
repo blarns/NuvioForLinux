@@ -100,6 +100,7 @@ import com.nuvio.app.features.profiles.ProfileSwitcherTab
 import com.nuvio.app.features.search.SearchScreen
 import com.nuvio.app.features.settings.SettingsScreen
 import com.nuvio.app.features.settings.HomescreenSettingsScreen
+import com.nuvio.app.features.settings.MetaScreenSettingsScreen
 import com.nuvio.app.features.settings.ContinueWatchingSettingsScreen
 import com.nuvio.app.features.settings.AddonsSettingsScreen
 import com.nuvio.app.features.settings.PluginsSettingsScreen
@@ -131,6 +132,9 @@ data class DetailRoute(val type: String, val id: String)
 
 @Serializable
 object HomescreenSettingsRoute
+
+@Serializable
+object MetaScreenSettingsRoute
 
 @Serializable
 object ContinueWatchingSettingsRoute
@@ -537,6 +541,7 @@ private fun MainAppContent(
                                     onContinueWatchingLongPress = onContinueWatchingLongPress,
                                     onSwitchProfile = onSwitchProfile,
                                     onHomescreenSettingsClick = { navController.navigate(HomescreenSettingsRoute) },
+                                    onMetaScreenSettingsClick = { navController.navigate(MetaScreenSettingsRoute) },
                                     onContinueWatchingSettingsClick = { navController.navigate(ContinueWatchingSettingsRoute) },
                                     onAddonsSettingsClick = { navController.navigate(AddonsSettingsRoute) },
                                     onPluginsSettingsClick = { navController.navigate(PluginsSettingsRoute) },
@@ -855,6 +860,11 @@ private fun MainAppContent(
                         onBack = { navController.popBackStack() },
                     )
                 }
+                composable<MetaScreenSettingsRoute> {
+                    MetaScreenSettingsScreen(
+                        onBack = { navController.popBackStack() },
+                    )
+                }
                 composable<ContinueWatchingSettingsRoute> {
                     ContinueWatchingSettingsScreen(
                         onBack = { navController.popBackStack() },
@@ -935,6 +945,7 @@ private fun AppTabHost(
     onContinueWatchingLongPress: ((ContinueWatchingItem) -> Unit)? = null,
     onSwitchProfile: (() -> Unit)? = null,
     onHomescreenSettingsClick: () -> Unit = {},
+    onMetaScreenSettingsClick: () -> Unit = {},
     onContinueWatchingSettingsClick: () -> Unit = {},
     onAddonsSettingsClick: () -> Unit = {},
     onPluginsSettingsClick: () -> Unit = {},
@@ -980,6 +991,7 @@ private fun AppTabHost(
                 modifier = Modifier.fillMaxSize(),
                 onSwitchProfile = onSwitchProfile,
                 onHomescreenClick = onHomescreenSettingsClick,
+                onMetaScreenClick = onMetaScreenSettingsClick,
                 onContinueWatchingClick = onContinueWatchingSettingsClick,
                 onAddonsClick = onAddonsSettingsClick,
                 onPluginsClick = onPluginsSettingsClick,
