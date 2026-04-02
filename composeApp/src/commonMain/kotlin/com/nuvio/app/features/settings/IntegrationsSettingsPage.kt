@@ -6,7 +6,6 @@ internal fun LazyListScope.integrationsContent(
     isTablet: Boolean,
     onTmdbClick: () -> Unit,
     onMdbListClick: () -> Unit,
-    onTraktClick: () -> Unit,
 ) {
     item {
         SettingsSection(
@@ -28,14 +27,6 @@ internal fun LazyListScope.integrationsContent(
                     iconPainter = integrationLogoPainter(IntegrationLogo.MdbList),
                     isTablet = isTablet,
                     onClick = onMdbListClick,
-                )
-                SettingsGroupDivider(isTablet = isTablet)
-                SettingsNavigationRow(
-                    title = "Trakt",
-                    description = "Connect Trakt, sync watchlist lists, and save titles directly to Trakt.",
-                    iconPainter = integrationLogoPainter(IntegrationLogo.Trakt),
-                    isTablet = isTablet,
-                    onClick = onTraktClick,
                 )
             }
         }

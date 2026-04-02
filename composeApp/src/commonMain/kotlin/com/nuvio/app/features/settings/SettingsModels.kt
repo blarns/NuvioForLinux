@@ -80,8 +80,8 @@ internal enum class SettingsPage(
     ),
     TraktAuthentication(
         title = "Trakt",
-        category = SettingsCategory.General,
-        parentPage = Integrations,
+        category = SettingsCategory.Account,
+        parentPage = Root,
     ),
 }
 

@@ -15,6 +15,7 @@ internal fun LazyListScope.settingsRootContent(
     onAppearanceClick: () -> Unit,
     onContentDiscoveryClick: () -> Unit,
     onIntegrationsClick: () -> Unit,
+    onTraktClick: () -> Unit,
     onAccountClick: () -> Unit,
     onSwitchProfileClick: (() -> Unit)? = null,
     showAccountSection: Boolean = true,
@@ -43,6 +44,14 @@ internal fun LazyListScope.settingsRootContent(
                         icon = Icons.Rounded.AccountCircle,
                         isTablet = isTablet,
                         onClick = onAccountClick,
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsNavigationRow(
+                        title = "Trakt",
+                        description = "Connect Trakt, sync watchlist lists, and save titles directly to Trakt.",
+                        iconPainter = integrationLogoPainter(IntegrationLogo.Trakt),
+                        isTablet = isTablet,
+                        onClick = onTraktClick,
                     )
                 }
             }
@@ -81,7 +90,7 @@ internal fun LazyListScope.settingsRootContent(
                     SettingsGroupDivider(isTablet = isTablet)
                     SettingsNavigationRow(
                         title = "Integrations",
-                        description = "Connect TMDB, Trakt, and MDBList services.",
+                        description = "Connect TMDB and MDBList services.",
                         icon = Icons.Rounded.Link,
                         isTablet = isTablet,
                         onClick = onIntegrationsClick,

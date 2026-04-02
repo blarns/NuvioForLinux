@@ -220,6 +220,7 @@ private fun MobileSettingsScreen(
                 onAppearanceClick = { onPageChange(SettingsPage.Appearance) },
                 onContentDiscoveryClick = { onPageChange(SettingsPage.ContentDiscovery) },
                 onIntegrationsClick = { onPageChange(SettingsPage.Integrations) },
+                onTraktClick = { onPageChange(SettingsPage.TraktAuthentication) },
                 onAccountClick = onAccountClick,
                 onSwitchProfileClick = onSwitchProfile,
             )
@@ -270,7 +271,6 @@ private fun MobileSettingsScreen(
                 isTablet = false,
                 onTmdbClick = { onPageChange(SettingsPage.TmdbEnrichment) },
                 onMdbListClick = { onPageChange(SettingsPage.MdbListRatings) },
-                onTraktClick = { onPageChange(SettingsPage.TraktAuthentication) },
             )
             SettingsPage.TmdbEnrichment -> tmdbSettingsContent(
                 isTablet = false,
@@ -397,6 +397,7 @@ private fun TabletSettingsScreen(
                     onAppearanceClick = { openInlinePage(SettingsPage.Appearance) },
                     onContentDiscoveryClick = { openInlinePage(SettingsPage.ContentDiscovery) },
                     onIntegrationsClick = { openInlinePage(SettingsPage.Integrations) },
+                    onTraktClick = { openInlinePage(SettingsPage.TraktAuthentication) },
                     onAccountClick = { openInlinePage(SettingsPage.Account) },
                     onSwitchProfileClick = onSwitchProfile,
                     showAccountSection = activeCategory == SettingsCategory.Account,
@@ -449,7 +450,6 @@ private fun TabletSettingsScreen(
                     isTablet = true,
                     onTmdbClick = { onPageChange(SettingsPage.TmdbEnrichment) },
                     onMdbListClick = { onPageChange(SettingsPage.MdbListRatings) },
-                    onTraktClick = { onPageChange(SettingsPage.TraktAuthentication) },
                 )
                 SettingsPage.TmdbEnrichment -> tmdbSettingsContent(
                     isTablet = true,
