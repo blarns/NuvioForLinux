@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.nuvio.app.core.ui.NuvioActionLabel
 import com.nuvio.app.features.details.MetaScreenSectionItem
 import com.nuvio.app.features.details.MetaScreenSettingsRepository
 import com.nuvio.app.features.details.MetaScreenSettingsUiState
@@ -45,12 +46,13 @@ internal fun LazyListScope.metaScreenSettingsContent(
         SettingsSection(
             title = "SECTIONS",
             isTablet = isTablet,
+            actions = {
+                NuvioActionLabel(
+                    text = "Reset",
+                    onClick = MetaScreenSettingsRepository::resetToDefaults,
+                )
+            },
         ) {
-            SettingsActionRow(
-                label = "Reset",
-                isTablet = isTablet,
-                onClick = MetaScreenSettingsRepository::resetToDefaults,
-            )
             SettingsGroup(isTablet = isTablet) {
                 MetaSectionReorderableList(
                     items = uiState.items,
@@ -78,7 +80,7 @@ private fun MetaSectionReorderableList(
     LazyColumn(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(max = if (isTablet) 680.dp else 520.dp),
+            .heightIn(max = if (isTablet) 820.dp else 640.dp),
         state = lazyListState,
     ) {
         itemsIndexed(items, key = { _, item -> item.key.name }) { index, item ->

@@ -31,6 +31,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.nuvio.app.core.ui.NuvioActionLabel
 import com.nuvio.app.features.home.HomeCatalogSettingsItem
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.components.HomeEmptyStateCard
@@ -97,12 +98,13 @@ internal fun LazyListScope.homescreenSettingsContent(
             SettingsSection(
                 title = "CATALOGS",
                 isTablet = isTablet,
+                actions = {
+                    NuvioActionLabel(
+                        text = "Reset",
+                        onClick = HomeCatalogSettingsRepository::resetToDefaults,
+                    )
+                },
             ) {
-                SettingsActionRow(
-                    label = "Reset",
-                    isTablet = isTablet,
-                    onClick = HomeCatalogSettingsRepository::resetToDefaults,
-                )
                 HomescreenCatalogList(
                     isTablet = isTablet,
                     items = items,
@@ -232,7 +234,7 @@ private fun HomescreenCatalogList(
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = if (isTablet) 760.dp else 560.dp),
+                .heightIn(max = if (isTablet) 900.dp else 680.dp),
             state = lazyListState,
         ) {
             itemsIndexed(items, key = { _, item -> item.key }) { index, item ->
