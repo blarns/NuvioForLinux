@@ -92,10 +92,21 @@ kotlin {
         }
     }
     
-    listOf(
+    val iosTargets = listOf(
         iosArm64(),
         iosSimulatorArm64()
-    ).forEach { iosTarget ->
+    )
+
+    iosTargets.forEach { iosTarget ->
+        iosTarget.compilations.getByName("main") {
+            cinterops {
+                create("commoncrypto") {
+                    defFile(project.file("src/nativeInterop/cinterop/commoncrypto.def"))
+                    compilerOpts("-I${project.projectDir}/src/nativeInterop/cinterop")
+                }
+            }
+        }
+
         iosTarget.binaries.framework {
             baseName = "ComposeApp"
             isStatic = true

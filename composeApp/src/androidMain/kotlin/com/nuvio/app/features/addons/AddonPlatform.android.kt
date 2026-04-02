@@ -2,21 +2,19 @@ package com.nuvio.app.features.addons
 
 import android.content.Context
 import android.content.SharedPreferences
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.android.Android
-import io.ktor.client.plugins.HttpTimeout
-import io.ktor.client.request.accept
-import io.ktor.client.request.get
-import io.ktor.client.request.header
-import io.ktor.client.request.post
-import io.ktor.client.request.request
-import io.ktor.client.request.setBody
-import io.ktor.client.request.url
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpMethod
-import io.ktor.http.isSuccess
+import com.nuvio.app.core.network.IPv4FirstDns
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.ResponseBody
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.net.Proxy
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import kotlin.text.Charsets
+import java.util.concurrent.TimeUnit
 
 actual object AddonStorage {
     private const val preferencesName = "nuvio_addons"
@@ -45,95 +43,156 @@ actual object AddonStorage {
     }
 }
 
-private val addonHttpClient = HttpClient(Android) {
-    install(HttpTimeout) {
-        requestTimeoutMillis = 10_000
-        connectTimeoutMillis = 10_000
-        socketTimeoutMillis = 10_000
+private val addonHttpClient = OkHttpClient.Builder()
+    .dns(IPv4FirstDns())
+    .connectTimeout(10, TimeUnit.SECONDS)
+    .readTimeout(10, TimeUnit.SECONDS)
+    .writeTimeout(10, TimeUnit.SECONDS)
+    .followRedirects(true)
+    .followSslRedirects(true)
+    .proxy(Proxy.NO_PROXY)
+    .build()
+
+private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+private const val maxResponseBodyBytes = 256 * 1024
+private const val truncationSuffix = "\n...[truncated]"
+
+private fun requestAllowsBody(method: String): Boolean =
+    when (method.uppercase()) {
+        "POST", "PUT", "PATCH", "DELETE" -> true
+        else -> false
     }
-    expectSuccess = false
+
+private fun Map<String, String>.withoutAcceptEncoding(): Map<String, String> =
+    entries
+        .filterNot { (key, _) -> key.equals("Accept-Encoding", ignoreCase = true) }
+        .associate { (key, value) -> key to value }
+
+private fun Map<String, String>.getHeaderIgnoreCase(name: String): String? =
+    entries.firstOrNull { (key, _) -> key.equals(name, ignoreCase = true) }?.value
+
+private data class LimitedReadResult(
+    val bytes: ByteArray,
+    val truncated: Boolean,
+)
+
+private fun readAtMostBytes(stream: InputStream, maxBytes: Int): LimitedReadResult {
+    val out = ByteArrayOutputStream(minOf(maxBytes, 16 * 1024))
+    val buffer = ByteArray(8 * 1024)
+    var remaining = maxBytes
+    var truncated = false
+
+    while (remaining > 0) {
+        val read = stream.read(buffer, 0, minOf(buffer.size, remaining))
+        if (read <= 0) break
+        out.write(buffer, 0, read)
+        remaining -= read
+    }
+
+    if (remaining == 0) {
+        truncated = stream.read() != -1
+    }
+
+    return LimitedReadResult(out.toByteArray(), truncated)
+}
+
+private fun readResponseBodyLimited(body: ResponseBody?): String {
+    if (body == null) return ""
+    val charset = body.contentType()?.charset(Charsets.UTF_8) ?: Charsets.UTF_8
+    val readResult = body.byteStream().use { stream ->
+        readAtMostBytes(stream, maxResponseBodyBytes)
+    }
+
+    val decoded = try {
+        String(readResult.bytes, charset)
+    } catch (_: Exception) {
+        String(readResult.bytes, Charsets.UTF_8)
+    }
+
+    return if (readResult.truncated) {
+        decoded + truncationSuffix
+    } else {
+        decoded
+    }
+}
+
+private suspend fun executeTextRequest(
+    method: String,
+    url: String,
+    headers: Map<String, String> = emptyMap(),
+    body: String = "",
+): String = withContext(Dispatchers.IO) {
+    val normalizedMethod = method.uppercase()
+    val sanitizedHeaders = headers.withoutAcceptEncoding()
+    val builder = Request.Builder().url(url)
+    sanitizedHeaders.forEach { (key, value) ->
+        builder.header(key, value)
+    }
+
+    val request = if (requestAllowsBody(normalizedMethod)) {
+        val contentType = sanitizedHeaders.getHeaderIgnoreCase("Content-Type")
+            ?: if (normalizedMethod == "POST") "application/x-www-form-urlencoded" else "application/json"
+        // Preserve exact media type and avoid implicit charset rewriting used in signed APIs like MovieBox.
+        val requestBody = body.toByteArray(Charsets.UTF_8).toRequestBody(contentType.toMediaType())
+        builder.method(normalizedMethod, requestBody)
+    } else {
+        builder.method(normalizedMethod, null)
+    }.build()
+
+    addonHttpClient.newCall(request).execute().use { response ->
+        val payload = readResponseBodyLimited(response.body)
+        if (!response.isSuccessful) {
+            error("Request failed with HTTP ${response.code}")
+        }
+        if (payload.isBlank()) {
+            throw IllegalStateException("Empty response body")
+        }
+        payload
+    }
 }
 
 actual suspend fun httpGetText(url: String): String =
-    addonHttpClient
-        .get(url) {
-            accept(ContentType.Application.Json)
-        }
-        .let { response ->
-            val payload = response.bodyAsText()
-            if (!response.status.isSuccess()) {
-                error("Request failed with HTTP ${response.status.value}")
-            }
-            if (payload.isBlank()) {
-                throw IllegalStateException("Empty response body")
-            }
-            payload
-        }
+    executeTextRequest(
+        method = "GET",
+        url = url,
+        headers = mapOf("Accept" to "application/json"),
+    )
 
 actual suspend fun httpPostJson(url: String, body: String): String =
-    addonHttpClient
-        .post(url) {
-            accept(ContentType.Application.Json)
-            header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-            setBody(body)
-        }
-        .let { response ->
-            val payload = response.bodyAsText()
-            if (!response.status.isSuccess()) {
-                error("Request failed with HTTP ${response.status.value}")
-            }
-            if (payload.isBlank()) {
-                throw IllegalStateException("Empty response body")
-            }
-            payload
-        }
+    executeTextRequest(
+        method = "POST",
+        url = url,
+        headers = mapOf(
+            "Accept" to "application/json",
+            "Content-Type" to "application/json",
+        ),
+        body = body,
+    )
 
 actual suspend fun httpGetTextWithHeaders(
     url: String,
     headers: Map<String, String>,
 ): String =
-    addonHttpClient
-        .get(url) {
-            accept(ContentType.Application.Json)
-            headers.forEach { (key, value) ->
-                header(key, value)
-            }
-        }
-        .let { response ->
-            val payload = response.bodyAsText()
-            if (!response.status.isSuccess()) {
-                error("Request failed with HTTP ${response.status.value}")
-            }
-            if (payload.isBlank()) {
-                throw IllegalStateException("Empty response body")
-            }
-            payload
-        }
+    executeTextRequest(
+        method = "GET",
+        url = url,
+        headers = mapOf("Accept" to "application/json") + headers,
+    )
 
 actual suspend fun httpPostJsonWithHeaders(
     url: String,
     body: String,
     headers: Map<String, String>,
 ): String =
-    addonHttpClient
-        .post(url) {
-            accept(ContentType.Application.Json)
-            header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-            headers.forEach { (key, value) ->
-                header(key, value)
-            }
-            setBody(body)
-        }
-        .let { response ->
-            val payload = response.bodyAsText()
-            if (!response.status.isSuccess()) {
-                error("Request failed with HTTP ${response.status.value}")
-            }
-            if (payload.isBlank()) {
-                throw IllegalStateException("Empty response body")
-            }
-            payload
-        }
+    executeTextRequest(
+        method = "POST",
+        url = url,
+        headers = mapOf(
+            "Accept" to "application/json",
+            "Content-Type" to "application/json",
+        ) + headers,
+        body = body,
+    )
 
 actual suspend fun httpRequestRaw(
     method: String,
@@ -141,25 +200,34 @@ actual suspend fun httpRequestRaw(
     headers: Map<String, String>,
     body: String,
 ): RawHttpResponse =
-    addonHttpClient
-        .request {
-            url(url)
-            this.method = HttpMethod.parse(method.uppercase())
-            headers.forEach { (key, value) ->
-                header(key, value)
-            }
-            if (this.method == HttpMethod.Post || this.method == HttpMethod.Put || this.method == HttpMethod.Patch) {
-                setBody(body)
-            }
+    withContext(Dispatchers.IO) {
+        val normalizedMethod = method.uppercase()
+        val sanitizedHeaders = headers.withoutAcceptEncoding()
+        val builder = Request.Builder().url(url)
+        sanitizedHeaders.forEach { (key, value) ->
+            builder.header(key, value)
         }
-        .let { response ->
+
+        val request = if (requestAllowsBody(normalizedMethod)) {
+            val contentType = sanitizedHeaders.getHeaderIgnoreCase("Content-Type")
+                ?: if (normalizedMethod == "POST") "application/x-www-form-urlencoded" else "application/json"
+            val requestBody = body.toByteArray(Charsets.UTF_8).toRequestBody(contentType.toMediaType())
+            builder.method(normalizedMethod, requestBody)
+        } else {
+            builder.method(normalizedMethod, null)
+        }.build()
+
+        addonHttpClient.newCall(request).execute().use { response ->
             RawHttpResponse(
-                status = response.status.value,
-                statusText = response.status.description,
-                url = response.call.request.url.toString(),
-                body = response.bodyAsText(),
-                headers = response.headers.entries().associate { (name, values) ->
-                    name.lowercase() to values.joinToString(",")
+                status = response.code,
+                statusText = response.message,
+                url = response.request.url.toString(),
+                body = readResponseBodyLimited(response.body),
+                headers = response.headers.toMultimap().mapValues { (_, values) ->
+                    values.joinToString(",")
+                }.mapKeys { (name, _) ->
+                    name.lowercase()
                 },
             )
         }
+    }

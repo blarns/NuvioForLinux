@@ -120,6 +120,51 @@ internal object PluginRuntime {
                     }
                 }
 
+                function("__crypto_digest_hex") { args ->
+                    val algorithm = args.getOrNull(0)?.toString() ?: "SHA256"
+                    val data = args.getOrNull(1)?.toString() ?: ""
+                    runCatching {
+                        pluginDigestHex(algorithm, data)
+                    }.getOrDefault("")
+                }
+
+                function("__crypto_hmac_hex") { args ->
+                    val algorithm = args.getOrNull(0)?.toString() ?: "SHA256"
+                    val key = args.getOrNull(1)?.toString() ?: ""
+                    val data = args.getOrNull(2)?.toString() ?: ""
+                    runCatching {
+                        pluginHmacHex(algorithm, key, data)
+                    }.getOrDefault("")
+                }
+
+                function("__crypto_base64_encode") { args ->
+                    val data = args.getOrNull(0)?.toString() ?: ""
+                    runCatching {
+                        pluginBase64Encode(data)
+                    }.getOrDefault("")
+                }
+
+                function("__crypto_base64_decode") { args ->
+                    val data = args.getOrNull(0)?.toString() ?: ""
+                    runCatching {
+                        pluginBase64Decode(data)
+                    }.getOrDefault("")
+                }
+
+                function("__crypto_utf8_to_hex") { args ->
+                    val data = args.getOrNull(0)?.toString() ?: ""
+                    runCatching {
+                        pluginUtf8ToHex(data)
+                    }.getOrDefault("")
+                }
+
+                function("__crypto_hex_to_utf8") { args ->
+                    val data = args.getOrNull(0)?.toString() ?: ""
+                    runCatching {
+                        pluginHexToUtf8(data)
+                    }.getOrDefault("")
+                }
+
                 function("__parse_url") { args ->
                     parseUrl(args.getOrNull(0)?.toString() ?: "")
                 }
@@ -607,6 +652,149 @@ internal object PluginRuntime {
                 this._params = sorted;
             };
 
+            function __hexToWords(hex) {
+                var words = [];
+                for (var i = 0; i < hex.length; i += 8) {
+                    var chunk = hex.substring(i, i + 8);
+                    while (chunk.length < 8) chunk += '0';
+                    words.push(parseInt(chunk, 16) | 0);
+                }
+                return words;
+            }
+
+            function __wordsToHex(words, sigBytes) {
+                var hex = '';
+                for (var i = 0; i < sigBytes; i++) {
+                    var word = words[i >>> 2] || 0;
+                    var byte = (word >>> (24 - (i % 4) * 8)) & 0xff;
+                    var part = byte.toString(16);
+                    if (part.length < 2) part = '0' + part;
+                    hex += part;
+                }
+                return hex;
+            }
+
+            function __wordArrayToHex(value) {
+                if (!value) return '';
+                if (typeof value.__hex === 'string') return value.__hex.toLowerCase();
+                if (Array.isArray(value.words) && typeof value.sigBytes === 'number') {
+                    return __wordsToHex(value.words, value.sigBytes);
+                }
+                return __crypto_utf8_to_hex(String(value));
+            }
+
+            function __buildWordArray(hex, utf8Override) {
+                var normalizedHex = (hex || '').toLowerCase();
+                if (normalizedHex.length % 2 !== 0) normalizedHex = '0' + normalizedHex;
+                var wordArray = {
+                    __hex: normalizedHex,
+                    __utf8: utf8Override !== undefined ? utf8Override : __crypto_hex_to_utf8(normalizedHex),
+                    sigBytes: normalizedHex.length / 2,
+                    words: __hexToWords(normalizedHex),
+                    toString: function(encoder) {
+                        if (!encoder || encoder === CryptoJS.enc.Hex) return this.__hex;
+                        if (encoder === CryptoJS.enc.Utf8) return this.__utf8;
+                        if (encoder === CryptoJS.enc.Base64) return __crypto_base64_encode(this.__utf8);
+                        return this.__hex;
+                    },
+                    clamp: function() {
+                        return this;
+                    },
+                    concat: function(other) {
+                        var otherHex = __wordArrayToHex(other);
+                        this.__hex += otherHex;
+                        this.__utf8 = __crypto_hex_to_utf8(this.__hex);
+                        this.sigBytes = this.__hex.length / 2;
+                        this.words = __hexToWords(this.__hex);
+                        return this;
+                    }
+                };
+                return wordArray;
+            }
+
+            function __wordArrayFromHex(hex) {
+                return __buildWordArray(hex, undefined);
+            }
+
+            function __wordArrayFromUtf8(text) {
+                var utf8 = text == null ? '' : String(text);
+                return __buildWordArray(__crypto_utf8_to_hex(utf8), utf8);
+            }
+
+            function __wordArrayFromBase64(base64) {
+                return __wordArrayFromUtf8(__crypto_base64_decode(base64 || ''));
+            }
+
+            function __normalizeWordArrayInput(value) {
+                if (value && typeof value === 'object' && typeof value.__utf8 === 'string') {
+                    return value.__utf8;
+                }
+                if (value && typeof value === 'object' && typeof value.__hex === 'string') {
+                    return __crypto_hex_to_utf8(value.__hex);
+                }
+                if (value && typeof value === 'object' && Array.isArray(value.words) && typeof value.sigBytes === 'number') {
+                    return __crypto_hex_to_utf8(__wordsToHex(value.words, value.sigBytes));
+                }
+                if (value == null) return '';
+                return String(value);
+            }
+
+            function __cryptoHashWordArray(algorithm, message) {
+                var utf8 = __normalizeWordArrayInput(message);
+                var hex = __crypto_digest_hex(algorithm, utf8);
+                return __wordArrayFromHex(hex);
+            }
+
+            function __cryptoHmacWordArray(algorithm, message, key) {
+                var utf8Message = __normalizeWordArrayInput(message);
+                var utf8Key = __normalizeWordArrayInput(key);
+                var hex = __crypto_hmac_hex(algorithm, utf8Key, utf8Message);
+                return __wordArrayFromHex(hex);
+            }
+
+            var CryptoJS = {
+                enc: {
+                    Hex: {
+                        stringify: function(wordArray) {
+                            return __wordArrayToHex(wordArray);
+                        },
+                        parse: function(hexStr) {
+                            return __wordArrayFromHex(hexStr || '');
+                        }
+                    },
+                    Utf8: {
+                        stringify: function(wordArray) {
+                            if (wordArray && typeof wordArray.__utf8 === 'string') return wordArray.__utf8;
+                            if (wordArray && typeof wordArray.__hex === 'string') return __crypto_hex_to_utf8(wordArray.__hex);
+                            return __normalizeWordArrayInput(wordArray);
+                        },
+                        parse: function(text) {
+                            return __wordArrayFromUtf8(text);
+                        }
+                    },
+                    Base64: {
+                        stringify: function(wordArray) {
+                            if (wordArray && typeof wordArray.__utf8 === 'string') {
+                                return __crypto_base64_encode(wordArray.__utf8);
+                            }
+                            return __crypto_base64_encode(__normalizeWordArrayInput(wordArray));
+                        },
+                        parse: function(base64) {
+                            return __wordArrayFromBase64(base64);
+                        }
+                    }
+                },
+                MD5: function(message) { return __cryptoHashWordArray('MD5', message); },
+                SHA1: function(message) { return __cryptoHashWordArray('SHA1', message); },
+                SHA256: function(message) { return __cryptoHashWordArray('SHA256', message); },
+                SHA512: function(message) { return __cryptoHashWordArray('SHA512', message); },
+                HmacMD5: function(message, key) { return __cryptoHmacWordArray('MD5', message, key); },
+                HmacSHA1: function(message, key) { return __cryptoHmacWordArray('SHA1', message, key); },
+                HmacSHA256: function(message, key) { return __cryptoHmacWordArray('SHA256', message, key); },
+                HmacSHA512: function(message, key) { return __cryptoHmacWordArray('SHA512', message, key); }
+            };
+            globalThis.CryptoJS = CryptoJS;
+
             var cheerio = {
                 load: function(html) {
                     var docId = __cheerio_load(html);
@@ -742,6 +930,9 @@ internal object PluginRuntime {
             var require = function(moduleName) {
                 if (moduleName === 'cheerio' || moduleName === 'cheerio-without-node-native' || moduleName === 'react-native-cheerio') {
                     return cheerio;
+                }
+                if (moduleName === 'crypto-js') {
+                    return CryptoJS;
                 }
                 throw new Error("Module '" + moduleName + "' is not available");
             };
