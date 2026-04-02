@@ -38,10 +38,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
 import com.nuvio.app.core.ui.NuvioBackButton
 import com.nuvio.app.core.ui.TraktListPickerDialog
 import com.nuvio.app.core.ui.nuvioPlatformExtraBottomPadding
@@ -435,11 +442,31 @@ fun MetaDetailsScreen(
                     val isTablet = maxWidth >= 720.dp
                     val contentHorizontalPadding = if (isTablet) 32.dp else 18.dp
                     val contentMaxWidth = detailTabletContentMaxWidth(maxWidth, isTablet)
+                    val cinematicEnabled = metaScreenSettingsUiState.cinematicBackground
 
                     Box(modifier = Modifier.fillMaxSize()) {
+                        if (cinematicEnabled) {
+                            val backdropUrl = meta.background ?: meta.poster
+                            if (backdropUrl != null) {
+                                AsyncImage(
+                                    model = backdropUrl,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .blur(30.dp),
+                                    contentScale = ContentScale.Crop,
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(MaterialTheme.colorScheme.background.copy(alpha = 0.92f)),
+                                )
+                            }
+                        }
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
+                                .zIndex(1f)
                                 .verticalScroll(scrollState),
                         ) {
                             DetailHero(
@@ -524,13 +551,36 @@ fun MetaDetailsScreen(
                             }
                         }
 
+                        if (cinematicEnabled && heroHeightPx > 0) {
+                            val blendColor = MaterialTheme.colorScheme.background
+                            Box(
+                                modifier = Modifier
+                                    .zIndex(0.5f)
+                                    .fillMaxWidth()
+                                    .height(132.dp)
+                                    .graphicsLayer {
+                                        translationY = heroHeightPx.toFloat() - scrollState.value
+                                    }
+                                    .background(
+                                        Brush.verticalGradient(
+                                            colors = listOf(
+                                                blendColor.copy(alpha = 0.98f),
+                                                blendColor.copy(alpha = 0.84f),
+                                                blendColor.copy(alpha = 0.52f),
+                                                Color.Transparent,
+                                            ),
+                                        ),
+                                    ),
+                            )
+                        }
+
                         if (headerProgress <= 0.05f) {
                             NuvioBackButton(
                                 onClick = onBack,
                                 modifier = Modifier.padding(
                                     start = 12.dp,
                                     top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp,
-                                ),
+                                ).zIndex(2f),
                                 containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.5f),
                                 contentColor = MaterialTheme.colorScheme.onBackground,
                             )
@@ -542,6 +592,7 @@ fun MetaDetailsScreen(
                             progress = headerProgress,
                             onBack = onBack,
                             onToggleSaved = toggleSaved,
+                            modifier = Modifier.zIndex(2f),
                         )
 
                         selectedEpisodeForActions?.let { selectedEpisode ->

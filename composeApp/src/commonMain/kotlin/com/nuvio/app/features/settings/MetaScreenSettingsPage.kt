@@ -44,6 +44,22 @@ internal fun LazyListScope.metaScreenSettingsContent(
 ) {
     item {
         SettingsSection(
+            title = "APPEARANCE",
+            isTablet = isTablet,
+        ) {
+            SettingsGroup(isTablet = isTablet) {
+                SettingsSwitchRow(
+                    title = "Cinematic Background",
+                    description = "Blurred backdrop behind content, similar to stream screen.",
+                    checked = uiState.cinematicBackground,
+                    isTablet = isTablet,
+                    onCheckedChange = { MetaScreenSettingsRepository.setCinematicBackground(it) },
+                )
+            }
+        }
+    }
+    item {
+        SettingsSection(
             title = "SECTIONS",
             isTablet = isTablet,
             actions = {

@@ -31,6 +31,7 @@ data class MetaScreenSectionItem(
 
 data class MetaScreenSettingsUiState(
     val items: List<MetaScreenSectionItem> = emptyList(),
+    val cinematicBackground: Boolean = false,
 )
 
 @Serializable
@@ -43,6 +44,7 @@ private data class StoredMetaScreenSectionPreference(
 @Serializable
 private data class StoredMetaScreenSettingsPayload(
     val items: List<StoredMetaScreenSectionPreference> = emptyList(),
+    val cinematicBackground: Boolean = false,
 )
 
 private data class MetaScreenSectionDefinition(
@@ -115,6 +117,7 @@ object MetaScreenSettingsRepository {
 
     private var hasLoaded = false
     private var preferences: MutableMap<MetaScreenSectionKey, StoredMetaScreenSectionPreference> = mutableMapOf()
+    private var cinematicBackground: Boolean = false
 
     fun ensureLoaded() {
         if (hasLoaded) return
@@ -126,6 +129,7 @@ object MetaScreenSettingsRepository {
                 json.decodeFromString<StoredMetaScreenSettingsPayload>(payload)
             }.getOrNull()
             if (parsed != null) {
+                cinematicBackground = parsed.cinematicBackground
                 preferences = parsed.items.mapNotNull { item ->
                     val key = runCatching { MetaScreenSectionKey.valueOf(item.key) }.getOrNull() ?: return@mapNotNull null
                     key to item
@@ -141,13 +145,22 @@ object MetaScreenSettingsRepository {
     fun onProfileChanged() {
         hasLoaded = false
         preferences.clear()
+        cinematicBackground = false
         _uiState.value = MetaScreenSettingsUiState()
         ensureLoaded()
+    }
+
+    fun setCinematicBackground(enabled: Boolean) {
+        ensureLoaded()
+        cinematicBackground = enabled
+        publish()
+        persist()
     }
 
     fun clearLocalState() {
         hasLoaded = false
         preferences.clear()
+        cinematicBackground = false
         _uiState.value = MetaScreenSettingsUiState()
     }
 
@@ -160,6 +173,7 @@ object MetaScreenSettingsRepository {
     fun resetToDefaults() {
         ensureLoaded()
         preferences.clear()
+        cinematicBackground = false
         normalizePreferences()
         publish()
         persist()
@@ -221,6 +235,7 @@ object MetaScreenSettingsRepository {
                         order = preference?.order ?: 0,
                     )
                 },
+            cinematicBackground = cinematicBackground,
         )
     }
 
@@ -229,6 +244,7 @@ object MetaScreenSettingsRepository {
             json.encodeToString(
                 StoredMetaScreenSettingsPayload(
                     items = preferences.values.sortedBy { it.order },
+                    cinematicBackground = cinematicBackground,
                 ),
             ),
         )
