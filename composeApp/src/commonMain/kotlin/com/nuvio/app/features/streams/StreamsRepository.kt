@@ -5,13 +5,14 @@ import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.httpGetText
 import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.plugins.PluginRepository
+import com.nuvio.app.features.plugins.PluginRepositoryItem
 import com.nuvio.app.features.plugins.PluginRuntimeResult
 import com.nuvio.app.features.plugins.PluginScraper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,7 +28,6 @@ object StreamsRepository {
     private var activeJob: Job? = null
     private var activeRequestKey: String? = null
 
-  
     fun load(type: String, videoId: String, season: Int? = null, episode: Int? = null) {
         load(type = type, videoId = videoId, season = season, episode = episode, forceRefresh = false)
     }
@@ -37,7 +37,9 @@ object StreamsRepository {
     }
 
     private fun load(type: String, videoId: String, season: Int?, episode: Int?, forceRefresh: Boolean) {
-        val requestKey = "$type::$videoId::$season::$episode"
+        PluginRepository.initialize()
+        val pluginUiState = PluginRepository.uiState.value
+        val requestKey = "$type::$videoId::$season::$episode::pluginsGrouped=${pluginUiState.groupStreamsByRepository}"
         val currentState = _uiState.value
         if (
             !forceRefresh &&
@@ -70,10 +72,13 @@ object StreamsRepository {
         }
 
         val installedAddons = AddonRepository.uiState.value.addons
-        PluginRepository.initialize()
         val pluginScrapers = PluginRepository.getEnabledScrapersForType(type)
+        val pluginProviderGroups = pluginScrapers.toPluginProviderGroups(
+            repositories = pluginUiState.repositories,
+            groupByRepository = pluginUiState.groupStreamsByRepository,
+        )
 
-        if (installedAddons.isEmpty() && pluginScrapers.isEmpty()) {
+        if (installedAddons.isEmpty() && pluginProviderGroups.isEmpty()) {
             _uiState.value = StreamsUiState(
                 isAnyLoading = false,
                 emptyStateReason = StreamsEmptyStateReason.NoAddonsInstalled,
@@ -94,7 +99,7 @@ object StreamsRepository {
 
         log.d { "Found ${streamAddons.size} addons for stream type=$type id=$videoId" }
 
-        if (streamAddons.isEmpty() && pluginScrapers.isEmpty()) {
+            if (streamAddons.isEmpty() && pluginProviderGroups.isEmpty()) {
             _uiState.value = StreamsUiState(
                 isAnyLoading = false,
                 emptyStateReason = StreamsEmptyStateReason.NoCompatibleAddons,
@@ -110,10 +115,10 @@ object StreamsRepository {
                 streams = emptyList(),
                 isLoading = true,
             )
-        } + pluginScrapers.map { scraper ->
+        } + pluginProviderGroups.map { providerGroup ->
             AddonStreamGroup(
-                addonName = scraper.name,
-                addonId = "plugin:${scraper.id}",
+                addonName = providerGroup.addonName,
+                addonId = providerGroup.addonId,
                 streams = emptyList(),
                 isLoading = true,
             )
@@ -126,8 +131,15 @@ object StreamsRepository {
         )
 
         activeJob = scope.launch {
-            val addonJobs = streamAddons.map { manifest ->
-                async {
+            val completions = Channel<StreamLoadCompletion>(capacity = Channel.BUFFERED)
+            val pluginRemainingByAddonId = pluginProviderGroups
+                .associate { it.addonId to it.scrapers.size }
+                .toMutableMap()
+            val pluginFirstErrorByAddonId = mutableMapOf<String, String>()
+            val totalTasks = streamAddons.size + pluginRemainingByAddonId.values.sum()
+
+            streamAddons.forEach { manifest ->
+                launch {
                     val encodedId = videoId.encodeForPath()
                     val baseUrl = manifest.transportUrl
                         .substringBefore("?")
@@ -135,7 +147,7 @@ object StreamsRepository {
                     val url = "$baseUrl/stream/$type/$encodedId.json"
                     log.d { "Fetching streams from: $url" }
 
-                    runCatching {
+                    val group = runCatching {
                         val payload = httpGetText(url)
                         StreamParser.parse(
                             payload = payload,
@@ -163,56 +175,107 @@ object StreamsRepository {
                             )
                         },
                     )
+                    completions.send(StreamLoadCompletion.Addon(group))
                 }
             }
 
-            val pluginJobs = pluginScrapers.map { scraper ->
-                async {
-                    PluginRepository.executeScraper(
-                        scraper = scraper,
-                        tmdbId = videoId.toPluginTmdbId(),
-                        mediaType = type,
-                        season = season,
-                        episode = episode,
-                    ).fold(
-                        onSuccess = { results ->
-                            AddonStreamGroup(
-                                addonName = scraper.name,
-                                addonId = "plugin:${scraper.id}",
-                                streams = results.map { it.toStreamItem(scraper) },
-                                isLoading = false,
-                            )
-                        },
-                        onFailure = { error ->
-                            AddonStreamGroup(
-                                addonName = scraper.name,
-                                addonId = "plugin:${scraper.id}",
-                                streams = emptyList(),
-                                isLoading = false,
-                                error = error.message,
-                            )
-                        },
-                    )
-                }
-            }
-
-            val jobs = addonJobs + pluginJobs
-
-            // Collect results as they arrive and update state incrementally
-            jobs.forEach { deferred ->
-                val result = deferred.await()
-                _uiState.update { current ->
-                    val updated = current.groups.map { group ->
-                        if (group.addonId == result.addonId) result else group
+            pluginProviderGroups.forEach { providerGroup ->
+                val includeScraperNameInSubtitle = false
+                providerGroup.scrapers.forEach { scraper ->
+                    launch {
+                        val completion = PluginRepository.executeScraper(
+                            scraper = scraper,
+                            tmdbId = videoId.toPluginTmdbId(),
+                            mediaType = type,
+                            season = season,
+                            episode = episode,
+                        ).fold(
+                            onSuccess = { results ->
+                                StreamLoadCompletion.PluginScraper(
+                                    addonId = providerGroup.addonId,
+                                    streams = results.map { result ->
+                                        result.toStreamItem(
+                                            scraper = scraper,
+                                            addonName = providerGroup.addonName,
+                                            addonId = providerGroup.addonId,
+                                            includeScraperNameInSubtitle = includeScraperNameInSubtitle,
+                                        )
+                                    },
+                                    error = null,
+                                )
+                            },
+                            onFailure = { error ->
+                                StreamLoadCompletion.PluginScraper(
+                                    addonId = providerGroup.addonId,
+                                    streams = emptyList(),
+                                    error = error.message ?: "Failed to load ${scraper.name}",
+                                )
+                            },
+                        )
+                        completions.send(completion)
                     }
-                    val anyLoading = updated.any { it.isLoading }
-                    current.copy(
-                        groups = updated,
-                        isAnyLoading = anyLoading,
-                        emptyStateReason = updated.toEmptyStateReason(anyLoading),
-                    )
                 }
             }
+
+            repeat(totalTasks) {
+                when (val completion = completions.receive()) {
+                    is StreamLoadCompletion.Addon -> {
+                        val result = completion.group
+                        _uiState.update { current ->
+                            val updated = current.groups.map { group ->
+                                if (group.addonId == result.addonId) result else group
+                            }
+                            val anyLoading = updated.any { it.isLoading }
+                            current.copy(
+                                groups = updated,
+                                isAnyLoading = anyLoading,
+                                emptyStateReason = updated.toEmptyStateReason(anyLoading),
+                            )
+                        }
+                    }
+
+                    is StreamLoadCompletion.PluginScraper -> {
+                        val remaining = (pluginRemainingByAddonId[completion.addonId] ?: 1) - 1
+                        pluginRemainingByAddonId[completion.addonId] = remaining.coerceAtLeast(0)
+                        if (!completion.error.isNullOrBlank() && pluginFirstErrorByAddonId[completion.addonId].isNullOrBlank()) {
+                            pluginFirstErrorByAddonId[completion.addonId] = completion.error
+                        }
+
+                        _uiState.update { current ->
+                            val updated = current.groups.map { group ->
+                                if (group.addonId != completion.addonId) {
+                                    group
+                                } else {
+                                    val mergedStreams = if (completion.streams.isEmpty()) {
+                                        group.streams
+                                    } else {
+                                        (group.streams + completion.streams).sortedForGroupedDisplay()
+                                    }
+                                    val stillLoading = remaining > 0
+                                    val finalError = if (mergedStreams.isEmpty() && !stillLoading) {
+                                        pluginFirstErrorByAddonId[completion.addonId]
+                                    } else {
+                                        null
+                                    }
+                                    group.copy(
+                                        streams = mergedStreams,
+                                        isLoading = stillLoading,
+                                        error = finalError,
+                                    )
+                                }
+                            }
+                            val anyLoading = updated.any { it.isLoading }
+                            current.copy(
+                                groups = updated,
+                                isAnyLoading = anyLoading,
+                                emptyStateReason = updated.toEmptyStateReason(anyLoading),
+                            )
+                        }
+                    }
+                }
+            }
+
+            completions.close()
         }
     }
 
@@ -229,6 +292,47 @@ object StreamsRepository {
     // Encode id segment so colons and slashes don't break URL path parsing on addons
     private fun String.encodeForPath(): String =
         replace("%", "%25").replace(" ", "%20")
+}
+
+private data class PluginProviderGroup(
+    val addonId: String,
+    val addonName: String,
+    val scrapers: List<PluginScraper>,
+)
+
+private sealed interface StreamLoadCompletion {
+    data class Addon(val group: AddonStreamGroup) : StreamLoadCompletion
+    data class PluginScraper(
+        val addonId: String,
+        val streams: List<StreamItem>,
+        val error: String?,
+    ) : StreamLoadCompletion
+}
+
+private fun List<PluginScraper>.toPluginProviderGroups(
+    repositories: List<PluginRepositoryItem>,
+    groupByRepository: Boolean,
+): List<PluginProviderGroup> {
+    if (!groupByRepository) {
+        return map { scraper ->
+            PluginProviderGroup(
+                addonId = "plugin:${scraper.id}",
+                addonName = scraper.name,
+                scrapers = listOf(scraper),
+            )
+        }
+    }
+
+    val repoNameByUrl = repositories.associate { it.manifestUrl to it.name }
+    return groupBy { it.repositoryUrl }
+        .map { (repositoryUrl, scrapers) ->
+            PluginProviderGroup(
+                addonId = "plugin-repo:${repositoryUrl.lowercase()}",
+                addonName = repoNameByUrl[repositoryUrl].orEmpty().ifBlank { repositoryUrl.fallbackRepositoryLabel() },
+                scrapers = scrapers.sortedBy { it.name.lowercase() },
+            )
+        }
+        .sortedBy { it.addonName.lowercase() }
 }
 
 private fun List<AddonStreamGroup>.toEmptyStateReason(anyLoading: Boolean): StreamsEmptyStateReason? {
@@ -251,8 +355,14 @@ private fun String.toPluginTmdbId(): String {
     }
 }
 
-private fun PluginRuntimeResult.toStreamItem(scraper: PluginScraper): StreamItem {
+private fun PluginRuntimeResult.toStreamItem(
+    scraper: PluginScraper,
+    addonName: String = scraper.name,
+    addonId: String = "plugin:${scraper.id}",
+    includeScraperNameInSubtitle: Boolean = false,
+): StreamItem {
     val subtitleParts = listOfNotNull(
+        scraper.name.takeIf { includeScraperNameInSubtitle && it.isNotBlank() },
         quality?.takeIf { it.isNotBlank() },
         size?.takeIf { it.isNotBlank() },
         language?.takeIf { it.isNotBlank() },
@@ -275,8 +385,9 @@ private fun PluginRuntimeResult.toStreamItem(scraper: PluginScraper): StreamItem
         description = subtitleParts.joinToString(" • ").ifBlank { null },
         url = url,
         infoHash = infoHash,
-        addonName = scraper.name,
-        addonId = "plugin:${scraper.id}",
+        sourceName = scraper.name,
+        addonName = addonName,
+        addonId = addonId,
         behaviorHints = if (requestHeaders.isEmpty()) {
             StreamBehaviorHints()
         } else {
@@ -285,4 +396,22 @@ private fun PluginRuntimeResult.toStreamItem(scraper: PluginScraper): StreamItem
             )
         },
     )
+}
+
+private fun List<StreamItem>.sortedForGroupedDisplay(): List<StreamItem> =
+    sortedWith(
+        compareBy<StreamItem>(
+            { it.sourceName.orEmpty().lowercase() },
+            { it.streamLabel.lowercase() },
+            { it.streamSubtitle.orEmpty().lowercase() },
+        ),
+    )
+
+private fun String.fallbackRepositoryLabel(): String {
+    val withoutQuery = substringBefore("?")
+    val withoutManifest = withoutQuery.removeSuffix("/manifest.json")
+    val host = withoutManifest.substringAfter("://", withoutManifest).substringBefore('/')
+    return host.ifBlank {
+        withoutManifest.substringAfterLast('/').ifBlank { "Plugin repository" }
+    }
 }

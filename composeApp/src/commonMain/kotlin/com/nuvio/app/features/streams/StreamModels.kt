@@ -7,6 +7,7 @@ data class StreamItem(
     val infoHash: String? = null,
     val fileIdx: Int? = null,
     val externalUrl: String? = null,
+    val sourceName: String? = null,
     val addonName: String,
     val addonId: String,
     val behaviorHints: StreamBehaviorHints = StreamBehaviorHints(),

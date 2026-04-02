@@ -55,48 +55,8 @@ object PluginRepository {
     private val activeRefreshJobs = mutableMapOf<String, Job>()
 
     fun initialize() {
-        if (initialized) return
-        currentProfileId = resolveEffectiveProfileId(ProfileRepository.activeProfileId)
-        val stored = loadStoredState(currentProfileId)
-
-        _uiState.value = PluginsUiState(
-            pluginsEnabled = stored?.pluginsEnabled ?: true,
-            repositories = stored?.repositories
-                ?.map {
-                    PluginRepositoryItem(
-                        manifestUrl = it.manifestUrl,
-                        name = it.name,
-                        description = it.description,
-                        version = it.version,
-                        scraperCount = it.scraperCount,
-                        lastUpdated = it.lastUpdated,
-                        isRefreshing = false,
-                        errorMessage = null,
-                    )
-                }
-                ?: emptyList(),
-            scrapers = stored?.scrapers
-                ?.map {
-                    PluginScraper(
-                        id = it.id,
-                        repositoryUrl = it.repositoryUrl,
-                        name = it.name,
-                        description = it.description,
-                        version = it.version,
-                        filename = it.filename,
-                        supportedTypes = it.supportedTypes,
-                        enabled = it.enabled,
-                        manifestEnabled = it.manifestEnabled,
-                        logo = it.logo,
-                        contentLanguage = it.contentLanguage,
-                        formats = it.formats,
-                        code = it.code,
-                    )
-                }
-                ?: emptyList(),
-        )
-
-        initialized = true
+        val effectiveProfileId = resolveEffectiveProfileId(ProfileRepository.activeProfileId)
+        ensureStateLoadedForProfile(effectiveProfileId)
 
         _uiState.value.repositories.forEach { repo ->
             refreshRepository(repo.manifestUrl)
@@ -123,7 +83,8 @@ object PluginRepository {
     }
 
     suspend fun pullFromServer(profileId: Int) {
-        currentProfileId = resolveEffectiveProfileId(profileId)
+        val effectiveProfileId = resolveEffectiveProfileId(profileId)
+        ensureStateLoadedForProfile(effectiveProfileId)
         runCatching {
             val rows = SupabaseProvider.client.postgrest
                 .from("plugins")
@@ -159,6 +120,7 @@ object PluginRepository {
 
             _uiState.value = PluginsUiState(
                 pluginsEnabled = _uiState.value.pluginsEnabled,
+                groupStreamsByRepository = _uiState.value.groupStreamsByRepository,
                 repositories = nextRepos,
                 scrapers = nextScrapers,
             )
@@ -299,6 +261,12 @@ object PluginRepository {
     fun setPluginsEnabled(enabled: Boolean) {
         initialize()
         _uiState.update { it.copy(pluginsEnabled = enabled) }
+        persist()
+    }
+
+    fun setGroupStreamsByRepository(enabled: Boolean) {
+        initialize()
+        _uiState.update { it.copy(groupStreamsByRepository = enabled) }
         persist()
     }
 
@@ -454,6 +422,7 @@ object PluginRepository {
         val state = _uiState.value
         val payload = StoredPluginsState(
             pluginsEnabled = state.pluginsEnabled,
+            groupStreamsByRepository = state.groupStreamsByRepository,
             repositories = state.repositories.map { repo ->
                 StoredPluginRepository(
                     manifestUrl = repo.manifestUrl,
@@ -496,6 +465,60 @@ object PluginRepository {
     private fun cancelActiveRefreshes() {
         activeRefreshJobs.values.forEach(Job::cancel)
         activeRefreshJobs.clear()
+    }
+
+    private fun ensureStateLoadedForProfile(profileId: Int) {
+        if (initialized && currentProfileId == profileId) return
+
+        if (currentProfileId != profileId) {
+            cancelActiveRefreshes()
+            pulledFromServer = false
+        }
+
+        currentProfileId = profileId
+        _uiState.value = loadStateAsUiState(profileId)
+        initialized = true
+    }
+
+    private fun loadStateAsUiState(profileId: Int): PluginsUiState {
+        val stored = loadStoredState(profileId)
+        return PluginsUiState(
+            pluginsEnabled = stored?.pluginsEnabled ?: true,
+            groupStreamsByRepository = stored?.groupStreamsByRepository ?: false,
+            repositories = stored?.repositories
+                ?.map {
+                    PluginRepositoryItem(
+                        manifestUrl = it.manifestUrl,
+                        name = it.name,
+                        description = it.description,
+                        version = it.version,
+                        scraperCount = it.scraperCount,
+                        lastUpdated = it.lastUpdated,
+                        isRefreshing = false,
+                        errorMessage = null,
+                    )
+                }
+                ?: emptyList(),
+            scrapers = stored?.scrapers
+                ?.map {
+                    PluginScraper(
+                        id = it.id,
+                        repositoryUrl = it.repositoryUrl,
+                        name = it.name,
+                        description = it.description,
+                        version = it.version,
+                        filename = it.filename,
+                        supportedTypes = it.supportedTypes,
+                        enabled = it.enabled,
+                        manifestEnabled = it.manifestEnabled,
+                        logo = it.logo,
+                        contentLanguage = it.contentLanguage,
+                        formats = it.formats,
+                        code = it.code,
+                    )
+                }
+                ?: emptyList(),
+        )
     }
 
     private fun dedupeManifestUrls(urls: List<String>): List<String> =

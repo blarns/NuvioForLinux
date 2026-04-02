@@ -61,8 +61,16 @@ fun PluginsSettingsPageContent(
     val sortedRepos = remember(uiState.repositories) {
         uiState.repositories.sortedBy { it.name.lowercase() }
     }
-    val sortedScrapers = remember(uiState.scrapers) {
-        uiState.scrapers.sortedBy { it.name.lowercase() }
+    val repositoryNameByUrl = remember(sortedRepos) {
+        sortedRepos.associate { it.manifestUrl to it.name }
+    }
+    val sortedScrapers = remember(uiState.scrapers, repositoryNameByUrl) {
+        uiState.scrapers.sortedWith(
+            compareBy<PluginScraper>(
+                { repositoryNameByUrl[it.repositoryUrl]?.lowercase() ?: it.repositoryUrl.lowercase() },
+                { it.name.lowercase() },
+            ),
+        )
     }
 
     Column(
@@ -87,14 +95,52 @@ fun PluginsSettingsPageContent(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(
-                    text = "Enable plugin scrapers globally",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Enable plugin scrapers globally",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Use JavaScript plugin scrapers during stream discovery.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
                 Switch(
                     checked = uiState.pluginsEnabled,
                     onCheckedChange = { PluginRepository.setPluginsEnabled(it) },
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Group plugin providers by repository",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "In Streams, show one provider per repo (example: Tapframe) instead of one per scraper.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Switch(
+                    checked = uiState.groupStreamsByRepository,
+                    onCheckedChange = { PluginRepository.setGroupStreamsByRepository(it) },
                 )
             }
         }
@@ -243,6 +289,8 @@ fun PluginsSettingsPageContent(
             sortedScrapers.forEach { scraper ->
                 val scraperResults = testResults[scraper.id]
                 val isTestingThisScraper = testingScraperId == scraper.id
+                val repositoryName = repositoryNameByUrl[scraper.repositoryUrl]
+                    ?: scraper.repositoryUrl.fallbackRepositoryLabel()
 
                 NuvioSurfaceCard {
                     Row(
@@ -261,6 +309,14 @@ fun PluginsSettingsPageContent(
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = repositoryName,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = scraper.name,
                                     style = MaterialTheme.typography.titleLarge,
@@ -291,6 +347,9 @@ fun PluginsSettingsPageContent(
                     ) {
                         NuvioInfoBadge(text = scraper.supportedTypes.joinToString(" | "))
                         NuvioInfoBadge(text = "v${scraper.version}")
+                        if (!scraper.manifestEnabled) {
+                            NuvioInfoBadge(text = "Disabled by repo")
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -362,5 +421,14 @@ fun PluginsSettingsPageContent(
                 }
             }
         }
+    }
+}
+
+private fun String.fallbackRepositoryLabel(): String {
+    val withoutQuery = substringBefore("?")
+    val withoutManifest = withoutQuery.removeSuffix("/manifest.json")
+    val host = withoutManifest.substringAfter("://", withoutManifest).substringBefore('/')
+    return host.ifBlank {
+        withoutManifest.substringAfterLast('/').ifBlank { "Plugin repository" }
     }
 }

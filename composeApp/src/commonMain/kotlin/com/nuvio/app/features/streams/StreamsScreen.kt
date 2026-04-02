@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -685,19 +686,36 @@ private fun LazyListScope.streamSection(
         }
     }
 
-    items(
-        items = group.streams,
-        key = { stream -> "${group.addonId}_${stream.url ?: stream.infoHash ?: stream.streamLabel}" },
-    ) { stream ->
-        StreamCard(
-            stream = stream,
-            onClick = {
-                if (stream.directPlaybackUrl != null) {
-                    onStreamSelected(stream, resumePositionMs, resumeProgressFraction)
-                }
+    val streamsBySource = group.streams.groupBy { stream ->
+        stream.sourceName?.takeIf { it.isNotBlank() } ?: stream.addonName
+    }
+    val sortedSources = streamsBySource.keys.sortedBy { it.lowercase() }
+    val showSourceHeaders = sortedSources.size > 1
+
+    sortedSources.forEach { sourceName ->
+        val sourceStreams = streamsBySource[sourceName].orEmpty()
+        if (showSourceHeaders) {
+            item(key = "source_${group.addonId}_${sourceName}") {
+                StreamSourceHeader(sourceName = sourceName)
+            }
+        }
+
+        itemsIndexed(
+            items = sourceStreams,
+            key = { index, stream ->
+                "${group.addonId}_${sourceName}_${index}_${stream.url ?: stream.infoHash ?: stream.streamLabel}"
             },
-        )
-        Spacer(modifier = Modifier.height(10.dp))
+        ) { _, stream ->
+            StreamCard(
+                stream = stream,
+                onClick = {
+                    if (stream.directPlaybackUrl != null) {
+                        onStreamSelected(stream, resumePositionMs, resumeProgressFraction)
+                    }
+                },
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+        }
     }
 }
 
@@ -742,6 +760,23 @@ private fun StreamSectionHeader(
             }
         }
     }
+}
+
+@Composable
+private fun StreamSourceHeader(
+    sourceName: String,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = sourceName,
+        modifier = modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+        style = MaterialTheme.typography.labelLarge.copy(
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.2.sp,
+        ),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 // ---------------------------------------------------------------------------

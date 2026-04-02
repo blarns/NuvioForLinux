@@ -80,6 +80,7 @@ data class PluginRuntimeResult(
 
 data class PluginsUiState(
     val pluginsEnabled: Boolean = true,
+    val groupStreamsByRepository: Boolean = false,
     val repositories: List<PluginRepositoryItem> = emptyList(),
     val scrapers: List<PluginScraper> = emptyList(),
 )
@@ -92,6 +93,7 @@ sealed interface AddPluginRepositoryResult {
 @Serializable
 internal data class StoredPluginsState(
     val pluginsEnabled: Boolean = true,
+    val groupStreamsByRepository: Boolean = false,
     val repositories: List<StoredPluginRepository> = emptyList(),
     val scrapers: List<StoredPluginScraper> = emptyList(),
 )
