@@ -1,6 +1,7 @@
 package com.nuvio.app.features.details.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -30,14 +31,18 @@ import com.nuvio.app.features.details.MetaDetails
 fun DetailProductionSection(
     meta: MetaDetails,
     modifier: Modifier = Modifier,
+    onCompanyClick: ((MetaCompany, String) -> Unit)? = null,
 ) {
     val isSeriesLike = meta.type == "series" || meta.videos.any { it.season != null || it.episode != null }
+    val isNetworkSource = isSeriesLike && meta.networks.isNotEmpty()
     val sourceItems = if (isSeriesLike) {
         meta.networks.ifEmpty { meta.productionCompanies }
     } else {
         meta.productionCompanies.ifEmpty { meta.networks }
     }
     if (sourceItems.isEmpty()) return
+
+    val entityKind = if (isNetworkSource) "network" else "company"
 
     val displayItems = if (isSeriesLike) {
         sourceItems.take(6)
@@ -78,6 +83,9 @@ fun DetailProductionSection(
                         chipHeight = chipHeight,
                         logoWidth = logoWidth,
                         logoHeight = logoHeight,
+                        onClick = if (onCompanyClick != null && item.tmdbId != null) {
+                            { onCompanyClick(item, entityKind) }
+                        } else null,
                     )
                 }
             }
@@ -91,11 +99,15 @@ private fun ProductionChip(
     chipHeight: androidx.compose.ui.unit.Dp,
     logoWidth: androidx.compose.ui.unit.Dp,
     logoHeight: androidx.compose.ui.unit.Dp,
+    onClick: (() -> Unit)? = null,
 ) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(12.dp))
             .background(color = ProductionChipBackground)
+            .then(
+                if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+            )
             .padding(horizontal = 12.dp, vertical = 8.dp)
             .height(chipHeight),
         contentAlignment = Alignment.Center,

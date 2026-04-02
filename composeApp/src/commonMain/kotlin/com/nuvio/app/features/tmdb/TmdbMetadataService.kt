@@ -29,6 +29,9 @@ object TmdbMetadataService {
     private val collectionCache = mutableMapOf<String, Pair<String?, List<MetaPreview>>>()
     private val trailerCache = mutableMapOf<String, List<MetaTrailer>>()
     private val personCache = mutableMapOf<String, PersonDetail>()
+    private val entityBrowseCache = mutableMapOf<String, TmdbEntityBrowseData>()
+    private val entityHeaderCache = mutableMapOf<String, TmdbEntityHeader>()
+    private val entityRailCache = mutableMapOf<String, List<MetaPreview>>()
 
     suspend fun fetchPersonDetail(
         personId: Int,
@@ -187,6 +190,259 @@ object TmdbMetadataService {
                     releaseInfo = credit.firstAirDate?.take(4),
                 )
             }
+    }
+
+    suspend fun fetchEntityBrowse(
+        entityKind: TmdbEntityKind,
+        entityId: Int,
+        sourceType: String,
+        fallbackName: String? = null,
+    ): TmdbEntityBrowseData? = withContext(Dispatchers.Default) {
+        val settings = TmdbSettingsRepository.snapshot()
+        if (!settings.enabled || !settings.hasApiKey) return@withContext null
+        val language = normalizeTmdbLanguage(settings.language)
+        val normalizedSourceType = normalizeEntitySourceType(sourceType)
+        val cacheKey = "${entityKind.routeValue}:$entityId:$normalizedSourceType:$language"
+        entityBrowseCache[cacheKey]?.let { return@withContext it }
+
+        val header = fetchEntityHeader(
+            entityKind = entityKind,
+            entityId = entityId,
+            fallbackName = fallbackName,
+            language = language,
+        )
+
+        val rails = buildEntityMediaOrder(entityKind, normalizedSourceType)
+            .flatMap { mediaType ->
+                TmdbEntityRailType.entries.mapNotNull { railType ->
+                    val pageResult = fetchEntityRailPage(
+                        entityKind = entityKind,
+                        entityId = entityId,
+                        mediaType = mediaType,
+                        railType = railType,
+                        language = language,
+                        page = 1,
+                    )
+                    if (pageResult.items.isEmpty()) {
+                        null
+                    } else {
+                        TmdbEntityRail(
+                            mediaType = mediaType,
+                            railType = railType,
+                            items = pageResult.items,
+                            currentPage = 1,
+                            hasMore = pageResult.hasMore,
+                        )
+                    }
+                }
+            }
+
+        if (header == null && rails.isEmpty()) return@withContext null
+
+        val data = TmdbEntityBrowseData(
+            header = header ?: TmdbEntityHeader(
+                id = entityId,
+                kind = entityKind,
+                name = fallbackName?.takeIf { it.isNotBlank() } ?: "Unknown",
+                logo = null,
+                originCountry = null,
+                secondaryLabel = null,
+                description = null,
+            ),
+            rails = rails,
+        )
+        entityBrowseCache[cacheKey] = data
+        data
+    }
+
+    suspend fun fetchEntityRailPage(
+        entityKind: TmdbEntityKind,
+        entityId: Int,
+        mediaType: TmdbEntityMediaType,
+        railType: TmdbEntityRailType,
+        language: String,
+        page: Int,
+    ): TmdbEntityRailPageResult {
+        if (entityKind == TmdbEntityKind.NETWORK && mediaType == TmdbEntityMediaType.MOVIE) {
+            return TmdbEntityRailPageResult(items = emptyList(), hasMore = false)
+        }
+
+        val cacheKey = "${entityKind.routeValue}:$entityId:${mediaType.value}:${railType.value}:$language:page:$page"
+        entityRailCache[cacheKey]?.let { cached ->
+            return TmdbEntityRailPageResult(items = cached, hasMore = cached.isNotEmpty())
+        }
+
+        val voteCountFloor = if (railType == TmdbEntityRailType.TOP_RATED) ENTITY_TOP_RATED_VOTE_FLOOR else null
+
+        val result = try {
+            val sortBy = when (mediaType) {
+                TmdbEntityMediaType.MOVIE -> when (railType) {
+                    TmdbEntityRailType.POPULAR -> "popularity.desc"
+                    TmdbEntityRailType.TOP_RATED -> "vote_average.desc"
+                    TmdbEntityRailType.RECENT -> "primary_release_date.desc"
+                }
+                TmdbEntityMediaType.TV -> when (railType) {
+                    TmdbEntityRailType.POPULAR -> "popularity.desc"
+                    TmdbEntityRailType.TOP_RATED -> "vote_average.desc"
+                    TmdbEntityRailType.RECENT -> "first_air_date.desc"
+                }
+            }
+
+            val queryParams = buildMap {
+                put("language", language)
+                put("page", page.toString())
+                put("sort_by", sortBy)
+                when (mediaType) {
+                    TmdbEntityMediaType.MOVIE -> {
+                        put("with_companies", entityId.toString())
+                    }
+                    TmdbEntityMediaType.TV -> {
+                        if (entityKind == TmdbEntityKind.COMPANY) put("with_companies", entityId.toString())
+                        if (entityKind == TmdbEntityKind.NETWORK) put("with_networks", entityId.toString())
+                    }
+                }
+                if (voteCountFloor != null) put("vote_count.gte", voteCountFloor.toString())
+            }
+
+            val endpoint = when (mediaType) {
+                TmdbEntityMediaType.MOVIE -> "discover/movie"
+                TmdbEntityMediaType.TV -> "discover/tv"
+            }
+
+            val response = fetch<TmdbDiscoverResponse>(endpoint = endpoint, query = queryParams)
+            val results = response?.results.orEmpty()
+            val totalPages = response?.totalPages ?: page
+
+            val mappedItems = results
+                .filter { it.id > 0 }
+                .mapNotNull { item -> mapEntityDiscoverResult(item, mediaType) }
+                .take(ENTITY_RAIL_MAX_ITEMS)
+
+            TmdbEntityRailPageResult(
+                items = mappedItems,
+                hasMore = page < totalPages && mappedItems.isNotEmpty(),
+            )
+        } catch (e: Exception) {
+            log.w(e) { "Failed to fetch entity rail ${railType.value}/${mediaType.value} for $entityId" }
+            TmdbEntityRailPageResult(items = emptyList(), hasMore = false)
+        }
+
+        if (result.items.isNotEmpty()) {
+            entityRailCache[cacheKey] = result.items
+        }
+        return result
+    }
+
+    private suspend fun fetchEntityHeader(
+        entityKind: TmdbEntityKind,
+        entityId: Int,
+        fallbackName: String?,
+        language: String,
+    ): TmdbEntityHeader? {
+        val cacheKey = "${entityKind.routeValue}:$entityId:$language:header"
+        entityHeaderCache[cacheKey]?.let { return it }
+
+        val header = try {
+            when (entityKind) {
+                TmdbEntityKind.COMPANY -> {
+                    val body = fetch<TmdbCompanyDetailsResponse>(endpoint = "company/$entityId")
+                    body?.let {
+                        TmdbEntityHeader(
+                            id = it.id,
+                            kind = entityKind,
+                            name = it.name?.takeIf { n -> n.isNotBlank() }
+                                ?: fallbackName?.takeIf { n -> n.isNotBlank() }
+                                ?: "Unknown",
+                            logo = buildImageUrl(it.logoPath, "w500"),
+                            originCountry = it.originCountry?.takeIf { c -> c.isNotBlank() },
+                            secondaryLabel = it.headquarters?.takeIf { h -> h.isNotBlank() },
+                            description = it.description?.takeIf { d -> d.isNotBlank() },
+                        )
+                    }
+                }
+                TmdbEntityKind.NETWORK -> {
+                    val body = fetch<TmdbNetworkDetailsResponse>(endpoint = "network/$entityId")
+                    body?.let {
+                        TmdbEntityHeader(
+                            id = it.id,
+                            kind = entityKind,
+                            name = it.name?.takeIf { n -> n.isNotBlank() }
+                                ?: fallbackName?.takeIf { n -> n.isNotBlank() }
+                                ?: "Unknown",
+                            logo = buildImageUrl(it.logoPath, "w500"),
+                            originCountry = it.originCountry?.takeIf { c -> c.isNotBlank() },
+                            secondaryLabel = it.headquarters?.takeIf { h -> h.isNotBlank() },
+                            description = null,
+                        )
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            log.w(e) { "Failed to fetch ${entityKind.routeValue} header for $entityId" }
+            null
+        } ?: fallbackName?.takeIf { it.isNotBlank() }?.let {
+            TmdbEntityHeader(
+                id = entityId,
+                kind = entityKind,
+                name = it,
+                logo = null,
+                originCountry = null,
+                secondaryLabel = null,
+                description = null,
+            )
+        }
+
+        if (header != null) {
+            entityHeaderCache[cacheKey] = header
+        }
+        return header
+    }
+
+    private fun mapEntityDiscoverResult(
+        result: TmdbDiscoverResult,
+        mediaType: TmdbEntityMediaType,
+    ): MetaPreview? {
+        val title = result.title?.takeIf { it.isNotBlank() }
+            ?: result.name?.takeIf { it.isNotBlank() }
+            ?: result.originalTitle?.takeIf { it.isNotBlank() }
+            ?: result.originalName?.takeIf { it.isNotBlank() }
+            ?: return null
+        val poster = buildImageUrl(result.posterPath, "w500")
+            ?: buildImageUrl(result.backdropPath, "w780")
+            ?: return null
+        val releaseInfo = when (mediaType) {
+            TmdbEntityMediaType.MOVIE -> result.releaseDate?.take(4)
+            TmdbEntityMediaType.TV -> result.firstAirDate?.take(4)
+        }
+        return MetaPreview(
+            id = "tmdb:${result.id}",
+            type = if (mediaType == TmdbEntityMediaType.TV) "series" else "movie",
+            name = title,
+            poster = poster,
+            description = result.overview?.takeIf { it.isNotBlank() },
+            releaseInfo = releaseInfo,
+        )
+    }
+
+    private fun buildEntityMediaOrder(
+        entityKind: TmdbEntityKind,
+        sourceType: String,
+    ): List<TmdbEntityMediaType> {
+        if (entityKind == TmdbEntityKind.NETWORK) {
+            return listOf(TmdbEntityMediaType.TV)
+        }
+        return when (sourceType) {
+            "movie" -> listOf(TmdbEntityMediaType.MOVIE, TmdbEntityMediaType.TV)
+            else -> listOf(TmdbEntityMediaType.TV, TmdbEntityMediaType.MOVIE)
+        }
+    }
+
+    private fun normalizeEntitySourceType(sourceType: String): String {
+        return when (sourceType.trim().lowercase()) {
+            "movie" -> "movie"
+            "tv", "series", "show" -> "tv"
+            else -> "tv"
+        }
     }
 
     suspend fun enrichMeta(
@@ -1277,4 +1533,106 @@ private data class TmdbPersonCreditCrew(
     @SerialName("release_date") val releaseDate: String? = null,
     @SerialName("first_air_date") val firstAirDate: String? = null,
     @SerialName("vote_average") val voteAverage: Double? = null,
+)
+
+// ─── Entity Browse (Company / Network) Models ───
+
+private const val ENTITY_RAIL_MAX_ITEMS = 20
+private const val ENTITY_TOP_RATED_VOTE_FLOOR = 200
+
+enum class TmdbEntityKind(val routeValue: String) {
+    COMPANY("company"),
+    NETWORK("network");
+
+    companion object {
+        fun fromRouteValue(value: String): TmdbEntityKind = when (value.trim().lowercase()) {
+            "network" -> NETWORK
+            else -> COMPANY
+        }
+    }
+}
+
+enum class TmdbEntityMediaType(val value: String) {
+    MOVIE("movie"),
+    TV("tv"),
+}
+
+enum class TmdbEntityRailType(val value: String) {
+    POPULAR("popular"),
+    TOP_RATED("top_rated"),
+    RECENT("recent"),
+}
+
+data class TmdbEntityHeader(
+    val id: Int,
+    val kind: TmdbEntityKind,
+    val name: String,
+    val logo: String?,
+    val originCountry: String?,
+    val secondaryLabel: String?,
+    val description: String?,
+)
+
+data class TmdbEntityRail(
+    val mediaType: TmdbEntityMediaType,
+    val railType: TmdbEntityRailType,
+    val items: List<MetaPreview>,
+    val currentPage: Int = 1,
+    val hasMore: Boolean = false,
+    val isLoading: Boolean = false,
+)
+
+data class TmdbEntityBrowseData(
+    val header: TmdbEntityHeader,
+    val rails: List<TmdbEntityRail>,
+)
+
+data class TmdbEntityRailPageResult(
+    val items: List<MetaPreview>,
+    val hasMore: Boolean,
+)
+
+@Serializable
+private data class TmdbCompanyDetailsResponse(
+    val id: Int,
+    val name: String? = null,
+    val description: String? = null,
+    val headquarters: String? = null,
+    val homepage: String? = null,
+    @SerialName("logo_path") val logoPath: String? = null,
+    @SerialName("origin_country") val originCountry: String? = null,
+)
+
+@Serializable
+private data class TmdbNetworkDetailsResponse(
+    val id: Int,
+    val name: String? = null,
+    val headquarters: String? = null,
+    val homepage: String? = null,
+    @SerialName("logo_path") val logoPath: String? = null,
+    @SerialName("origin_country") val originCountry: String? = null,
+)
+
+@Serializable
+private data class TmdbDiscoverResponse(
+    val page: Int? = null,
+    val results: List<TmdbDiscoverResult> = emptyList(),
+    @SerialName("total_pages") val totalPages: Int? = null,
+    @SerialName("total_results") val totalResults: Int? = null,
+)
+
+@Serializable
+private data class TmdbDiscoverResult(
+    val id: Int,
+    val title: String? = null,
+    val name: String? = null,
+    @SerialName("original_title") val originalTitle: String? = null,
+    @SerialName("original_name") val originalName: String? = null,
+    @SerialName("poster_path") val posterPath: String? = null,
+    @SerialName("backdrop_path") val backdropPath: String? = null,
+    val overview: String? = null,
+    @SerialName("release_date") val releaseDate: String? = null,
+    @SerialName("first_air_date") val firstAirDate: String? = null,
+    @SerialName("vote_average") val voteAverage: Double? = null,
+    @SerialName("vote_count") val voteCount: Int? = null,
 )

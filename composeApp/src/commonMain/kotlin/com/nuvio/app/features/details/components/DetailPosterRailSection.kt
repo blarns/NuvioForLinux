@@ -28,7 +28,7 @@ fun DetailPosterRailSection(
         entries = items,
         modifier = modifier,
         headerHorizontalPadding = headerHorizontalPadding,
-        rowContentPadding = PaddingValues(0.dp),
+        rowContentPadding = PaddingValues(horizontal = headerHorizontalPadding),
         showHeaderAccent = false,
         key = { item -> item.stableKey() },
     ) { item ->

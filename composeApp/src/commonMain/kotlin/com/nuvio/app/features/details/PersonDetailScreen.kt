@@ -378,7 +378,7 @@ private fun PersonDetailSkeleton(personName: String) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 0.dp),
+                    .padding(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 repeat(4) {

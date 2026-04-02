@@ -81,6 +81,8 @@ import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.details.MetaDetailsScreen
 import com.nuvio.app.features.details.MetaPerson
 import com.nuvio.app.features.details.PersonDetailScreen
+import com.nuvio.app.features.details.TmdbEntityBrowseScreen
+import com.nuvio.app.features.tmdb.TmdbEntityKind
 import com.nuvio.app.features.home.HomeCatalogSection
 import com.nuvio.app.features.home.HomeScreen
 import com.nuvio.app.features.home.MetaPreview
@@ -141,6 +143,14 @@ data class PersonDetailRoute(
     val personId: Int,
     val personName: String,
     val preferCrew: Boolean = false,
+)
+
+@Serializable
+data class EntityBrowseRoute(
+    val entityKind: String,
+    val entityId: Int,
+    val entityName: String,
+    val sourceType: String = "tv",
 )
 
 @Serializable
@@ -632,6 +642,19 @@ private fun MainAppContent(
                                 )
                             }
                         },
+                        onCompanyClick = { company, entityKind ->
+                            val tmdbId = company.tmdbId
+                            if (tmdbId != null && tmdbId > 0) {
+                                navController.navigate(
+                                    EntityBrowseRoute(
+                                        entityKind = entityKind,
+                                        entityId = tmdbId,
+                                        entityName = company.name,
+                                        sourceType = route.type,
+                                    ),
+                                )
+                            }
+                        },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -641,6 +664,38 @@ private fun MainAppContent(
                         personId = route.personId,
                         personName = route.personName,
                         preferCrew = route.preferCrew,
+                        onBack = { navController.popBackStack() },
+                        onOpenMeta = { preview ->
+                            coroutineScope.launch {
+                                val resolvedId = if (preview.id.startsWith("tmdb:")) {
+                                    val tmdbId = preview.id.removePrefix("tmdb:").toIntOrNull()
+                                    tmdbId?.let {
+                                        TmdbService.tmdbToImdb(
+                                            tmdbId = it,
+                                            mediaType = preview.type,
+                                        )
+                                    } ?: preview.id
+                                } else {
+                                    preview.id
+                                }
+                                navController.navigate(
+                                    DetailRoute(
+                                        type = preview.type,
+                                        id = resolvedId,
+                                    ),
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                composable<EntityBrowseRoute> { backStackEntry ->
+                    val route = backStackEntry.toRoute<EntityBrowseRoute>()
+                    TmdbEntityBrowseScreen(
+                        entityKind = TmdbEntityKind.fromRouteValue(route.entityKind),
+                        entityId = route.entityId,
+                        entityName = route.entityName,
+                        sourceType = route.sourceType,
                         onBack = { navController.popBackStack() },
                         onOpenMeta = { preview ->
                             coroutineScope.launch {
