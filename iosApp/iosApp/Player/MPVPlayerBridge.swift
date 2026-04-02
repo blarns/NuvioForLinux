@@ -16,7 +16,13 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
     }
 
     func loadFile(url: String) { playerVC?.loadFile(url) }
-    func loadFileWithAudio(videoUrl: String, audioUrl: String?) { playerVC?.loadFile(videoUrl, audioUrl: audioUrl) }
+    func loadFileWithAudio(videoUrl: String, audioUrl: String?, headersJson: String?) {
+        playerVC?.loadFile(
+            videoUrl,
+            audioUrl: audioUrl,
+            requestHeaders: parseRequestHeaders(headersJson)
+        )
+    }
     func play() { playerVC?.playPlayback() }
     func pause() { playerVC?.pausePlayback() }
     func seekTo(positionMs: Int64) { playerVC?.seekToMs(positionMs) }
@@ -99,6 +105,25 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
         playerVC?.destroyPlayer()
         playerVC = nil
     }
+
+    private func parseRequestHeaders(_ headersJson: String?) -> [String: String] {
+        guard
+            let headersJson,
+            !headersJson.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            let data = headersJson.data(using: .utf8),
+            let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return [:]
+        }
+
+        var headers: [String: String] = [:]
+        headers.reserveCapacity(raw.count)
+        raw.forEach { key, value in
+            guard let headerValue = value as? String else { return }
+            headers[key] = headerValue
+        }
+        return headers
+    }
 }
 
 // MARK: - Track Info
@@ -121,6 +146,7 @@ final class MPVPlayerViewController: UIViewController {
     private var mpv: OpaquePointer?
     private lazy var eventQueue = DispatchQueue(label: "mpv-events", qos: .userInitiated)
     private var recentPlaybackLogs: [String] = []
+    private var activeRequestHeaders: [String: String] = [:]
 
     // Cached track lists
     var audioTracks: [TrackInfo] = []
@@ -221,9 +247,12 @@ final class MPVPlayerViewController: UIViewController {
 
     // MARK: - Playback API
 
-    func loadFile(_ urlString: String, audioUrl: String? = nil) {
+    func loadFile(_ urlString: String, audioUrl: String? = nil, requestHeaders: [String: String] = [:]) {
         guard mpv != nil else { return }
         clearPlaybackError()
+        let sanitizedHeaders = sanitizeRequestHeaders(requestHeaders)
+        activeRequestHeaders = sanitizedHeaders
+        applyRequestHeaders(sanitizedHeaders)
         isPlayerLoading = true
         isPlayerEnded = false
         command("loadfile", args: [urlString, "replace"])
@@ -260,6 +289,7 @@ final class MPVPlayerViewController: UIViewController {
         guard mpv != nil else { return }
         if let path = getString("path") {
             clearPlaybackError()
+            applyRequestHeaders(activeRequestHeaders)
             let pos = getDouble("time-pos")
             command("loadfile", args: [path, "replace"])
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
@@ -561,6 +591,40 @@ final class MPVPlayerViewController: UIViewController {
         if status < 0 {
             print("[MPV] API error: \(String(cString: mpv_error_string(status)))")
         }
+    }
+
+    private func sanitizeRequestHeaders(_ headers: [String: String]) -> [String: String] {
+        guard !headers.isEmpty else { return [:] }
+
+        var sanitized: [String: String] = [:]
+        sanitized.reserveCapacity(headers.count)
+        headers.forEach { rawKey, rawValue in
+            let key = rawKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !key.isEmpty, !value.isEmpty else { return }
+            guard key.caseInsensitiveCompare("Range") != .orderedSame else { return }
+            sanitized[key] = value
+        }
+        return sanitized
+    }
+
+    private func applyRequestHeaders(_ headers: [String: String]) {
+        guard mpv != nil else { return }
+        if headers.isEmpty {
+            checkError(mpv_set_property_string(mpv, "http-header-fields", ""))
+            return
+        }
+
+        let serialized = headers
+            .sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
+            .map { key, value in
+                let escapedValue = value
+                    .replacingOccurrences(of: "\\", with: "\\\\")
+                    .replacingOccurrences(of: ",", with: "\\,")
+                return "\(key): \(escapedValue)"
+            }
+            .joined(separator: ",")
+        checkError(mpv_set_property_string(mpv, "http-header-fields", serialized))
     }
 }
 

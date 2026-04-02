@@ -91,6 +91,7 @@ import com.nuvio.app.features.player.PlayerLaunch
 import com.nuvio.app.features.player.PlayerLaunchStore
 import com.nuvio.app.features.player.PlayerRoute
 import com.nuvio.app.features.player.PlayerScreen
+import com.nuvio.app.features.player.sanitizePlaybackHeaders
 import com.nuvio.app.features.profiles.NuvioProfile
 import com.nuvio.app.features.profiles.ProfileEditScreen
 import com.nuvio.app.features.profiles.ProfileRepository
@@ -713,6 +714,7 @@ private fun MainAppContent(
                                     PlayerLaunch(
                                         title = route.title,
                                         sourceUrl = sourceUrl,
+                                        sourceHeaders = sanitizePlaybackHeaders(stream.behaviorHints.proxyHeaders?.request),
                                         logo = route.logo,
                                         poster = route.poster,
                                         background = route.background,
@@ -761,6 +763,7 @@ private fun MainAppContent(
                         title = launch.title,
                         sourceUrl = launch.sourceUrl,
                         sourceAudioUrl = launch.sourceAudioUrl,
+                        sourceHeaders = launch.sourceHeaders,
                         logo = launch.logo,
                         poster = launch.poster,
                         background = launch.background,

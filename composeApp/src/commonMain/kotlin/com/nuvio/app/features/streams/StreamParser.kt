@@ -3,6 +3,7 @@ package com.nuvio.app.features.streams
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -30,6 +31,9 @@ object StreamParser {
             if (url == null && infoHash == null && externalUrl == null) return@mapNotNull null
 
             val hintsObj = obj["behaviorHints"] as? JsonObject
+            val proxyHeaders = hintsObj
+                ?.objectValue("proxyHeaders")
+                ?.toProxyHeaders()
             StreamItem(
                 name = obj.string("name"),
                 description = obj.string("description") ?: obj.string("title"),
@@ -44,6 +48,7 @@ object StreamParser {
                     notWebReady = hintsObj?.boolean("notWebReady") ?: false,
                     videoSize = hintsObj?.long("videoSize"),
                     filename = hintsObj?.string("filename"),
+                    proxyHeaders = proxyHeaders,
                 ),
             )
         }
@@ -60,4 +65,26 @@ object StreamParser {
 
     private fun JsonObject.boolean(name: String): Boolean? =
         this[name]?.jsonPrimitive?.booleanOrNull
+
+    private fun JsonObject.objectValue(name: String): JsonObject? =
+        this[name] as? JsonObject
+
+    private fun JsonObject.stringMap(): Map<String, String> =
+        entries.mapNotNull { (key, value) ->
+            (value as? JsonPrimitive)?.contentOrNull
+                ?.takeIf { it.isNotBlank() }
+                ?.let { key to it }
+        }.toMap()
+
+    private fun JsonObject.toProxyHeaders(): StreamProxyHeaders? {
+        val requestHeaders = objectValue("request")?.stringMap().orEmpty().takeIf { it.isNotEmpty() }
+        val responseHeaders = objectValue("response")?.stringMap().orEmpty().takeIf { it.isNotEmpty() }
+        if (requestHeaders == null && responseHeaders == null) {
+            return null
+        }
+        return StreamProxyHeaders(
+            request = requestHeaders,
+            response = responseHeaders,
+        )
+    }
 }

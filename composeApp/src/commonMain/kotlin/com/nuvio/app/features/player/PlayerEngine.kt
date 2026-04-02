@@ -20,10 +20,26 @@ interface PlayerEngineController {
     fun applySubtitleStyle(style: SubtitleStyleState) {}
 }
 
+internal fun sanitizePlaybackHeaders(headers: Map<String, String>?): Map<String, String> {
+    val rawHeaders = headers ?: return emptyMap()
+    if (rawHeaders.isEmpty()) return emptyMap()
+
+    val sanitized = LinkedHashMap<String, String>(rawHeaders.size)
+    rawHeaders.forEach { (rawKey, rawValue) ->
+        val key = rawKey.trim()
+        val value = rawValue.trim()
+        if (key.isEmpty() || value.isEmpty()) return@forEach
+        if (key.equals("Range", ignoreCase = true)) return@forEach
+        sanitized[key] = value
+    }
+    return sanitized
+}
+
 @Composable
 expect fun PlatformPlayerSurface(
     sourceUrl: String,
     sourceAudioUrl: String? = null,
+    sourceHeaders: Map<String, String> = emptyMap(),
     modifier: Modifier = Modifier,
     playWhenReady: Boolean = true,
     resizeMode: PlayerResizeMode = PlayerResizeMode.Fit,

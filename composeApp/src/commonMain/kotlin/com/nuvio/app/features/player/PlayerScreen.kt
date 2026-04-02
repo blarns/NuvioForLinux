@@ -64,6 +64,7 @@ fun PlayerScreen(
     title: String,
     sourceUrl: String,
     sourceAudioUrl: String? = null,
+    sourceHeaders: Map<String, String> = emptyMap(),
     providerName: String,
     streamTitle: String,
     streamSubtitle: String?,
@@ -105,6 +106,9 @@ fun PlayerScreen(
         // Active playback state (mutable to support source/episode switching)
         var activeSourceUrl by rememberSaveable { mutableStateOf(sourceUrl) }
         var activeSourceAudioUrl by rememberSaveable { mutableStateOf(sourceAudioUrl) }
+        var activeSourceHeaders by remember(sourceUrl, sourceHeaders) {
+            mutableStateOf(sanitizePlaybackHeaders(sourceHeaders))
+        }
         var activeStreamTitle by rememberSaveable { mutableStateOf(streamTitle) }
         var activeStreamSubtitle by rememberSaveable { mutableStateOf(streamSubtitle) }
         var activeProviderName by rememberSaveable { mutableStateOf(providerName) }
@@ -468,6 +472,7 @@ fun PlayerScreen(
             }
             activeSourceUrl = url
             activeSourceAudioUrl = null
+            activeSourceHeaders = sanitizePlaybackHeaders(stream.behaviorHints.proxyHeaders?.request)
             activeStreamTitle = stream.streamLabel
             activeStreamSubtitle = stream.streamSubtitle
             activeProviderName = stream.addonName
@@ -500,6 +505,7 @@ fun PlayerScreen(
             }
             activeSourceUrl = url
             activeSourceAudioUrl = null
+            activeSourceHeaders = sanitizePlaybackHeaders(stream.behaviorHints.proxyHeaders?.request)
             activeStreamTitle = stream.streamLabel
             activeStreamSubtitle = stream.streamSubtitle
             activeProviderName = stream.addonName
@@ -541,7 +547,7 @@ fun PlayerScreen(
             controlsVisible = false
         }
 
-        LaunchedEffect(activeSourceUrl, activeSourceAudioUrl) {
+        LaunchedEffect(activeSourceUrl, activeSourceAudioUrl, activeSourceHeaders) {
             errorMessage = null
             scrubbingPositionMs = null
             initialLoadCompleted = false
@@ -777,6 +783,7 @@ fun PlayerScreen(
             PlatformPlayerSurface(
                 sourceUrl = activeSourceUrl,
                 sourceAudioUrl = activeSourceAudioUrl,
+                sourceHeaders = activeSourceHeaders,
                 modifier = Modifier.fillMaxSize(),
                 playWhenReady = shouldPlay,
                 resizeMode = resizeMode,

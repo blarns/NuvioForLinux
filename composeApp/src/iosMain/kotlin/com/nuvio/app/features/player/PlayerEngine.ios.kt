@@ -12,6 +12,8 @@ import co.touchlab.kermit.Logger
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 private const val TAG = "NuvioiOSPlayer"
 
@@ -20,6 +22,7 @@ private const val TAG = "NuvioiOSPlayer"
 actual fun PlatformPlayerSurface(
     sourceUrl: String,
     sourceAudioUrl: String?,
+    sourceHeaders: Map<String, String>,
     modifier: Modifier,
     playWhenReady: Boolean,
     resizeMode: PlayerResizeMode,
@@ -205,8 +208,12 @@ actual fun PlatformPlayerSurface(
     }
 
     // Load file and set initial state
-    LaunchedEffect(bridge, sourceUrl, sourceAudioUrl) {
-        bridge.loadFileWithAudio(sourceUrl, sourceAudioUrl)
+    LaunchedEffect(bridge, sourceUrl, sourceAudioUrl, sourceHeaders) {
+        bridge.loadFileWithAudio(
+            sourceUrl,
+            sourceAudioUrl,
+            encodePlaybackHeadersForBridge(sourceHeaders),
+        )
         if (playWhenReady) {
             bridge.play()
         } else {
@@ -293,4 +300,14 @@ private fun Int.toHexByte(): String {
         append(digits[value / 16])
         append(digits[value % 16])
     }
+}
+
+private fun encodePlaybackHeadersForBridge(headers: Map<String, String>): String? {
+    val sanitized = sanitizePlaybackHeaders(headers)
+    if (sanitized.isEmpty()) {
+        return null
+    }
+    return runCatching {
+        Json.encodeToString(sanitized)
+    }.getOrNull()
 }

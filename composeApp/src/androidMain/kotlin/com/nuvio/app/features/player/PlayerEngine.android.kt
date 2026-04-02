@@ -58,6 +58,7 @@ private const val TAG = "NuvioPlayer"
 actual fun PlatformPlayerSurface(
     sourceUrl: String,
     sourceAudioUrl: String?,
+    sourceHeaders: Map<String, String>,
     modifier: Modifier,
     playWhenReady: Boolean,
     resizeMode: PlayerResizeMode,
@@ -77,7 +78,11 @@ actual fun PlatformPlayerSurface(
         PlayerSettingsRepository.uiState.value
     }
 
-    val exoPlayer = remember(sourceUrl, sourceAudioUrl) {
+    val sanitizedSourceHeaders = remember(sourceHeaders) {
+        sanitizePlaybackHeaders(sourceHeaders)
+    }
+
+    val exoPlayer = remember(sourceUrl, sourceAudioUrl, sanitizedSourceHeaders) {
         val renderersFactory = DefaultRenderersFactory(context)
             .setExtensionRendererMode(playerSettings.decoderPriority)
             .setMapDV7ToHevc(playerSettings.mapDV7ToHevc)
@@ -107,7 +112,7 @@ actual fun PlatformPlayerSurface(
             .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
 
         val mediaSourceFactory = DefaultMediaSourceFactory(
-            YoutubeChunkedDataSourceFactory(),
+            YoutubeChunkedDataSourceFactory(defaultRequestHeaders = sanitizedSourceHeaders),
             extractorsFactory,
         )
 

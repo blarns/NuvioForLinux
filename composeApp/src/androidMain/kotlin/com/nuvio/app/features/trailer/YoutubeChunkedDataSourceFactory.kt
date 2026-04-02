@@ -19,6 +19,7 @@ import androidx.media3.datasource.TransferListener
  */
 @UnstableApi
 class YoutubeChunkedDataSourceFactory(
+    private val defaultRequestHeaders: Map<String, String> = emptyMap(),
     private val chunkSizeBytes: Long = CHUNK_SIZE
 ) : DataSource.Factory {
 
@@ -29,11 +30,14 @@ class YoutubeChunkedDataSourceFactory(
     }
 
     override fun createDataSource(): DataSource {
-        val upstream = DefaultHttpDataSource.Factory()
+        val upstreamFactory = DefaultHttpDataSource.Factory()
             .setConnectTimeoutMs(15_000)
             .setReadTimeoutMs(15_000)
             .setAllowCrossProtocolRedirects(true)
-            .createDataSource()
+        if (defaultRequestHeaders.isNotEmpty()) {
+            upstreamFactory.setDefaultRequestProperties(defaultRequestHeaders)
+        }
+        val upstream = upstreamFactory.createDataSource()
         return YoutubeChunkedDataSource(upstream, chunkSizeBytes)
     }
 

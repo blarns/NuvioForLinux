@@ -29,6 +29,12 @@ data class StreamBehaviorHints(
     val notWebReady: Boolean = false,
     val videoSize: Long? = null,
     val filename: String? = null,
+    val proxyHeaders: StreamProxyHeaders? = null,
+)
+
+data class StreamProxyHeaders(
+    val request: Map<String, String>? = null,
+    val response: Map<String, String>? = null,
 )
 
 data class AddonStreamGroup(

@@ -257,6 +257,19 @@ private fun PluginRuntimeResult.toStreamItem(scraper: PluginScraper): StreamItem
         size?.takeIf { it.isNotBlank() },
         language?.takeIf { it.isNotBlank() },
     )
+    val requestHeaders = headers
+        .orEmpty()
+        .mapNotNull { (key, value) ->
+            val headerName = key.trim()
+            val headerValue = value.trim()
+            if (headerName.isBlank() || headerValue.isBlank() || headerName.equals("Range", ignoreCase = true)) {
+                null
+            } else {
+                headerName to headerValue
+            }
+        }
+        .toMap()
+
     return StreamItem(
         name = name ?: title,
         description = subtitleParts.joinToString(" • ").ifBlank { null },
@@ -264,5 +277,12 @@ private fun PluginRuntimeResult.toStreamItem(scraper: PluginScraper): StreamItem
         infoHash = infoHash,
         addonName = scraper.name,
         addonId = "plugin:${scraper.id}",
+        behaviorHints = if (requestHeaders.isEmpty()) {
+            StreamBehaviorHints()
+        } else {
+            StreamBehaviorHints(
+                proxyHeaders = StreamProxyHeaders(request = requestHeaders),
+            )
+        },
     )
 }
