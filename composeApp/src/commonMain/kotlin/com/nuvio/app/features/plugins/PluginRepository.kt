@@ -293,7 +293,7 @@ object PluginRepository {
     suspend fun testScraper(scraperId: String): Result<List<PluginRuntimeResult>> {
         initialize()
         val scraper = _uiState.value.scrapers.find { it.id == scraperId }
-            ?: return Result.failure(IllegalArgumentException("Scraper not found"))
+            ?: return Result.failure(IllegalArgumentException("Provider not found"))
 
         val mediaType = if (scraper.supportsType("movie")) "movie" else "tv"
         val season = if (mediaType == "tv") 1 else null

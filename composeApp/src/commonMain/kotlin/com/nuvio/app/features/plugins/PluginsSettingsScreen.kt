@@ -84,7 +84,7 @@ fun PluginsSettingsPageContent(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 NuvioInfoBadge(text = "${sortedRepos.size} repos")
-                NuvioInfoBadge(text = "${sortedScrapers.size} scrapers")
+                NuvioInfoBadge(text = "${sortedScrapers.size} providers")
                 NuvioInfoBadge(
                     text = if (uiState.pluginsEnabled) "Plugins enabled" else "Plugins disabled",
                 )
@@ -97,13 +97,13 @@ fun PluginsSettingsPageContent(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Enable plugin scrapers globally",
+                        text = "Enable plugin providers globally",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "Use JavaScript plugin scrapers during stream discovery.",
+                        text = "Use plugin providers during stream discovery.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -132,7 +132,7 @@ fun PluginsSettingsPageContent(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "In Streams, show one provider per repo (example: Tapframe) instead of one per scraper.",
+                        text = "In Streams, show one provider per repository instead of one per source.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -201,7 +201,7 @@ fun PluginsSettingsPageContent(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Add a repository URL to download JS scrapers and use them in stream discovery.",
+                    text = "Add a repository URL to install provider plugins for stream discovery.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -259,7 +259,7 @@ fun PluginsSettingsPageContent(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        NuvioInfoBadge(text = "${repo.scraperCount} scrapers")
+                        NuvioInfoBadge(text = "${repo.scraperCount} providers")
                         if (repo.isRefreshing) {
                             NuvioInfoBadge(text = "Refreshing")
                         }
@@ -276,11 +276,11 @@ fun PluginsSettingsPageContent(
             }
         }
 
-        NuvioSectionLabel("SCRAPERS")
+        NuvioSectionLabel("PROVIDERS")
         if (sortedScrapers.isEmpty()) {
             NuvioSurfaceCard {
                 Text(
-                    text = "No scrapers available yet.",
+                    text = "No providers available yet.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -354,7 +354,7 @@ fun PluginsSettingsPageContent(
 
                     Spacer(modifier = Modifier.height(12.dp))
                     NuvioPrimaryButton(
-                        text = if (isTestingThisScraper) "Testing..." else "Test Scraper",
+                        text = if (isTestingThisScraper) "Testing..." else "Test Provider",
                         enabled = !isTestingThisScraper,
                         onClick = {
                             testingScraperId = scraper.id
@@ -367,7 +367,7 @@ fun PluginsSettingsPageContent(
                                         testResults[scraper.id] = listOf(
                                             PluginRuntimeResult(
                                                 title = "Error",
-                                                name = error.message ?: "Scraper test failed",
+                                                name = error.message ?: "Provider test failed",
                                                 url = "about:error",
                                             ),
                                         )

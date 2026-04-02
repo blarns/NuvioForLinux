@@ -212,9 +212,11 @@ fun App() {
         }
 
         val authState by AuthRepository.state.collectAsStateWithLifecycle()
+        val profileState by ProfileRepository.state.collectAsStateWithLifecycle()
         var gateScreen by rememberSaveable { mutableStateOf(AppGateScreen.Loading.name) }
         var editingProfile by remember { mutableStateOf<NuvioProfile?>(null) }
         var isNewProfile by remember { mutableStateOf(false) }
+        var autoSkipProfileSelection by rememberSaveable { mutableStateOf(false) }
 
         LaunchedEffect(authState) {
             when (authState) {
@@ -227,9 +229,33 @@ fun App() {
                     val authenticatedState = authState as AuthState.Authenticated
                     ProfileRepository.ensureLoaded(authenticatedState.userId)
                     if (gateScreen == AppGateScreen.Loading.name || gateScreen == AppGateScreen.Auth.name) {
-                        gateScreen = AppGateScreen.ProfileSelection.name
+                        autoSkipProfileSelection = true
+                        val cachedProfiles = ProfileRepository.state.value.profiles
+                        if (cachedProfiles.size == 1) {
+                            val onlyProfile = cachedProfiles.first()
+                            ProfileRepository.selectProfile(onlyProfile.profileIndex)
+                            SyncManager.pullAllForProfile(onlyProfile.profileIndex)
+                            gateScreen = AppGateScreen.Main.name
+                            autoSkipProfileSelection = false
+                        } else {
+                            gateScreen = AppGateScreen.ProfileSelection.name
+                        }
                     }
                 }
+            }
+        }
+
+        LaunchedEffect(gateScreen, autoSkipProfileSelection, profileState.profiles) {
+            if (
+                autoSkipProfileSelection &&
+                gateScreen == AppGateScreen.ProfileSelection.name &&
+                profileState.profiles.size == 1
+            ) {
+                val onlyProfile = profileState.profiles.first()
+                ProfileRepository.selectProfile(onlyProfile.profileIndex)
+                SyncManager.pullAllForProfile(onlyProfile.profileIndex)
+                gateScreen = AppGateScreen.Main.name
+                autoSkipProfileSelection = false
             }
         }
 
@@ -286,6 +312,7 @@ fun App() {
                 AppGateScreen.Main.name -> {
                     MainAppContent(
                         onSwitchProfile = {
+                            autoSkipProfileSelection = false
                             gateScreen = AppGateScreen.ProfileSelection.name
                         },
                     )
@@ -478,6 +505,7 @@ private fun MainAppContent(
                                                     selected = selectedTab == AppScreenTab.Settings,
                                                     onClick = { selectedTab = AppScreenTab.Settings },
                                                     onProfileSelected = onProfileSelected,
+                                                    onAddProfileRequested = onSwitchProfile,
                                                 )
                                             },
                                             label = { Text("Profile") },
@@ -521,6 +549,7 @@ private fun MainAppContent(
                                         selectedTab = selectedTab,
                                         onTabSelected = { selectedTab = it },
                                         onProfileSelected = onProfileSelected,
+                                        onAddProfileRequested = onSwitchProfile,
                                     )
                                 }
                             }
@@ -966,6 +995,7 @@ private fun TabletFloatingTopBar(
     selectedTab: AppScreenTab,
     onTabSelected: (AppScreenTab) -> Unit,
     onProfileSelected: (NuvioProfile) -> Unit,
+    onAddProfileRequested: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -1040,6 +1070,7 @@ private fun TabletFloatingTopBar(
                             selected = selectedTab == AppScreenTab.Settings,
                             onClick = { onTabSelected(AppScreenTab.Settings) },
                             onProfileSelected = onProfileSelected,
+                            onAddProfileRequested = onAddProfileRequested,
                         )
                         Text(
                             text = "Profile",

@@ -2,13 +2,10 @@ package com.nuvio.app.features.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -33,13 +30,8 @@ internal fun LazyListScope.traktSettingsContent(
     uiState: TraktAuthUiState,
 ) {
     item {
-        SettingsSection(
-            title = "TRAKT",
-            isTablet = isTablet,
-        ) {
-            SettingsGroup(isTablet = isTablet) {
-                TraktBrandIntro(isTablet = isTablet)
-            }
+        SettingsGroup(isTablet = isTablet) {
+            TraktBrandIntro(isTablet = isTablet)
         }
     }
 
@@ -69,35 +61,26 @@ private fun TraktBrandIntro(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = horizontalPadding, vertical = verticalPadding),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalAlignment = Alignment.Start,
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(if (isTablet) 64.dp else 56.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             androidx.compose.foundation.Image(
                 painter = traktBrandPainter(TraktBrandAsset.Glyph),
                 contentDescription = "Trakt",
-                modifier = Modifier.size(if (isTablet) 56.dp else 48.dp),
+                modifier = Modifier.size(if (isTablet) 84.dp else 72.dp),
                 contentScale = ContentScale.Fit,
             )
-            androidx.compose.foundation.Image(
-                painter = traktBrandPainter(TraktBrandAsset.Wordmark),
-                contentDescription = "Trakt",
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(if (isTablet) 170.dp else 150.dp),
-                contentScale = ContentScale.Fit,
+            Text(
+                text = "Track what you watch, save to watchlist or custom lists, and keep your library synced with Trakt.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Text(
-            text = "Track what you watch, save to watchlist or custom lists, and keep your library synced with Trakt.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 

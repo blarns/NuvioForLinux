@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Backspace
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material3.Icon
@@ -71,6 +72,7 @@ fun ProfileSwitcherTab(
     selected: Boolean,
     onClick: () -> Unit,
     onProfileSelected: (NuvioProfile) -> Unit,
+    onAddProfileRequested: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val profileState by ProfileRepository.state.collectAsStateWithLifecycle()
@@ -133,7 +135,7 @@ fun ProfileSwitcherTab(
                 detectTapGestures(
                     onTap = { onClick() },
                     onLongPress = {
-                        if (profiles.size > 1) {
+                        if (profiles.isNotEmpty()) {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             showPopup = true
                         }
@@ -151,7 +153,7 @@ fun ProfileSwitcherTab(
         )
 
         // Floating profile popup (stays composed during exit animation)
-        if (popupVisible && profiles.size > 1) {
+        if (popupVisible && profiles.isNotEmpty()) {
             Popup(
                 alignment = Alignment.BottomCenter,
                 offset = IntOffset(0, with(density) { -64.dp.roundToPx() }),
@@ -202,6 +204,16 @@ fun ProfileSwitcherTab(
                                     },
                                 )
                             }
+
+                            if (profiles.size < 4) {
+                                PopupAddProfileBubble(
+                                    delayMs = profiles.size * 50,
+                                    onClick = {
+                                        showPopup = false
+                                        onAddProfileRequested()
+                                    },
+                                )
+                            }
                         }
 
                         // Inline PIN entry for locked profiles
@@ -233,6 +245,74 @@ fun ProfileSwitcherTab(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun PopupAddProfileBubble(
+    delayMs: Int,
+    onClick: () -> Unit,
+) {
+    val itemAlpha = remember { Animatable(0f) }
+    val itemScale = remember { Animatable(0.4f) }
+
+    LaunchedEffect(Unit) {
+        delay(delayMs.toLong())
+        launch { itemAlpha.animateTo(1f, tween(200, easing = FastOutSlowInEasing)) }
+        launch {
+            itemScale.animateTo(
+                1f,
+                spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium,
+                ),
+            )
+        }
+    }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .graphicsLayer {
+                alpha = itemAlpha.value
+                scaleX = itemScale.value
+                scaleY = itemScale.value
+            }
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(4.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .border(1.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Add,
+                contentDescription = "Add Profile",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Text(
+            text = "Add",
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Medium,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            modifier = Modifier.width(56.dp),
+        )
     }
 }
 

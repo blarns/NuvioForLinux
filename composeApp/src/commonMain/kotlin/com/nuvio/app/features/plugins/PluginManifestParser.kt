@@ -11,7 +11,7 @@ internal object PluginManifestParser {
         val manifest = json.decodeFromString<PluginManifest>(payload)
         require(manifest.name.isNotBlank()) { "Manifest name is missing." }
         require(manifest.version.isNotBlank()) { "Manifest version is missing." }
-        require(manifest.scrapers.isNotEmpty()) { "Manifest has no scrapers." }
+        require(manifest.scrapers.isNotEmpty()) { "Manifest has no providers." }
         return manifest
     }
 }
