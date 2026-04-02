@@ -71,6 +71,7 @@ import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.sync.SyncManager
 import com.nuvio.app.core.ui.nuvioBottomNavigationBarInsets
 import com.nuvio.app.core.ui.NuvioPosterActionSheet
+import com.nuvio.app.core.ui.TraktListPickerDialog
 import com.nuvio.app.core.ui.NuvioTheme
 import com.nuvio.app.features.auth.AuthScreen
 import com.nuvio.app.features.catalog.CatalogRepository
@@ -113,6 +114,9 @@ import com.nuvio.app.features.streams.StreamsRepository
 import com.nuvio.app.features.streams.StreamsScreen
 import com.nuvio.app.features.tmdb.TmdbService
 import com.nuvio.app.features.player.PlayerSettingsRepository
+import com.nuvio.app.features.trakt.TraktAuthRepository
+import com.nuvio.app.features.trakt.TraktConnectionMode
+import com.nuvio.app.features.trakt.TraktListTab
 import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watchprogress.ContinueWatchingItem
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
@@ -336,14 +340,26 @@ private fun MainAppContent(
         val coroutineScope = rememberCoroutineScope()
         var selectedTab by rememberSaveable { mutableStateOf(AppScreenTab.Home) }
         var selectedPosterForActions by remember { mutableStateOf<MetaPreview?>(null) }
+        var showLibraryListPicker by remember { mutableStateOf(false) }
+        var pickerItem by remember { mutableStateOf<LibraryItem?>(null) }
+        var pickerTitle by remember { mutableStateOf("") }
+        var pickerTabs by remember { mutableStateOf<List<TraktListTab>>(emptyList()) }
+        var pickerMembership by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+        var pickerPending by remember { mutableStateOf(false) }
+        var pickerError by remember { mutableStateOf<String?>(null) }
         val libraryUiState by remember {
             LibraryRepository.ensureLoaded()
             LibraryRepository.uiState
+        }.collectAsStateWithLifecycle()
+        val traktAuthUiState by remember {
+            TraktAuthRepository.ensureLoaded()
+            TraktAuthRepository.uiState
         }.collectAsStateWithLifecycle()
     val watchedUiState by remember {
         WatchedRepository.ensureLoaded()
         WatchedRepository.uiState
     }.collectAsStateWithLifecycle()
+    val isTraktConnected = traktAuthUiState.mode == TraktConnectionMode.CONNECTED
     var initialHomeReady by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(5_000)
@@ -901,7 +917,29 @@ private fun MainAppContent(
                 onDismiss = { selectedPosterForActions = null },
                 onToggleLibrary = {
                     selectedPosterForActions?.let { preview ->
-                        LibraryRepository.toggleSaved(preview.toLibraryItem(savedAtEpochMs = 0L))
+                        val libraryItem = preview.toLibraryItem(savedAtEpochMs = 0L)
+                        if (!isTraktConnected) {
+                            LibraryRepository.toggleSaved(libraryItem)
+                        } else {
+                            pickerItem = libraryItem
+                            pickerTitle = preview.name
+                            coroutineScope.launch {
+                                pickerPending = true
+                                pickerError = null
+                                runCatching {
+                                    val snapshot = LibraryRepository.getMembershipSnapshot(libraryItem)
+                                    val tabs = LibraryRepository.traktListTabs()
+                                    pickerTabs = tabs
+                                    pickerMembership = tabs.associate { tab ->
+                                        tab.key to (snapshot[tab.key] == true)
+                                    }
+                                    showLibraryListPicker = true
+                                }.onFailure { error ->
+                                    pickerError = error.message ?: "Failed to load Trakt lists"
+                                }
+                                pickerPending = false
+                            }
+                        }
                     }
                 },
                 onToggleWatched = {
@@ -909,6 +947,47 @@ private fun MainAppContent(
                         coroutineScope.launch {
                             WatchingActions.togglePosterWatched(preview)
                         }
+                    }
+                },
+            )
+
+            TraktListPickerDialog(
+                visible = showLibraryListPicker,
+                title = pickerTitle,
+                tabs = pickerTabs,
+                membership = pickerMembership,
+                isPending = pickerPending,
+                errorMessage = pickerError,
+                onToggle = { listKey ->
+                    pickerMembership = pickerMembership.toMutableMap().apply {
+                        this[listKey] = !(this[listKey] == true)
+                    }
+                },
+                onDismiss = {
+                    if (!pickerPending) {
+                        showLibraryListPicker = false
+                        pickerItem = null
+                        pickerError = null
+                    }
+                },
+                onSave = {
+                    val item = pickerItem ?: return@TraktListPickerDialog
+                    coroutineScope.launch {
+                        pickerPending = true
+                        pickerError = null
+                        runCatching {
+                            LibraryRepository.applyMembershipChanges(
+                                item = item,
+                                desiredMembership = pickerMembership,
+                            )
+                        }.onSuccess {
+                            showLibraryListPicker = false
+                            pickerItem = null
+                            pickerError = null
+                        }.onFailure { error ->
+                            pickerError = error.message ?: "Failed to update Trakt lists"
+                        }
+                        pickerPending = false
                     }
                 },
             )

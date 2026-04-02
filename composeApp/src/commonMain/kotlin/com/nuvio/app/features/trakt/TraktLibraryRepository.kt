@@ -15,7 +15,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -30,6 +32,7 @@ private const val WATCHLIST_KEY = "trakt:watchlist"
 private const val PERSONAL_LIST_PREFIX = "trakt:list:"
 private const val METADATA_FETCH_TIMEOUT_MS = 3_500L
 private const val METADATA_FETCH_CONCURRENCY = 5
+private const val SNAPSHOT_CACHE_TTL_MS = 60_000L
 
 data class TraktLibraryUiState(
     val listTabs: List<TraktListTab> = emptyList(),
@@ -48,6 +51,8 @@ object TraktLibraryRepository {
     val uiState: StateFlow<TraktLibraryUiState> = _uiState.asStateFlow()
 
     private var hasLoaded = false
+    private val refreshMutex = Mutex()
+    private var lastRefreshAtMs: Long = 0L
 
     fun ensureLoaded() {
         if (hasLoaded) return
@@ -73,39 +78,61 @@ object TraktLibraryRepository {
     }
 
     suspend fun refreshNow() {
+        refresh(force = true)
+    }
+
+    suspend fun ensureFresh() {
+        refresh(force = false)
+    }
+
+    private suspend fun refresh(force: Boolean) {
         ensureLoaded()
-        AddonRepository.initialize()
-        withTimeoutOrNull(4_000L) {
-            AddonRepository.awaitManifestsLoaded()
+        refreshMutex.withLock {
+            val now = TraktPlatformClock.nowEpochMs()
+            val current = _uiState.value
+            if (
+                !force &&
+                current.listTabs.isNotEmpty() &&
+                now - lastRefreshAtMs <= SNAPSHOT_CACHE_TTL_MS
+            ) {
+                return
+            }
+
+            AddonRepository.initialize()
+            withTimeoutOrNull(4_000L) {
+                AddonRepository.awaitManifestsLoaded()
+            }
+
+            val headers = TraktAuthRepository.authorizedHeaders()
+            if (headers == null) {
+                _uiState.value = TraktLibraryUiState()
+                lastRefreshAtMs = 0L
+                return
+            }
+
+            _uiState.value = current.copy(isLoading = true, errorMessage = null)
+
+            val result = runCatching {
+                fetchSnapshot(headers)
+            }.onFailure { error ->
+                if (error is CancellationException) throw error
+                log.w { "Failed to refresh Trakt library: ${error.message}" }
+            }.getOrNull()
+
+            if (result == null) {
+                _uiState.value = current.copy(isLoading = false, errorMessage = "Failed to load Trakt library")
+                return
+            }
+
+            _uiState.value = result.copy(isLoading = false, errorMessage = null)
+            lastRefreshAtMs = now
         }
-
-        val headers = TraktAuthRepository.authorizedHeaders()
-        if (headers == null) {
-            _uiState.value = TraktLibraryUiState()
-            return
-        }
-
-        _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
-
-        val result = runCatching {
-            fetchSnapshot(headers)
-        }.onFailure { error ->
-            if (error is CancellationException) throw error
-            log.w { "Failed to refresh Trakt library: ${error.message}" }
-        }.getOrNull()
-
-        if (result == null) {
-            _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = "Failed to load Trakt library")
-            return
-        }
-
-        _uiState.value = result.copy(isLoading = false, errorMessage = null)
     }
 
     suspend fun getMembershipSnapshot(item: LibraryItem): TraktMembershipSnapshot {
         ensureLoaded()
-        if (_uiState.value.listTabs.isEmpty() && TraktAuthRepository.isAuthenticated.value) {
-            refreshNow()
+        if (TraktAuthRepository.isAuthenticated.value) {
+            ensureFresh()
         }
         val itemMembership = _uiState.value.membershipByContent[contentKey(item.id, item.type)].orEmpty()
         val map = _uiState.value.listTabs.associate { tab ->
@@ -127,33 +154,129 @@ object TraktLibraryRepository {
     suspend fun applyMembershipChanges(item: LibraryItem, changes: TraktMembershipChanges) {
         ensureLoaded()
         val headers = TraktAuthRepository.authorizedHeaders() ?: return
+        ensureFresh()
+
         val current = getMembershipSnapshot(item).listMembership
         val desired = changes.desiredMembership
         val keys = (current.keys + desired.keys).distinct()
+        val previousState = _uiState.value
 
-        for (key in keys) {
-            val before = current[key] == true
-            val after = desired[key] == true
-            if (before == after) continue
+        _uiState.value = applyOptimisticMembershipChanges(
+            state = previousState,
+            item = item,
+            desiredMembership = desired,
+        )
 
-            if (key == WATCHLIST_KEY) {
-                if (after) {
-                    addToWatchlist(headers, item)
+        try {
+            for (key in keys) {
+                val before = current[key] == true
+                val after = desired[key] == true
+                if (before == after) continue
+
+                if (key == WATCHLIST_KEY) {
+                    if (after) {
+                        addToWatchlist(headers, item)
+                    } else {
+                        removeFromWatchlist(headers, item)
+                    }
                 } else {
-                    removeFromWatchlist(headers, item)
+                    val listId = key.removePrefix(PERSONAL_LIST_PREFIX)
+                    if (listId == key || listId.isBlank()) continue
+                    if (after) {
+                        addToPersonalList(headers, listId, item)
+                    } else {
+                        removeFromPersonalList(headers, listId, item)
+                    }
                 }
+            }
+        } catch (error: Throwable) {
+            _uiState.value = previousState
+            throw error
+        }
+    }
+
+    private fun applyOptimisticMembershipChanges(
+        state: TraktLibraryUiState,
+        item: LibraryItem,
+        desiredMembership: Map<String, Boolean>,
+    ): TraktLibraryUiState {
+        if (state.listTabs.isEmpty()) return state
+
+        val contentKey = contentKey(item.id, item.type)
+        val currentMembership = state.membershipByContent[contentKey].orEmpty()
+        val updatedEntriesByList = state.entriesByList.toMutableMap()
+        val keys = (currentMembership + desiredMembership.keys).distinct()
+
+        keys.forEach { listKey ->
+            val before = currentMembership.contains(listKey)
+            val after = desiredMembership[listKey] == true
+            if (before == after) return@forEach
+
+            if (after) {
+                val resolvedItem = resolveOptimisticItem(state, item)
+                updatedEntriesByList[listKey] = listOf(resolvedItem) +
+                    updatedEntriesByList[listKey].orEmpty().filterNot {
+                        contentKey(it.id, it.type) == contentKey
+                    }
             } else {
-                val listId = key.removePrefix(PERSONAL_LIST_PREFIX)
-                if (listId == key || listId.isBlank()) continue
-                if (after) {
-                    addToPersonalList(headers, listId, item)
-                } else {
-                    removeFromPersonalList(headers, listId, item)
+                updatedEntriesByList[listKey] = updatedEntriesByList[listKey].orEmpty().filterNot {
+                    contentKey(it.id, it.type) == contentKey
                 }
             }
         }
 
-        refreshNow()
+        return rebuildUiState(
+            listTabs = state.listTabs,
+            entriesByList = updatedEntriesByList,
+        )
+    }
+
+    private fun resolveOptimisticItem(
+        state: TraktLibraryUiState,
+        item: LibraryItem,
+    ): LibraryItem {
+        val existing = state.allItems.firstOrNull {
+            contentKey(it.id, it.type) == contentKey(item.id, item.type)
+        }
+        val base = existing ?: item
+        val savedAt = base.savedAtEpochMs.takeIf { it > 0L }
+            ?: item.savedAtEpochMs.takeIf { it > 0L }
+            ?: TraktPlatformClock.nowEpochMs()
+
+        return base.copy(savedAtEpochMs = savedAt)
+    }
+
+    private fun rebuildUiState(
+        listTabs: List<TraktListTab>,
+        entriesByList: Map<String, List<LibraryItem>>,
+    ): TraktLibraryUiState {
+        val normalizedEntriesByList = linkedMapOf<String, List<LibraryItem>>()
+        listTabs.forEach { tab ->
+            normalizedEntriesByList[tab.key] = entriesByList[tab.key].orEmpty()
+        }
+
+        val membershipByContent = mutableMapOf<String, MutableSet<String>>()
+        normalizedEntriesByList.forEach { (listKey, entries) ->
+            entries.forEach { entry ->
+                membershipByContent
+                    .getOrPut(contentKey(entry.id, entry.type)) { mutableSetOf() }
+                    .add(listKey)
+            }
+        }
+
+        val allItems = normalizedEntriesByList.values
+            .flatten()
+            .distinctBy { contentKey(it.id, it.type) }
+            .sortedByDescending { it.savedAtEpochMs }
+
+        return TraktLibraryUiState(
+            listTabs = listTabs,
+            entriesByList = normalizedEntriesByList,
+            allItems = allItems,
+            membershipByContent = membershipByContent.mapValues { it.value.toSet() },
+            isLoading = false,
+            errorMessage = null,
+        )
     }
 
     private suspend fun fetchSnapshot(headers: Map<String, String>): TraktLibraryUiState = withContext(Dispatchers.Default) {

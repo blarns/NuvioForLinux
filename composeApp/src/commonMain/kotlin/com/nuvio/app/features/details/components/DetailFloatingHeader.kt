@@ -55,7 +55,7 @@ fun DetailFloatingHeader(
     val headerTopPadding = (safeAreaTop - 6.dp).coerceAtLeast(safeAreaTop * 0.8f)
     val interactive = progress > 0.05f
     val surfaceColor = if (isIos) {
-        MaterialTheme.colorScheme.surface.copy(alpha = 0.84f)
+        MaterialTheme.colorScheme.surface.copy(alpha = 1.0f)
     } else {
         MaterialTheme.colorScheme.background
     }
