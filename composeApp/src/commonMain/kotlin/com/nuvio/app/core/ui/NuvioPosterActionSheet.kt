@@ -4,14 +4,11 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -23,11 +20,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CheckCircleOutline
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -58,26 +52,16 @@ fun NuvioPosterActionSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
 
-    ModalBottomSheet(
+    NuvioModalBottomSheet(
         onDismissRequest = {
             coroutineScope.launch {
-                dismissPosterActionSheet(
+                dismissNuvioBottomSheet(
                     sheetState = sheetState,
                     onDismiss = onDismiss,
                 )
             }
         },
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface,
-        dragHandle = {
-            Box(
-                modifier = Modifier
-                    .padding(top = 10.dp, bottom = 6.dp)
-                    .size(width = 54.dp, height = 5.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)),
-            )
-        },
     ) {
         Column(
             modifier = Modifier
@@ -85,28 +69,28 @@ fun NuvioPosterActionSheet(
                 .padding(bottom = 16.dp + nuvioPlatformExtraBottomPadding),
         ) {
             PosterSheetHeader(item = item)
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-            PosterSheetActionRow(
+            NuvioBottomSheetDivider()
+            NuvioBottomSheetActionRow(
                 icon = if (isSaved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
                 title = if (isSaved) "Remove from Library" else "Add to Library",
                 onClick = {
                     onToggleLibrary()
                     coroutineScope.launch {
-                        dismissPosterActionSheet(
+                        dismissNuvioBottomSheet(
                             sheetState = sheetState,
                             onDismiss = onDismiss,
                         )
                     }
                 },
             )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-            PosterSheetActionRow(
+            NuvioBottomSheetDivider()
+            NuvioBottomSheetActionRow(
                 icon = if (isWatched) Icons.Default.CheckCircle else Icons.Default.CheckCircleOutline,
                 title = if (isWatched) "Mark as Unwatched" else "Mark as Watched",
                 onClick = {
                     onToggleWatched()
                     coroutineScope.launch {
-                        dismissPosterActionSheet(
+                        dismissNuvioBottomSheet(
                             sheetState = sheetState,
                             onDismiss = onDismiss,
                         )
@@ -115,17 +99,6 @@ fun NuvioPosterActionSheet(
             )
         }
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-private suspend fun dismissPosterActionSheet(
-    sheetState: SheetState,
-    onDismiss: () -> Unit,
-) {
-    if (sheetState.isVisible) {
-        sheetState.hide()
-    }
-    onDismiss()
 }
 
 @Composable
@@ -226,35 +199,3 @@ private fun PosterSheetHeader(
     }
 }
 
-@Composable
-private fun PosterSheetActionRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(22.dp),
-        )
-        Column {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Spacer(modifier = Modifier.weight(1f))
-    }
-}

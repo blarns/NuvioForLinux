@@ -13,11 +13,9 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.Icons
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -33,6 +31,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import com.nuvio.app.core.ui.NuvioBottomSheetDivider
+import com.nuvio.app.core.ui.NuvioModalBottomSheet
+import com.nuvio.app.core.ui.dismissNuvioBottomSheet
 import com.nuvio.app.core.ui.nuvioPlatformExtraBottomPadding
 import com.nuvio.app.features.player.PlatformPlayerSurface
 import com.nuvio.app.features.player.PlayerResizeMode
@@ -74,17 +75,13 @@ fun TrailerPlayerPopup(
 
     val dismissSheet: () -> Unit = {
         coroutineScope.launch {
-            if (sheetState.isVisible) {
-                sheetState.hide()
-            }
-            onDismiss()
+            dismissNuvioBottomSheet(sheetState = sheetState, onDismiss = onDismiss)
         }
     }
 
-    ModalBottomSheet(
+    NuvioModalBottomSheet(
         onDismissRequest = dismissSheet,
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface,
     ) {
         Column(
             modifier = Modifier
@@ -112,7 +109,6 @@ fun TrailerPlayerPopup(
                     if (headerSubtitle.isNotBlank()) {
                         Text(
                             text = headerSubtitle,
-                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -129,7 +125,7 @@ fun TrailerPlayerPopup(
                 }
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+            NuvioBottomSheetDivider()
 
             Box(
                 modifier = Modifier
