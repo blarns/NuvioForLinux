@@ -23,6 +23,7 @@ import com.nuvio.app.features.details.MetaDetails
 fun DetailAdditionalInfoSection(
     meta: MetaDetails,
     modifier: Modifier = Modifier,
+    showHeader: Boolean = true,
 ) {
     val isSeriesLike = meta.type == "series" || meta.videos.any { it.season != null || it.episode != null }
     val title = if (isSeriesLike) "Show Details" else "Movie Details"
@@ -39,6 +40,7 @@ fun DetailAdditionalInfoSection(
     DetailSection(
         title = title,
         modifier = modifier,
+        showHeader = showHeader,
     ) {
         rows.forEachIndexed { index, (label, value) ->
             DetailInfoRow(

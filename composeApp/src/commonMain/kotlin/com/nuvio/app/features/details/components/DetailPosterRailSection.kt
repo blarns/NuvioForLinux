@@ -17,6 +17,7 @@ fun DetailPosterRailSection(
     items: List<MetaPreview>,
     watchedKeys: Set<String>,
     modifier: Modifier = Modifier,
+    showHeader: Boolean = true,
     headerHorizontalPadding: Dp = 0.dp,
     onPosterClick: ((MetaPreview) -> Unit)? = null,
     onPosterLongClick: ((MetaPreview) -> Unit)? = null,
@@ -24,7 +25,7 @@ fun DetailPosterRailSection(
     if (items.isEmpty()) return
 
     NuvioShelfSection(
-        title = title,
+        title = if (showHeader) title else "",
         entries = items,
         modifier = modifier,
         headerHorizontalPadding = headerHorizontalPadding,

@@ -44,6 +44,7 @@ fun DetailTrailersSection(
     trailers: List<MetaTrailer>,
     onTrailerClick: (MetaTrailer) -> Unit,
     modifier: Modifier = Modifier,
+    showHeader: Boolean = true,
 ) {
     if (trailers.isEmpty()) return
 
@@ -79,10 +80,12 @@ fun DetailTrailersSection(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                DetailSectionTitle(
-                    title = "Trailers",
-                    fullWidth = false,
-                )
+                if (showHeader) {
+                    DetailSectionTitle(
+                        title = "Trailers",
+                        fullWidth = false,
+                    )
+                }
 
                 Box {
                     Surface(

@@ -69,6 +69,7 @@ private val log = Logger.withTag("SeriesContent")
 fun DetailSeriesContent(
     meta: MetaDetails,
     modifier: Modifier = Modifier,
+    showHeader: Boolean = true,
     progressByVideoId: Map<String, WatchProgressEntry> = emptyMap(),
     watchedKeys: Set<String> = emptySet(),
     onEpisodeClick: ((MetaVideo) -> Unit)? = null,
@@ -81,6 +82,7 @@ fun DetailSeriesContent(
         DetailSection(
             title = "Episodes",
             modifier = modifier,
+            showHeader = showHeader,
         ) {
             Text(
                 text = when {
@@ -120,6 +122,7 @@ fun DetailSeriesContent(
             DetailSection(
                 title = "Episodes",
                 modifier = modifier,
+                showHeader = showHeader,
             ) {
                 Text(
                     text = "This addon returned videos for the series, but none included season or episode numbers.",

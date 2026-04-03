@@ -3,6 +3,7 @@ package com.nuvio.app.features.details
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -19,6 +20,11 @@ enum class MetaScreenSectionKey {
     DETAILS,
     COLLECTION,
     MORE_LIKE_THIS,
+    ;
+
+    
+    val canBeTabbed: Boolean
+        get() = this != ACTIONS && this != OVERVIEW
 }
 
 data class MetaScreenSectionItem(
@@ -27,11 +33,13 @@ data class MetaScreenSectionItem(
     val description: String,
     val enabled: Boolean,
     val order: Int,
+    val tabGroup: Int? = null,
 )
 
 data class MetaScreenSettingsUiState(
     val items: List<MetaScreenSectionItem> = emptyList(),
     val cinematicBackground: Boolean = false,
+    val tabLayout: Boolean = false,
 )
 
 @Serializable
@@ -39,12 +47,15 @@ private data class StoredMetaScreenSectionPreference(
     val key: String,
     val enabled: Boolean = true,
     val order: Int = 0,
+    val tabGroup: Int? = null,
 )
 
 @Serializable
 private data class StoredMetaScreenSettingsPayload(
     val items: List<StoredMetaScreenSectionPreference> = emptyList(),
     val cinematicBackground: Boolean = false,
+    @SerialName("tvStyleLayout")
+    val tabLayout: Boolean = false,
 )
 
 private data class MetaScreenSectionDefinition(
@@ -118,6 +129,7 @@ object MetaScreenSettingsRepository {
     private var hasLoaded = false
     private var preferences: MutableMap<MetaScreenSectionKey, StoredMetaScreenSectionPreference> = mutableMapOf()
     private var cinematicBackground: Boolean = false
+    private var tabLayout: Boolean = false
 
     fun ensureLoaded() {
         if (hasLoaded) return
@@ -130,6 +142,7 @@ object MetaScreenSettingsRepository {
             }.getOrNull()
             if (parsed != null) {
                 cinematicBackground = parsed.cinematicBackground
+                tabLayout = parsed.tabLayout
                 preferences = parsed.items.mapNotNull { item ->
                     val key = runCatching { MetaScreenSectionKey.valueOf(item.key) }.getOrNull() ?: return@mapNotNull null
                     key to item
@@ -146,6 +159,7 @@ object MetaScreenSettingsRepository {
         hasLoaded = false
         preferences.clear()
         cinematicBackground = false
+        tabLayout = false
         _uiState.value = MetaScreenSettingsUiState()
         ensureLoaded()
     }
@@ -157,10 +171,31 @@ object MetaScreenSettingsRepository {
         persist()
     }
 
+    fun setTabLayout(enabled: Boolean) {
+        ensureLoaded()
+        tabLayout = enabled
+        publish()
+        persist()
+    }
+
+    fun setTabGroup(key: MetaScreenSectionKey, groupId: Int?) {
+        ensureLoaded()
+        if (!key.canBeTabbed) return
+        if (groupId != null) {
+            // Enforce max 3 sections per group
+            val currentGroupCount = preferences.count { it.value.tabGroup == groupId && it.key != key }
+            if (currentGroupCount >= 3) return
+        }
+        updatePreference(key) { preference ->
+            preference.copy(tabGroup = groupId)
+        }
+    }
+
     fun clearLocalState() {
         hasLoaded = false
         preferences.clear()
         cinematicBackground = false
+        tabLayout = false
         _uiState.value = MetaScreenSettingsUiState()
     }
 
@@ -174,6 +209,7 @@ object MetaScreenSettingsRepository {
         ensureLoaded()
         preferences.clear()
         cinematicBackground = false
+        tabLayout = false
         normalizePreferences()
         publish()
         persist()
@@ -216,6 +252,7 @@ object MetaScreenSettingsRepository {
                     key = definition.key.name,
                     enabled = stored?.enabled ?: true,
                     order = index,
+                    tabGroup = stored?.tabGroup,
                 )
             }
         preferences = normalized
@@ -233,9 +270,11 @@ object MetaScreenSettingsRepository {
                         description = definition.description,
                         enabled = preference?.enabled ?: true,
                         order = preference?.order ?: 0,
+                        tabGroup = preference?.tabGroup,
                     )
                 },
             cinematicBackground = cinematicBackground,
+            tabLayout = tabLayout,
         )
     }
 
@@ -245,6 +284,7 @@ object MetaScreenSettingsRepository {
                 StoredMetaScreenSettingsPayload(
                     items = preferences.values.sortedBy { it.order },
                     cinematicBackground = cinematicBackground,
+                    tabLayout = tabLayout,
                 ),
             ),
         )

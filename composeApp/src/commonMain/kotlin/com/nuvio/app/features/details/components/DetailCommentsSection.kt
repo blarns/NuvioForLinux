@@ -51,6 +51,7 @@ fun DetailCommentsSection(
     onLoadMore: () -> Unit,
     onCommentClick: (TraktCommentReview) -> Unit,
     modifier: Modifier = Modifier,
+    showHeader: Boolean = true,
 ) {
     val listState = rememberLazyListState()
 
@@ -68,8 +69,10 @@ fun DetailCommentsSection(
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
-        CommentsHeader()
-        Spacer(modifier = Modifier.height(12.dp))
+        if (showHeader) {
+            CommentsHeader()
+            Spacer(modifier = Modifier.height(12.dp))
+        }
 
         when {
             isLoading -> {

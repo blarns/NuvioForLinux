@@ -62,13 +62,15 @@ fun <T> NuvioShelfSection(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        NuvioShelfSectionHeader(
-            title = title,
-            modifier = Modifier.padding(horizontal = headerHorizontalPadding),
-            showAccent = showHeaderAccent,
-            onViewAllClick = onViewAllClick,
-            viewAllPillSize = viewAllPillSize,
-        )
+        if (title.isNotBlank()) {
+            NuvioShelfSectionHeader(
+                title = title,
+                modifier = Modifier.padding(horizontal = headerHorizontalPadding),
+                showAccent = showHeaderAccent,
+                onViewAllClick = onViewAllClick,
+                viewAllPillSize = viewAllPillSize,
+            )
+        }
         LazyRow(
             contentPadding = rowContentPadding,
             horizontalArrangement = Arrangement.spacedBy(itemSpacing),

@@ -32,6 +32,7 @@ import com.nuvio.app.features.details.MetaPerson
 fun DetailCastSection(
     cast: List<MetaPerson>,
     modifier: Modifier = Modifier,
+    showHeader: Boolean = true,
     onCastClick: ((MetaPerson) -> Unit)? = null,
 ) {
     if (cast.isEmpty()) return
@@ -39,6 +40,7 @@ fun DetailCastSection(
     DetailSection(
         title = "Cast",
         modifier = modifier,
+        showHeader = showHeader,
     ) {
         BoxWithConstraints {
             val sizing = castSectionSizing(maxWidth.value)

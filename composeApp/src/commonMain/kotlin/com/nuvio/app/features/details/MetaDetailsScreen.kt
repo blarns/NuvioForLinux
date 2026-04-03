@@ -1,11 +1,13 @@
 package com.nuvio.app.features.details
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,6 +48,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
@@ -810,106 +813,208 @@ private fun ConfiguredMetaSections(
     onCastClick: ((MetaPerson) -> Unit)?,
     onCompanyClick: ((MetaCompany, String) -> Unit)?,
 ) {
-    settings.items
-        .filter { it.enabled }
-        .forEach { section ->
-            when (section.key) {
-                MetaScreenSectionKey.ACTIONS -> {
-                    DetailActionButtons(
-                        playLabel = playButtonLabel,
-                        saveLabel = if (isSaved) "Saved" else "Save",
-                        isSaved = isSaved,
-                        isTablet = isTablet,
-                        onPlayClick = onPrimaryPlayClick,
-                        onSaveClick = onSaveClick,
+    val enabledItems = settings.items.filter { it.enabled }
+
+    // Helper to check if a section actually has content to show
+    val sectionHasContent: (MetaScreenSectionKey) -> Boolean = { key ->
+        when (key) {
+            MetaScreenSectionKey.ACTIONS -> true
+            MetaScreenSectionKey.OVERVIEW -> true
+            MetaScreenSectionKey.PRODUCTION -> hasProductionSection
+            MetaScreenSectionKey.CAST -> meta.cast.isNotEmpty()
+            MetaScreenSectionKey.COMMENTS -> shouldShowComments && (isCommentsLoading || comments.isNotEmpty() || !commentsError.isNullOrBlank())
+            MetaScreenSectionKey.TRAILERS -> hasTrailersSection
+            MetaScreenSectionKey.EPISODES -> hasEpisodes
+            MetaScreenSectionKey.DETAILS -> hasAdditionalInfoSection
+            MetaScreenSectionKey.COLLECTION -> !hasEpisodes && hasCollectionSection
+            MetaScreenSectionKey.MORE_LIKE_THIS -> hasMoreLikeThisSection
+        }
+    }
+
+    @Composable
+    fun RenderSection(key: MetaScreenSectionKey, showHeader: Boolean = true) {
+        when (key) {
+            MetaScreenSectionKey.ACTIONS -> {
+                DetailActionButtons(
+                    playLabel = playButtonLabel,
+                    saveLabel = if (isSaved) "Saved" else "Save",
+                    isSaved = isSaved,
+                    isTablet = isTablet,
+                    onPlayClick = onPrimaryPlayClick,
+                    onSaveClick = onSaveClick,
+                )
+            }
+            MetaScreenSectionKey.OVERVIEW -> {
+                DetailMetaInfo(meta = meta)
+            }
+            MetaScreenSectionKey.PRODUCTION -> {
+                if (hasProductionSection) {
+                    DetailProductionSection(meta = meta, showHeader = showHeader, onCompanyClick = onCompanyClick)
+                }
+            }
+            MetaScreenSectionKey.CAST -> {
+                DetailCastSection(cast = meta.cast, showHeader = showHeader, onCastClick = onCastClick)
+            }
+            MetaScreenSectionKey.COMMENTS -> {
+                if (shouldShowComments && (isCommentsLoading || comments.isNotEmpty() || !commentsError.isNullOrBlank())) {
+                    DetailCommentsSection(
+                        comments = comments,
+                        isLoading = isCommentsLoading,
+                        isLoadingMore = isCommentsLoadingMore,
+                        canLoadMore = commentsCurrentPage < commentsPageCount,
+                        error = commentsError,
+                        onRetry = onRetryComments,
+                        onLoadMore = onLoadMoreComments,
+                        onCommentClick = onCommentClick,
+                        showHeader = showHeader,
                     )
                 }
-
-                MetaScreenSectionKey.OVERVIEW -> {
-                    DetailMetaInfo(meta = meta)
+            }
+            MetaScreenSectionKey.TRAILERS -> {
+                if (hasTrailersSection) {
+                    DetailTrailersSection(trailers = meta.trailers, onTrailerClick = onTrailerClick, showHeader = showHeader)
                 }
-
-                MetaScreenSectionKey.PRODUCTION -> {
-                    if (hasProductionSection) {
-                        DetailProductionSection(
-                            meta = meta,
-                            onCompanyClick = onCompanyClick,
-                        )
-                    }
-                }
-
-                MetaScreenSectionKey.CAST -> {
-                    DetailCastSection(
-                        cast = meta.cast,
-                        onCastClick = onCastClick,
+            }
+            MetaScreenSectionKey.EPISODES -> {
+                if (hasEpisodes) {
+                    DetailSeriesContent(
+                        meta = meta,
+                        showHeader = showHeader,
+                        progressByVideoId = progressByVideoId,
+                        watchedKeys = watchedKeys,
+                        onEpisodeClick = onEpisodeClick,
+                        onEpisodeLongPress = onEpisodeLongPress,
                     )
                 }
-
-                MetaScreenSectionKey.COMMENTS -> {
-                    if (shouldShowComments && (isCommentsLoading || comments.isNotEmpty() || !commentsError.isNullOrBlank())) {
-                        DetailCommentsSection(
-                            comments = comments,
-                            isLoading = isCommentsLoading,
-                            isLoadingMore = isCommentsLoadingMore,
-                            canLoadMore = commentsCurrentPage < commentsPageCount,
-                            error = commentsError,
-                            onRetry = onRetryComments,
-                            onLoadMore = onLoadMoreComments,
-                            onCommentClick = onCommentClick,
-                        )
-                    }
+            }
+            MetaScreenSectionKey.DETAILS -> {
+                if (hasAdditionalInfoSection) {
+                    DetailAdditionalInfoSection(meta = meta, showHeader = showHeader)
                 }
-
-                MetaScreenSectionKey.TRAILERS -> {
-                    if (hasTrailersSection) {
-                        DetailTrailersSection(
-                            trailers = meta.trailers,
-                            onTrailerClick = onTrailerClick,
-                        )
-                    }
+            }
+            MetaScreenSectionKey.COLLECTION -> {
+                if (!hasEpisodes && hasCollectionSection) {
+                    DetailPosterRailSection(
+                        title = meta.collectionName.orEmpty(),
+                        items = meta.collectionItems,
+                        watchedKeys = watchedKeys,
+                        showHeader = showHeader,
+                        onPosterClick = onOpenMeta,
+                    )
                 }
-
-                MetaScreenSectionKey.EPISODES -> {
-                    if (hasEpisodes) {
-                        DetailSeriesContent(
-                            meta = meta,
-                            progressByVideoId = progressByVideoId,
-                            watchedKeys = watchedKeys,
-                            onEpisodeClick = onEpisodeClick,
-                            onEpisodeLongPress = onEpisodeLongPress,
-                        )
-                    }
-                }
-
-                MetaScreenSectionKey.DETAILS -> {
-                    if (hasAdditionalInfoSection) {
-                        DetailAdditionalInfoSection(meta = meta)
-                    }
-                }
-
-                MetaScreenSectionKey.COLLECTION -> {
-                    if (!hasEpisodes && hasCollectionSection) {
-                        DetailPosterRailSection(
-                            title = meta.collectionName.orEmpty(),
-                            items = meta.collectionItems,
-                            watchedKeys = watchedKeys,
-                            onPosterClick = onOpenMeta,
-                        )
-                    }
-                }
-
-                MetaScreenSectionKey.MORE_LIKE_THIS -> {
-                    if (hasMoreLikeThisSection) {
-                        DetailPosterRailSection(
-                            title = "More Like This",
-                            items = meta.moreLikeThis,
-                            watchedKeys = watchedKeys,
-                            onPosterClick = onOpenMeta,
-                        )
-                    }
+            }
+            MetaScreenSectionKey.MORE_LIKE_THIS -> {
+                if (hasMoreLikeThisSection) {
+                    DetailPosterRailSection(
+                        title = "More Like This",
+                        items = meta.moreLikeThis,
+                        watchedKeys = watchedKeys,
+                        showHeader = showHeader,
+                        onPosterClick = onOpenMeta,
+                    )
                 }
             }
         }
+    }
+
+    if (!settings.tabLayout) {
+        // Standard mode: render sections individually in order
+        enabledItems.forEach { section -> RenderSection(section.key) }
+    } else {
+        // Tab layout mode: group sections by tabGroup, render grouped ones as tabs
+        val processedGroups = mutableSetOf<Int>()
+
+        enabledItems.forEach { section ->
+            val groupId = section.tabGroup
+            if (groupId == null) {
+                // Standalone section
+                RenderSection(section.key)
+            } else if (groupId !in processedGroups) {
+                // First encounter of this group — render the whole tabbed group
+                processedGroups.add(groupId)
+                val groupMembers = enabledItems
+                    .filter { it.tabGroup == groupId && sectionHasContent(it.key) }
+                if (groupMembers.isEmpty()) return@forEach
+                if (groupMembers.size == 1) {
+                    // Only one member with content — render standalone
+                    RenderSection(groupMembers.first().key)
+                } else {
+                    TabbedSectionGroup(
+                        tabs = groupMembers.map { it.key to it.title },
+                    ) { activeKey ->
+                        RenderSection(activeKey, showHeader = false)
+                    }
+                }
+            }
+            // else: already processed as part of group, skip
+        }
+    }
+}
+
+@Composable
+private fun TabbedSectionGroup(
+    tabs: List<Pair<MetaScreenSectionKey, String>>,
+    content: @Composable (MetaScreenSectionKey) -> Unit,
+) {
+    if (tabs.isEmpty()) return
+
+    var selectedIndex by remember { mutableIntStateOf(0) }
+    val clampedIndex = selectedIndex.coerceIn(0, tabs.lastIndex)
+    if (clampedIndex != selectedIndex) selectedIndex = clampedIndex
+
+    val headerColor = MaterialTheme.colorScheme.onBackground
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        // Tab row using the same style as DetailSectionTitle
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val titleSize = if (maxWidth >= 720.dp) 22.sp else 20.sp
+            val headerStyle = MaterialTheme.typography.titleLarge.copy(
+                fontSize = titleSize,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+            )
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                tabs.forEachIndexed { index, (_, title) ->
+                    if (index > 0) {
+                        Text(
+                            text = "|",
+                            style = headerStyle,
+                            color = headerColor.copy(alpha = 0.45f),
+                            modifier = Modifier.padding(horizontal = 10.dp),
+                        )
+                    }
+
+                    Text(
+                        text = title,
+                        style = headerStyle,
+                        color = if (index == selectedIndex) {
+                            headerColor
+                        } else {
+                            headerColor.copy(alpha = 0.55f)
+                        },
+                        maxLines = 1,
+                        modifier = Modifier
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) { selectedIndex = index },
+                    )
+                }
+            }
+        }
+
+        // Content with crossfade
+        Crossfade(
+            targetState = tabs[selectedIndex].first,
+            animationSpec = tween(durationMillis = 200),
+            label = "tabbedSectionCrossfade",
+        ) { activeKey ->
+            content(activeKey)
+        }
+    }
 }
 
 private fun detailTabletContentMaxWidth(maxWidth: Dp, isTablet: Boolean): Dp =

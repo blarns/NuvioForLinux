@@ -16,13 +16,16 @@ import androidx.compose.ui.unit.sp
 fun DetailSection(
     title: String,
     modifier: Modifier = Modifier,
+    showHeader: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        DetailSectionTitle(title = title)
+        if (showHeader) {
+            DetailSectionTitle(title = title)
+        }
         content()
     }
 }

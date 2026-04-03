@@ -31,6 +31,7 @@ import com.nuvio.app.features.details.MetaDetails
 fun DetailProductionSection(
     meta: MetaDetails,
     modifier: Modifier = Modifier,
+    showHeader: Boolean = true,
     onCompanyClick: ((MetaCompany, String) -> Unit)? = null,
 ) {
     val isSeriesLike = meta.type == "series" || meta.videos.any { it.season != null || it.episode != null }
@@ -55,6 +56,7 @@ fun DetailProductionSection(
     DetailSection(
         title = if (isSeriesLike) "Network" else "Production",
         modifier = modifier,
+        showHeader = showHeader,
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
             val chipHeight = when {
