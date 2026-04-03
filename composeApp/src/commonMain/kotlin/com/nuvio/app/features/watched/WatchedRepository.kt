@@ -3,7 +3,9 @@ package com.nuvio.app.features.watched
 import co.touchlab.kermit.Logger
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.profiles.ProfileRepository
+import com.nuvio.app.features.trakt.TraktAuthRepository
 import com.nuvio.app.features.watching.sync.SupabaseWatchedSyncAdapter
+import com.nuvio.app.features.watching.sync.TraktWatchedSyncAdapter
 import com.nuvio.app.features.watching.sync.WatchedSyncAdapter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +41,9 @@ object WatchedRepository {
     private var currentProfileId: Int = 1
     private var itemsByKey: MutableMap<String, WatchedItem> = mutableMapOf()
     internal var syncAdapter: WatchedSyncAdapter = SupabaseWatchedSyncAdapter
+
+    private fun activeSyncAdapter(): WatchedSyncAdapter =
+        if (TraktAuthRepository.isAuthenticated.value) TraktWatchedSyncAdapter else syncAdapter
 
     fun ensureLoaded() {
         if (hasLoaded) return
@@ -76,7 +81,7 @@ object WatchedRepository {
     suspend fun pullFromServer(profileId: Int) {
         currentProfileId = profileId
         runCatching {
-            val serverItems = syncAdapter.pull(
+            val serverItems = activeSyncAdapter().pull(
                 profileId = profileId,
                 pageSize = watchedItemsPageSize,
             )
@@ -198,7 +203,7 @@ object WatchedRepository {
             runCatching {
                 if (items.isEmpty()) return@runCatching
                 val profileId = ProfileRepository.activeProfileId
-                syncAdapter.push(profileId = profileId, items = items)
+                activeSyncAdapter().push(profileId = profileId, items = items)
             }.onFailure { e ->
                 log.e(e) { "Failed to push watched items" }
             }
@@ -210,7 +215,7 @@ object WatchedRepository {
             runCatching {
                 if (items.isEmpty()) return@runCatching
                 val profileId = ProfileRepository.activeProfileId
-                syncAdapter.delete(profileId = profileId, items = items)
+                activeSyncAdapter().delete(profileId = profileId, items = items)
             }.onFailure { e ->
                 log.e(e) { "Failed to push watched item delete" }
             }
