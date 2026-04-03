@@ -71,6 +71,7 @@ import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.sync.SyncManager
 import com.nuvio.app.core.ui.nuvioBottomNavigationBarInsets
 import com.nuvio.app.core.ui.NuvioPosterActionSheet
+import com.nuvio.app.core.ui.PlatformBackHandler
 import com.nuvio.app.core.ui.TraktListPickerDialog
 import com.nuvio.app.core.ui.NuvioTheme
 import com.nuvio.app.features.auth.AuthScreen
@@ -487,6 +488,11 @@ private fun MainAppContent(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 composable<TabsRoute> {
+                    PlatformBackHandler(
+                        enabled = selectedTab != AppScreenTab.Home,
+                        onBack = { selectedTab = AppScreenTab.Home },
+                    )
+
                     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                         val isTabletLayout = maxWidth >= 768.dp
                         val onProfileSelected: (NuvioProfile) -> Unit = { profile ->
