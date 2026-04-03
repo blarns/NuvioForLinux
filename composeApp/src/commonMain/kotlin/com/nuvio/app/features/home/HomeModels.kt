@@ -13,6 +13,8 @@ data class MetaPreview(
     val posterShape: PosterShape = PosterShape.Poster,
     val description: String? = null,
     val releaseInfo: String? = null,
+    val rawReleaseDate: String? = null,
+    val popularity: Double? = null,
     val imdbRating: String? = null,
     val genres: List<String> = emptyList(),
 )

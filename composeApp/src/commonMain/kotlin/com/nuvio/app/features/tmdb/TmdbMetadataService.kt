@@ -131,6 +131,8 @@ object TmdbMetadataService {
                     poster = buildImageUrl(credit.posterPath, "w500"),
                     description = credit.overview?.takeIf { it.isNotBlank() },
                     releaseInfo = credit.releaseDate?.take(4),
+                    rawReleaseDate = credit.releaseDate,
+                    popularity = credit.popularity,
                 )
             }
     }
@@ -150,6 +152,8 @@ object TmdbMetadataService {
                     poster = buildImageUrl(credit.posterPath, "w500"),
                     description = credit.overview?.takeIf { it.isNotBlank() },
                     releaseInfo = credit.releaseDate?.take(4),
+                    rawReleaseDate = credit.releaseDate,
+                    popularity = credit.popularity,
                 )
             }
     }
@@ -169,6 +173,8 @@ object TmdbMetadataService {
                     poster = buildImageUrl(credit.posterPath, "w500"),
                     description = credit.overview?.takeIf { it.isNotBlank() },
                     releaseInfo = credit.firstAirDate?.take(4),
+                    rawReleaseDate = credit.firstAirDate,
+                    popularity = credit.popularity,
                 )
             }
     }
@@ -188,6 +194,8 @@ object TmdbMetadataService {
                     poster = buildImageUrl(credit.posterPath, "w500"),
                     description = credit.overview?.takeIf { it.isNotBlank() },
                     releaseInfo = credit.firstAirDate?.take(4),
+                    rawReleaseDate = credit.firstAirDate,
+                    popularity = credit.popularity,
                 )
             }
     }
@@ -1518,6 +1526,7 @@ private data class TmdbPersonCreditCast(
     @SerialName("release_date") val releaseDate: String? = null,
     @SerialName("first_air_date") val firstAirDate: String? = null,
     @SerialName("vote_average") val voteAverage: Double? = null,
+    val popularity: Double? = null,
 )
 
 @Serializable
@@ -1533,6 +1542,7 @@ private data class TmdbPersonCreditCrew(
     @SerialName("release_date") val releaseDate: String? = null,
     @SerialName("first_air_date") val firstAirDate: String? = null,
     @SerialName("vote_average") val voteAverage: Double? = null,
+    val popularity: Double? = null,
 )
 
 // ─── Entity Browse (Company / Network) Models ───

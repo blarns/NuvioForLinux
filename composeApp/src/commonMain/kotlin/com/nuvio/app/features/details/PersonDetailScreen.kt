@@ -32,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,15 +42,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.nuvio.app.features.details.components.DetailPosterRailSection
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.tmdb.TmdbMetadataService
+import com.nuvio.app.features.watchprogress.CurrentDateProvider
 
 private sealed interface PersonDetailUiState {
     data object Loading : PersonDetailUiState
@@ -133,7 +139,52 @@ private fun PersonDetailContent(
     val allCredits = remember(person.movieCredits, person.tvCredits) {
         (person.movieCredits + person.tvCredits)
             .distinctBy { it.id }
-            .sortedByDescending { it.releaseInfo?.take(4)?.toIntOrNull() ?: 0 }
+    }
+
+    val todayDate = remember { CurrentDateProvider.todayIsoDate() }
+
+    val popularCredits = remember(allCredits) {
+        allCredits
+            .sortedByDescending { it.popularity ?: 0.0 }
+    }
+
+    val latestCredits = remember(allCredits, todayDate) {
+        allCredits
+            .filter { credit ->
+                val date = credit.rawReleaseDate
+                date != null && date <= todayDate
+            }
+            .sortedByDescending { it.rawReleaseDate ?: "" }
+    }
+
+    val upcomingCredits = remember(allCredits, todayDate) {
+        allCredits
+            .filter { credit ->
+                val date = credit.rawReleaseDate
+                date != null && date > todayDate
+            }
+            .sortedBy { it.rawReleaseDate ?: "" }
+    }
+
+    val scrollState = rememberScrollState()
+    val haptic = LocalHapticFeedback.current
+
+    // Hero collapse: 0 = fully expanded, 1 = fully collapsed
+    val collapseProgress by remember {
+        derivedStateOf {
+            (scrollState.value / HERO_COLLAPSE_SCROLL_RANGE).coerceIn(0f, 1f)
+        }
+    }
+
+    val shouldTriggerCatalogHaptic by remember {
+        derivedStateOf { scrollState.value >= HAPTIC_TRIGGER_SCROLL_THRESHOLD_PX }
+    }
+    var didTriggerCatalogHaptic by remember(person.tmdbId) { mutableStateOf(false) }
+    LaunchedEffect(shouldTriggerCatalogHaptic, didTriggerCatalogHaptic) {
+        if (shouldTriggerCatalogHaptic && !didTriggerCatalogHaptic) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            didTriggerCatalogHaptic = true
+        }
     }
 
     val accentGradient = remember(accentColor) {
@@ -165,17 +216,42 @@ private fun PersonDetailContent(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scrollState)
                     .windowInsetsPadding(WindowInsets.statusBars)
                     .padding(top = 48.dp),
             ) {
-                HeroSection(person = person)
+                HeroSection(
+                    person = person,
+                    collapseProgress = collapseProgress,
+                )
 
-                if (allCredits.isNotEmpty()) {
+                if (popularCredits.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(24.dp))
                     DetailPosterRailSection(
-                        title = "Filmography",
-                        items = allCredits,
+                        title = "Popular",
+                        items = popularCredits,
+                        watchedKeys = emptySet(),
+                        headerHorizontalPadding = 20.dp,
+                        onPosterClick = onOpenMeta,
+                    )
+                }
+
+                if (latestCredits.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    DetailPosterRailSection(
+                        title = "Latest",
+                        items = latestCredits,
+                        watchedKeys = emptySet(),
+                        headerHorizontalPadding = 20.dp,
+                        onPosterClick = onOpenMeta,
+                    )
+                }
+
+                if (upcomingCredits.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    DetailPosterRailSection(
+                        title = "Upcoming",
+                        items = upcomingCredits,
                         watchedKeys = emptySet(),
                         headerHorizontalPadding = 20.dp,
                         onPosterClick = onOpenMeta,
@@ -188,18 +264,34 @@ private fun PersonDetailContent(
     }
 }
 
+private const val HERO_COLLAPSE_SCROLL_RANGE = 220f
+private const val HAPTIC_TRIGGER_SCROLL_THRESHOLD_PX = 56
+
 @Composable
-private fun HeroSection(person: PersonDetail) {
+private fun HeroSection(
+    person: PersonDetail,
+    collapseProgress: Float = 0f,
+) {
+    val avatarSize = lerp(140.dp, 72.dp, collapseProgress)
+    val heroScale = 1f - (collapseProgress * 0.12f)
+    val heroAlpha = 1f - (collapseProgress * 0.35f)
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = 20.dp)
+            .graphicsLayer {
+                scaleX = heroScale
+                scaleY = heroScale
+                alpha = heroAlpha
+                translationY = -(collapseProgress * 40f)
+            },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // Profile Photo
         Box(
             modifier = Modifier
-                .size(140.dp)
+                .size(avatarSize)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
