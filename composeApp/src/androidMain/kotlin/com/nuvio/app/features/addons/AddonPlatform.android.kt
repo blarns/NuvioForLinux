@@ -54,7 +54,7 @@ private val addonHttpClient = OkHttpClient.Builder()
     .build()
 
 private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
-private const val maxResponseBodyBytes = 256 * 1024
+private const val maxRawResponseBodyBytes = 1024 * 1024
 private const val truncationSuffix = "\n...[truncated]"
 
 private fun requestAllowsBody(method: String): Boolean =
@@ -100,7 +100,7 @@ private fun readResponseBodyLimited(body: ResponseBody?): String {
     if (body == null) return ""
     val charset = body.contentType()?.charset(Charsets.UTF_8) ?: Charsets.UTF_8
     val readResult = body.byteStream().use { stream ->
-        readAtMostBytes(stream, maxResponseBodyBytes)
+        readAtMostBytes(stream, maxRawResponseBodyBytes)
     }
 
     val decoded = try {
@@ -113,6 +113,17 @@ private fun readResponseBodyLimited(body: ResponseBody?): String {
         decoded + truncationSuffix
     } else {
         decoded
+    }
+}
+
+private fun readResponseBody(body: ResponseBody?): String {
+    if (body == null) return ""
+    val bytes = body.bytes()
+    return runCatching {
+        val charset = body.contentType()?.charset(Charsets.UTF_8) ?: Charsets.UTF_8
+        String(bytes, charset)
+    }.getOrElse {
+        String(bytes, Charsets.UTF_8)
     }
 }
 
@@ -140,7 +151,7 @@ private suspend fun executeTextRequest(
     }.build()
 
     addonHttpClient.newCall(request).execute().use { response ->
-        val payload = readResponseBodyLimited(response.body)
+        val payload = readResponseBody(response.body)
         if (!response.isSuccessful) {
             error("Request failed with HTTP ${response.code}")
         }

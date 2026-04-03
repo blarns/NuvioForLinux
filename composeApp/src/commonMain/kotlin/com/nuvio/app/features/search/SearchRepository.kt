@@ -1,12 +1,15 @@
 package com.nuvio.app.features.search
 
+import co.touchlab.kermit.Logger
 import com.nuvio.app.features.addons.AddonCatalog
 import com.nuvio.app.features.addons.AddonExtraProperty
 import com.nuvio.app.features.addons.ManagedAddon
+import com.nuvio.app.features.catalog.buildCatalogUrl
 import com.nuvio.app.features.catalog.fetchCatalogPage
 import com.nuvio.app.features.catalog.mergeCatalogItems
 import com.nuvio.app.features.catalog.supportsPagination
 import com.nuvio.app.features.home.HomeCatalogSection
+import com.nuvio.app.features.home.MetaPreview
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -19,6 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 object SearchRepository {
+    private val log = Logger.withTag("SearchRepository")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val _uiState = MutableStateFlow(SearchUiState())
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
@@ -120,6 +124,7 @@ object SearchRepository {
         if (activeAddons.isEmpty()) {
             activeDiscoverJob?.cancel()
             discoverSources = emptyList()
+            log.d { "Discover refresh aborted: no active addons" }
             _discoverUiState.value = DiscoverUiState(
                 emptyStateReason = DiscoverEmptyStateReason.NoActiveAddons,
             )
@@ -129,12 +134,17 @@ object SearchRepository {
         val sources = buildDiscoverSources(activeAddons)
         val current = _discoverUiState.value
         if (sources == discoverSources && current.canReuseDiscoverState(sources)) {
+            log.d {
+                "Reusing discover state type=${current.selectedType} catalog=${current.selectedCatalogKey} " +
+                    "genre=${current.selectedGenre ?: "<all>"} items=${current.items.size} nextSkip=${current.nextSkip}"
+            }
             return
         }
 
         discoverSources = sources
         if (sources.isEmpty()) {
             activeDiscoverJob?.cancel()
+            log.d { "Discover refresh found no compatible discover catalogs" }
             _discoverUiState.value = DiscoverUiState(
                 emptyStateReason = DiscoverEmptyStateReason.NoDiscoverCatalogs,
             )
@@ -161,6 +171,11 @@ object SearchRepository {
             emptyStateReason = null,
             errorMessage = null,
         )
+
+        log.d {
+            "Discover refresh prepared type=$selectedType catalog=${selectedCatalog.key} " +
+                "genre=${selectedGenre ?: "<all>"} sources=${sources.size}"
+        }
 
         loadDiscoverFeed(reset = true)
     }
@@ -314,6 +329,20 @@ object SearchRepository {
         val current = _discoverUiState.value
         val selectedCatalog = current.selectedCatalog ?: return
         val requestedSkip = if (reset) 0 else current.nextSkip ?: return
+        val requestUrl = buildCatalogUrl(
+            manifestUrl = selectedCatalog.manifestUrl,
+            type = selectedCatalog.type,
+            catalogId = selectedCatalog.catalogId,
+            genre = current.selectedGenre,
+            search = null,
+            skip = requestedSkip.takeIf { it > 0 },
+        )
+
+        log.d {
+            "Discover request reset=$reset addon=${selectedCatalog.addonName} type=${selectedCatalog.type} " +
+                "catalogId=${selectedCatalog.catalogId} catalogKey=${selectedCatalog.key} " +
+                "genre=${current.selectedGenre ?: "<all>"} skip=$requestedSkip url=$requestUrl"
+        }
 
         _discoverUiState.value = current.copy(
             isLoading = true,
@@ -343,6 +372,11 @@ object SearchRepository {
                     } else {
                         mergeCatalogItems(latest.items, page.items)
                     }
+                    log.d {
+                        "Discover response catalogKey=${selectedCatalog.key} returned=${page.items.size} " +
+                            "merged=${mergedItems.size} rawItemCount=${page.rawItemCount} nextSkip=${page.nextSkip} " +
+                            "sample=${page.items.previewNames()}"
+                    }
                     _discoverUiState.value = latest.copy(
                         items = mergedItems,
                         isLoading = false,
@@ -355,6 +389,11 @@ object SearchRepository {
                     val latest = _discoverUiState.value
                     if (latest.selectedCatalogKey != selectedCatalog.key || latest.selectedGenre != current.selectedGenre) {
                         return@fold
+                    }
+                    log.e(error) {
+                        "Discover request failed catalogKey=${selectedCatalog.key} addon=${selectedCatalog.addonName} " +
+                            "type=${selectedCatalog.type} catalogId=${selectedCatalog.catalogId} " +
+                            "genre=${current.selectedGenre ?: "<all>"} skip=$requestedSkip url=$requestUrl"
                     }
                     _discoverUiState.value = latest.copy(
                         items = if (reset) emptyList() else latest.items,
@@ -427,6 +466,13 @@ private fun DiscoverUiState.canReuseDiscoverState(
     }
 
     return isLoading || items.isNotEmpty() || emptyStateReason != null || errorMessage != null || nextSkip != null
+}
+
+private fun List<MetaPreview>.previewNames(limit: Int = 5): String {
+    if (isEmpty()) return "[]"
+    return take(limit).joinToString(prefix = "[", postfix = if (size > limit) ", ...]" else "]") { item ->
+        item.name
+    }
 }
 
 private fun String.displayLabel(): String =

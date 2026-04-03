@@ -97,7 +97,7 @@ fun mergeCatalogItems(
     }
 }
 
-private fun buildCatalogUrl(
+internal fun buildCatalogUrl(
     manifestUrl: String,
     type: String,
     catalogId: String,
