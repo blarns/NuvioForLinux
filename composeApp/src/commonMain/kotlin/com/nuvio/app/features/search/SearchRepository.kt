@@ -127,6 +127,11 @@ object SearchRepository {
         }
 
         val sources = buildDiscoverSources(activeAddons)
+        val current = _discoverUiState.value
+        if (sources == discoverSources && current.canReuseDiscoverState(sources)) {
+            return
+        }
+
         discoverSources = sources
         if (sources.isEmpty()) {
             activeDiscoverJob?.cancel()
@@ -136,7 +141,6 @@ object SearchRepository {
             return
         }
 
-        val current = _discoverUiState.value
         val typeOptions = sources.map { it.type }.distinct()
         val selectedType = current.selectedType
             ?.takeIf { type -> typeOptions.contains(type) }
@@ -403,6 +407,27 @@ private fun DiscoverCatalogOption.resolveGenreSelection(requestedGenre: String?)
         genreRequired -> genreOptions.firstOrNull()
         else -> null
     }
+
+private fun DiscoverUiState.canReuseDiscoverState(
+    sources: List<DiscoverCatalogOption>,
+): Boolean {
+    val currentType = selectedType ?: return false
+    if (!typeOptions.contains(currentType) || !sources.any { it.type == currentType }) {
+        return false
+    }
+
+    val currentCatalog = sources.firstOrNull { it.key == selectedCatalogKey } ?: return false
+    if (currentCatalog.type != currentType) {
+        return false
+    }
+
+    val resolvedGenre = currentCatalog.resolveGenreSelection(selectedGenre)
+    if (selectedGenre != resolvedGenre) {
+        return false
+    }
+
+    return isLoading || items.isNotEmpty() || emptyStateReason != null || errorMessage != null || nextSkip != null
+}
 
 private fun String.displayLabel(): String =
     replaceFirstChar { char ->
