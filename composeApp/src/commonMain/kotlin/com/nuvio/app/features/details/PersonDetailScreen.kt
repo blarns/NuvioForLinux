@@ -81,7 +81,11 @@ fun PersonDetailScreen(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
         Crossfade(
             targetState = uiState,
             label = "PersonDetailCrossfade",
@@ -143,7 +147,11 @@ private fun PersonDetailContent(
         )
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -291,8 +299,16 @@ private fun PersonDetailSkeleton(personName: String) {
         )
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.fillMaxSize().background(accentGradient))
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(accentGradient),
+        )
 
         Column(
             modifier = Modifier
@@ -429,7 +445,9 @@ private fun PersonDetailError(
     onRetry: () -> Unit,
 ) {
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
