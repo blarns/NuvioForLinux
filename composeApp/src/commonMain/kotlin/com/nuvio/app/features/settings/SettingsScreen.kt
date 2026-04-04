@@ -44,6 +44,8 @@ import com.nuvio.app.features.home.HomeCatalogSettingsItem
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.mdblist.MdbListSettings
 import com.nuvio.app.features.mdblist.MdbListSettingsRepository
+import com.nuvio.app.features.notifications.EpisodeReleaseNotificationsRepository
+import com.nuvio.app.features.notifications.EpisodeReleaseNotificationsUiState
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.trakt.TraktAuthUiState
 import com.nuvio.app.features.trakt.TraktAuthRepository
@@ -110,6 +112,10 @@ fun SettingsScreen(
             ContinueWatchingPreferencesRepository.ensureLoaded()
             ContinueWatchingPreferencesRepository.uiState
         }.collectAsStateWithLifecycle()
+        val episodeReleaseNotificationsUiState by remember {
+            EpisodeReleaseNotificationsRepository.ensureLoaded()
+            EpisodeReleaseNotificationsRepository.uiState
+        }.collectAsStateWithLifecycle()
 
         LaunchedEffect(addonsUiState.addons) {
             HomeCatalogSettingsRepository.syncCatalogs(addonsUiState.addons)
@@ -142,6 +148,7 @@ fun SettingsScreen(
                 onThemeSelected = ThemeSettingsRepository::setTheme,
                 amoledEnabled = amoledEnabled,
                 onAmoledToggle = ThemeSettingsRepository::setAmoled,
+                episodeReleaseNotificationsUiState = episodeReleaseNotificationsUiState,
                 tmdbSettings = tmdbSettings,
                 mdbListSettings = mdbListSettings,
                 traktAuthUiState = traktAuthUiState,
@@ -170,6 +177,7 @@ fun SettingsScreen(
                 onThemeSelected = ThemeSettingsRepository::setTheme,
                 amoledEnabled = amoledEnabled,
                 onAmoledToggle = ThemeSettingsRepository::setAmoled,
+                episodeReleaseNotificationsUiState = episodeReleaseNotificationsUiState,
                 tmdbSettings = tmdbSettings,
                 mdbListSettings = mdbListSettings,
                 traktAuthUiState = traktAuthUiState,
@@ -208,6 +216,7 @@ private fun MobileSettingsScreen(
     onThemeSelected: (AppTheme) -> Unit,
     amoledEnabled: Boolean,
     onAmoledToggle: (Boolean) -> Unit,
+    episodeReleaseNotificationsUiState: EpisodeReleaseNotificationsUiState,
     tmdbSettings: TmdbSettings,
     mdbListSettings: MdbListSettings,
     traktAuthUiState: TraktAuthUiState,
@@ -238,6 +247,7 @@ private fun MobileSettingsScreen(
                 isTablet = false,
                 onPlaybackClick = { onPageChange(SettingsPage.Playback) },
                 onAppearanceClick = { onPageChange(SettingsPage.Appearance) },
+                onNotificationsClick = { onPageChange(SettingsPage.Notifications) },
                 onContentDiscoveryClick = { onPageChange(SettingsPage.ContentDiscovery) },
                 onIntegrationsClick = { onPageChange(SettingsPage.Integrations) },
                 onTraktClick = { onPageChange(SettingsPage.TraktAuthentication) },
@@ -267,6 +277,10 @@ private fun MobileSettingsScreen(
                 amoledEnabled = amoledEnabled,
                 onAmoledToggle = onAmoledToggle,
                 onContinueWatchingClick = onContinueWatchingClick,
+            )
+            SettingsPage.Notifications -> notificationsSettingsContent(
+                isTablet = false,
+                uiState = episodeReleaseNotificationsUiState,
             )
             SettingsPage.ContinueWatching -> continueWatchingSettingsContent(
                 isTablet = false,
@@ -333,6 +347,7 @@ private fun TabletSettingsScreen(
     onThemeSelected: (AppTheme) -> Unit,
     amoledEnabled: Boolean,
     onAmoledToggle: (Boolean) -> Unit,
+    episodeReleaseNotificationsUiState: EpisodeReleaseNotificationsUiState,
     tmdbSettings: TmdbSettings,
     mdbListSettings: MdbListSettings,
     traktAuthUiState: TraktAuthUiState,
@@ -424,6 +439,7 @@ private fun TabletSettingsScreen(
                     isTablet = true,
                     onPlaybackClick = { openInlinePage(SettingsPage.Playback) },
                     onAppearanceClick = { openInlinePage(SettingsPage.Appearance) },
+                    onNotificationsClick = { openInlinePage(SettingsPage.Notifications) },
                     onContentDiscoveryClick = { openInlinePage(SettingsPage.ContentDiscovery) },
                     onIntegrationsClick = { openInlinePage(SettingsPage.Integrations) },
                     onTraktClick = { openInlinePage(SettingsPage.TraktAuthentication) },
@@ -455,6 +471,10 @@ private fun TabletSettingsScreen(
                     amoledEnabled = amoledEnabled,
                     onAmoledToggle = onAmoledToggle,
                     onContinueWatchingClick = { openInlinePage(SettingsPage.ContinueWatching) },
+                )
+                SettingsPage.Notifications -> notificationsSettingsContent(
+                    isTablet = true,
+                    uiState = episodeReleaseNotificationsUiState,
                 )
                 SettingsPage.ContinueWatching -> continueWatchingSettingsContent(
                     isTablet = true,

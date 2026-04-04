@@ -120,6 +120,7 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
+            implementation(libs.androidx.work.runtime)
             implementation("androidx.recyclerview:recyclerview:1.4.0")
             implementation("com.squareup.okhttp3:okhttp:4.12.0")
             implementation("com.google.code.gson:gson:2.11.0")

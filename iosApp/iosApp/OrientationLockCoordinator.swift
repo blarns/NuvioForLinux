@@ -1,14 +1,17 @@
 import UIKit
+import UserNotifications
+import ComposeApp
 
 private let lockPlayerToLandscapeNotification = Notification.Name("NuvioPlayerLockLandscape")
 private let unlockPlayerOrientationNotification = Notification.Name("NuvioPlayerUnlockOrientation")
 
-final class OrientationLockAppDelegate: NSObject, UIApplicationDelegate {
+final class OrientationLockAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         OrientationLockCoordinator.shared.start()
+        UNUserNotificationCenter.current().delegate = self
         return true
     }
 
@@ -17,6 +20,25 @@ final class OrientationLockAppDelegate: NSObject, UIApplicationDelegate {
         supportedInterfaceOrientationsFor window: UIWindow?
     ) -> UIInterfaceOrientationMask {
         OrientationLockCoordinator.shared.supportedOrientations
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .list, .sound])
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        if let deepLink = response.notification.request.content.userInfo["deeplink"] as? String {
+            AppUrlBridgeKt.handleAppUrl(url: deepLink)
+        }
+        completionHandler()
     }
 }
 

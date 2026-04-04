@@ -562,7 +562,9 @@ object TraktLibraryRepository {
         val banner = media.images?.banner.firstNonBlankImageUrl()
         val logo = media.images?.logo.firstNonBlankImageUrl()
 
-        val savedAt = item.listedAt?.takeIf { it.isNotBlank() }?.hashCode()?.toLong()?.let { kotlin.math.abs(it) }
+        val savedAt = item.listedAt
+            ?.takeIf { it.isNotBlank() }
+            ?.let(TraktPlatformClock::parseIsoDateTimeToEpochMs)
             ?: TraktPlatformClock.nowEpochMs()
 
         return LibraryItem(

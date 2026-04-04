@@ -7,12 +7,15 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.SystemBarStyle
 import androidx.core.view.WindowCompat
+import com.nuvio.app.core.deeplink.handleAppUrl
 import com.nuvio.app.core.storage.PlatformLocalAccountDataCleaner
 import com.nuvio.app.features.addons.AddonStorage
 import com.nuvio.app.features.library.LibraryStorage
 import com.nuvio.app.features.details.MetaScreenSettingsStorage
 import com.nuvio.app.features.home.HomeCatalogSettingsStorage
 import com.nuvio.app.features.mdblist.MdbListSettingsStorage
+import com.nuvio.app.features.notifications.EpisodeReleaseNotificationPlatform
+import com.nuvio.app.features.notifications.EpisodeReleaseNotificationsStorage
 import com.nuvio.app.features.player.PlayerSettingsStorage
 import com.nuvio.app.features.plugins.PluginStorage
 import com.nuvio.app.features.profiles.ProfileStorage
@@ -21,7 +24,6 @@ import com.nuvio.app.features.search.SearchHistoryStorage
 import com.nuvio.app.features.settings.ThemeSettingsStorage
 import com.nuvio.app.features.trakt.TraktAuthStorage
 import com.nuvio.app.features.trakt.TraktCommentsStorage
-import com.nuvio.app.features.trakt.handleTraktAuthCallbackUrl
 import com.nuvio.app.features.tmdb.TmdbSettingsStorage
 import com.nuvio.app.features.watched.WatchedStorage
 import com.nuvio.app.features.streams.StreamLinkCacheStorage
@@ -55,11 +57,14 @@ class MainActivity : ComponentActivity() {
         TraktAuthStorage.initialize(applicationContext)
         TraktCommentsStorage.initialize(applicationContext)
         ContinueWatchingPreferencesStorage.initialize(applicationContext)
+        EpisodeReleaseNotificationsStorage.initialize(applicationContext)
         WatchProgressStorage.initialize(applicationContext)
         StreamLinkCacheStorage.initialize(applicationContext)
         PluginStorage.initialize(applicationContext)
         PlatformLocalAccountDataCleaner.initialize(applicationContext)
-        forwardTraktAuthCallback(intent)
+        EpisodeReleaseNotificationPlatform.initialize(applicationContext)
+        EpisodeReleaseNotificationPlatform.bindActivity(this)
+        handleIncomingAppIntent(intent)
 
         setContent {
             App()
@@ -69,12 +74,28 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        forwardTraktAuthCallback(intent)
+        handleIncomingAppIntent(intent)
     }
 
-    private fun forwardTraktAuthCallback(intent: Intent?) {
-        val callbackUrl = intent?.dataString?.trim().orEmpty()
-        if (callbackUrl.isBlank()) return
-        handleTraktAuthCallbackUrl(callbackUrl)
+    override fun onDestroy() {
+        EpisodeReleaseNotificationPlatform.unbindActivity(this)
+        super.onDestroy()
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray,
+    ) {
+        if (EpisodeReleaseNotificationPlatform.handlePermissionRequestResult(requestCode, grantResults)) {
+            return
+        }
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+
+    private fun handleIncomingAppIntent(intent: Intent?) {
+        val appUrl = intent?.dataString?.trim().orEmpty()
+        if (appUrl.isBlank()) return
+        handleAppUrl(appUrl)
     }
 }

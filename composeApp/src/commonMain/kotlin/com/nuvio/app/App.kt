@@ -68,6 +68,8 @@ import coil3.request.CachePolicy
 import coil3.request.crossfade
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
+import com.nuvio.app.core.deeplink.AppDeepLink
+import com.nuvio.app.core.deeplink.AppDeepLinkRepository
 import com.nuvio.app.core.sync.SyncManager
 import com.nuvio.app.core.ui.nuvioBottomNavigationBarInsets
 import com.nuvio.app.core.ui.NuvioPosterActionSheet
@@ -93,6 +95,7 @@ import com.nuvio.app.features.library.LibrarySection
 import com.nuvio.app.features.library.LibrarySourceMode
 import com.nuvio.app.features.library.LibraryScreen
 import com.nuvio.app.features.library.toLibraryItem
+import com.nuvio.app.features.notifications.EpisodeReleaseNotificationsRepository
 import com.nuvio.app.features.player.PlayerLaunch
 import com.nuvio.app.features.player.PlayerLaunchStore
 import com.nuvio.app.features.player.PlayerRoute
@@ -127,6 +130,7 @@ import com.nuvio.app.features.watchprogress.ContinueWatchingItem
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import com.nuvio.app.features.watching.application.WatchingActions
 import com.nuvio.app.features.watching.application.WatchingState
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import nuvio.composeapp.generated.resources.Res
@@ -356,6 +360,9 @@ private fun MainAppContent(
     onSwitchProfile: () -> Unit = {},
 ) {
         val navController = rememberNavController()
+        remember {
+            EpisodeReleaseNotificationsRepository.ensureLoaded()
+        }
         val hapticFeedback = LocalHapticFeedback.current
         val coroutineScope = rememberCoroutineScope()
         var selectedTab by rememberSaveable { mutableStateOf(AppScreenTab.Home) }
@@ -382,10 +389,27 @@ private fun MainAppContent(
     val isTraktConnected = traktAuthUiState.mode == TraktConnectionMode.CONNECTED
     var initialHomeReady by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) {
+        EpisodeReleaseNotificationsRepository.refreshAsync()
         kotlinx.coroutines.delay(5_000)
         initialHomeReady = true
     }
     var profileSwitchLoading by remember { mutableStateOf(false) }
+
+        LaunchedEffect(navController) {
+            AppDeepLinkRepository.pendingDeepLink.collectLatest { deepLink ->
+                when (deepLink) {
+                    is AppDeepLink.Meta -> {
+                        selectedTab = AppScreenTab.Home
+                        navController.navigate(DetailRoute(type = deepLink.type, id = deepLink.id)) {
+                            launchSingleTop = true
+                        }
+                        AppDeepLinkRepository.markConsumed(deepLink)
+                    }
+
+                    null -> Unit
+                }
+            }
+        }
 
         val onPlay: (String, String, String, String, String, String?, String?, String?, Int?, Int?, String?, String?, String?, Long?) -> Unit =
             { type, videoId, parentMetaId, parentMetaType, title, logo, poster, background, seasonNumber, episodeNumber, episodeTitle, episodeThumbnail, pauseDescription, resumePositionMs ->

@@ -10,7 +10,7 @@ struct iOSApp: App {
             ContentView()
                 .preferredColorScheme(.dark)
                 .onOpenURL { url in
-                    TraktAuthBridgeKt.handleTraktAuthCallbackUrl(url: url.absoluteString)
+                    AppUrlBridgeKt.handleAppUrl(url: url.absoluteString)
                 }
         }
     }

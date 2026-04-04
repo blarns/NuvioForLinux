@@ -2,6 +2,7 @@ package com.nuvio.app.features.settings
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -35,6 +36,11 @@ internal enum class SettingsPage(
     ),
     Appearance(
         title = "Appearance",
+        category = SettingsCategory.General,
+        parentPage = Root,
+    ),
+    Notifications(
+        title = "Notifications",
         category = SettingsCategory.General,
         parentPage = Root,
     ),

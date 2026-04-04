@@ -7,6 +7,7 @@ import com.nuvio.app.features.details.MetaScreenSettingsRepository
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.HomeRepository
 import com.nuvio.app.features.library.LibraryRepository
+import com.nuvio.app.features.notifications.EpisodeReleaseNotificationsRepository
 import com.nuvio.app.features.player.PlayerLaunchStore
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.plugins.PluginRepository
@@ -35,6 +36,7 @@ internal object LocalAccountDataCleaner {
         WatchProgressRepository.clearLocalState()
         WatchedRepository.clearLocalState()
         ContinueWatchingPreferencesRepository.clearLocalState()
+        EpisodeReleaseNotificationsRepository.clearLocalState()
         ThemeSettingsRepository.clearLocalState()
         TraktAuthRepository.clearLocalState()
         PlayerSettingsRepository.clearLocalState()

@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.People
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -13,6 +14,7 @@ internal fun LazyListScope.settingsRootContent(
     isTablet: Boolean,
     onPlaybackClick: () -> Unit,
     onAppearanceClick: () -> Unit,
+    onNotificationsClick: () -> Unit,
     onContentDiscoveryClick: () -> Unit,
     onIntegrationsClick: () -> Unit,
     onTraktClick: () -> Unit,
@@ -78,6 +80,14 @@ internal fun LazyListScope.settingsRootContent(
                         icon = Icons.Rounded.Palette,
                         isTablet = isTablet,
                         onClick = onAppearanceClick,
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsNavigationRow(
+                        title = "Notifications",
+                        description = "Manage episode release alerts and send a test notification.",
+                        icon = Icons.Rounded.Notifications,
+                        isTablet = isTablet,
+                        onClick = onNotificationsClick,
                     )
                     SettingsGroupDivider(isTablet = isTablet)
                     SettingsNavigationRow(
