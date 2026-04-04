@@ -2,6 +2,7 @@ package com.nuvio.app.features.details.components
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -156,6 +157,7 @@ fun DetailSeriesContent(
                         .any { !it.seasonPoster.isNullOrBlank() }
                 }
                 Column(
+                    modifier = Modifier.animateContentSize(animationSpec = tween(280)),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Row(

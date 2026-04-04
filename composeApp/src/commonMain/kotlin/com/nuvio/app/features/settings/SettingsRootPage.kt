@@ -67,27 +67,11 @@ internal fun LazyListScope.settingsRootContent(
             ) {
                 SettingsGroup(isTablet = isTablet) {
                     SettingsNavigationRow(
-                        title = "Playback",
-                        description = "Control player behavior and viewing defaults.",
-                        icon = Icons.Rounded.PlayArrow,
-                        isTablet = isTablet,
-                        onClick = onPlaybackClick,
-                    )
-                    SettingsGroupDivider(isTablet = isTablet)
-                    SettingsNavigationRow(
                         title = "Appearance",
                         description = "Tune home presentation and visual preferences.",
                         icon = Icons.Rounded.Palette,
                         isTablet = isTablet,
                         onClick = onAppearanceClick,
-                    )
-                    SettingsGroupDivider(isTablet = isTablet)
-                    SettingsNavigationRow(
-                        title = "Notifications",
-                        description = "Manage episode release alerts and send a test notification.",
-                        icon = Icons.Rounded.Notifications,
-                        isTablet = isTablet,
-                        onClick = onNotificationsClick,
                     )
                     SettingsGroupDivider(isTablet = isTablet)
                     SettingsNavigationRow(
@@ -99,11 +83,27 @@ internal fun LazyListScope.settingsRootContent(
                     )
                     SettingsGroupDivider(isTablet = isTablet)
                     SettingsNavigationRow(
+                        title = "Playback",
+                        description = "Control player behavior and viewing defaults.",
+                        icon = Icons.Rounded.PlayArrow,
+                        isTablet = isTablet,
+                        onClick = onPlaybackClick,
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsNavigationRow(
                         title = "Integrations",
                         description = "Connect TMDB and MDBList services.",
                         icon = Icons.Rounded.Link,
                         isTablet = isTablet,
                         onClick = onIntegrationsClick,
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsNavigationRow(
+                        title = "Notifications",
+                        description = "Manage episode release alerts and send a test notification.",
+                        icon = Icons.Rounded.Notifications,
+                        isTablet = isTablet,
+                        onClick = onNotificationsClick,
                     )
                 }
             }
