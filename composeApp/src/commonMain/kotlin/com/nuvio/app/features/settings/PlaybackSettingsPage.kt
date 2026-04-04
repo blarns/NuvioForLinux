@@ -367,6 +367,208 @@ private fun PlaybackSettingsSection(
                 }
             }
         }
+
+        SettingsSection(
+            title = "SKIP SEGMENTS",
+            isTablet = isTablet,
+        ) {
+            SettingsGroup(isTablet = isTablet) {
+                SettingsSwitchRow(
+                    title = "Skip Intro/Outro/Recap",
+                    description = "Show skip button during detected intro, outro, and recap segments.",
+                    checked = autoPlayPlayerSettings.skipIntroEnabled,
+                    isTablet = isTablet,
+                    onCheckedChange = PlayerSettingsRepository::setSkipIntroEnabled,
+                )
+                SettingsGroupDivider(isTablet = isTablet)
+                SettingsSwitchRow(
+                    title = "Anime Skip",
+                    description = "Also search AnimeSkip for skip timestamps (requires client ID).",
+                    checked = autoPlayPlayerSettings.animeSkipEnabled,
+                    isTablet = isTablet,
+                    onCheckedChange = PlayerSettingsRepository::setAnimeSkipEnabled,
+                )
+                if (autoPlayPlayerSettings.animeSkipEnabled) {
+                    SettingsGroupDivider(isTablet = isTablet)
+                    var showAnimeSkipClientIdDialog by remember { mutableStateOf(false) }
+                    SettingsNavigationRow(
+                        title = "AnimeSkip Client ID",
+                        description = autoPlayPlayerSettings.animeSkipClientId.ifBlank { "Not set" },
+                        isTablet = isTablet,
+                        onClick = { showAnimeSkipClientIdDialog = true },
+                    )
+                    if (showAnimeSkipClientIdDialog) {
+                        AnimeSkipClientIdDialog(
+                            initialValue = autoPlayPlayerSettings.animeSkipClientId,
+                            onSave = {
+                                PlayerSettingsRepository.setAnimeSkipClientId(it)
+                                showAnimeSkipClientIdDialog = false
+                            },
+                            onDismiss = { showAnimeSkipClientIdDialog = false },
+                        )
+                    }
+                }
+            }
+        }
+
+        SettingsSection(
+            title = "NEXT EPISODE",
+            isTablet = isTablet,
+        ) {
+            SettingsGroup(isTablet = isTablet) {
+                SettingsSwitchRow(
+                    title = "Auto-Play Next Episode",
+                    description = "Automatically find and play the next episode when the threshold is reached.",
+                    checked = autoPlayPlayerSettings.streamAutoPlayNextEpisodeEnabled,
+                    isTablet = isTablet,
+                    onCheckedChange = PlayerSettingsRepository::setStreamAutoPlayNextEpisodeEnabled,
+                )
+                SettingsGroupDivider(isTablet = isTablet)
+                SettingsSwitchRow(
+                    title = "Prefer Binge Group",
+                    description = "When auto-playing, prefer a stream from the same binge group as the current one.",
+                    checked = autoPlayPlayerSettings.streamAutoPlayPreferBingeGroup,
+                    isTablet = isTablet,
+                    onCheckedChange = PlayerSettingsRepository::setStreamAutoPlayPreferBingeGroup,
+                )
+                SettingsGroupDivider(isTablet = isTablet)
+                var showThresholdModeDialog by remember { mutableStateOf(false) }
+                SettingsNavigationRow(
+                    title = "Threshold Mode",
+                    description = when (autoPlayPlayerSettings.nextEpisodeThresholdMode) {
+                        com.nuvio.app.features.player.skip.NextEpisodeThresholdMode.PERCENTAGE -> "Percentage"
+                        com.nuvio.app.features.player.skip.NextEpisodeThresholdMode.MINUTES_BEFORE_END -> "Minutes Before End"
+                    },
+                    isTablet = isTablet,
+                    onClick = { showThresholdModeDialog = true },
+                )
+                if (showThresholdModeDialog) {
+                    NextEpisodeThresholdModeDialog(
+                        selected = autoPlayPlayerSettings.nextEpisodeThresholdMode,
+                        onSelect = {
+                            PlayerSettingsRepository.setNextEpisodeThresholdMode(it)
+                            showThresholdModeDialog = false
+                        },
+                        onDismiss = { showThresholdModeDialog = false },
+                    )
+                }
+                SettingsGroupDivider(isTablet = isTablet)
+                when (autoPlayPlayerSettings.nextEpisodeThresholdMode) {
+                    com.nuvio.app.features.player.skip.NextEpisodeThresholdMode.PERCENTAGE -> {
+                        val thresholdPercent = autoPlayPlayerSettings.nextEpisodeThresholdPercent
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = if (isTablet) 18.dp else 16.dp, vertical = 10.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Threshold Percentage",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        text = "Show next episode card when playback reaches this percentage.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Text(
+                                    text = "${thresholdPercent.toInt()}%",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                            var sliderVal by remember(thresholdPercent) { mutableFloatStateOf(thresholdPercent) }
+                            var lastHapticPercent by remember(thresholdPercent) { mutableStateOf(thresholdPercent.toInt()) }
+                            Slider(
+                                value = sliderVal,
+                                onValueChange = {
+                                    sliderVal = it
+                                    val stepped = it.toInt()
+                                    if (stepped != lastHapticPercent) {
+                                        lastHapticPercent = stepped
+                                        hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    }
+                                },
+                                onValueChangeFinished = {
+                                    PlayerSettingsRepository.setNextEpisodeThresholdPercent(sliderVal)
+                                },
+                                valueRange = 50f..100f,
+                                steps = 49,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = MaterialTheme.colorScheme.primary,
+                                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                                ),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                    com.nuvio.app.features.player.skip.NextEpisodeThresholdMode.MINUTES_BEFORE_END -> {
+                        val thresholdMinutes = autoPlayPlayerSettings.nextEpisodeThresholdMinutesBeforeEnd
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = if (isTablet) 18.dp else 16.dp, vertical = 10.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Minutes Before End",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        text = "Show next episode card this many minutes before the end.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Text(
+                                    text = "${thresholdMinutes.toInt()} min",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                            var sliderVal by remember(thresholdMinutes) { mutableFloatStateOf(thresholdMinutes) }
+                            var lastHapticMin by remember(thresholdMinutes) { mutableStateOf(thresholdMinutes.toInt()) }
+                            Slider(
+                                value = sliderVal,
+                                onValueChange = {
+                                    sliderVal = it
+                                    val stepped = it.toInt()
+                                    if (stepped != lastHapticMin) {
+                                        lastHapticMin = stepped
+                                        hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    }
+                                },
+                                onValueChangeFinished = {
+                                    PlayerSettingsRepository.setNextEpisodeThresholdMinutesBeforeEnd(sliderVal)
+                                },
+                                valueRange = 1f..15f,
+                                steps = 13,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = MaterialTheme.colorScheme.primary,
+                                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                                ),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 
     if (showPreferredAudioDialog) {
@@ -1315,6 +1517,150 @@ private fun StreamAutoPlayRegexDialog(
                         Text("Save")
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun AnimeSkipClientIdDialog(
+    initialValue: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var value by remember { mutableStateOf(initialValue) }
+
+    BasicAlertDialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = "AnimeSkip Client ID",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = "Enter your AnimeSkip API client ID. Get one at anime-skip.com.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+                ) {
+                    BasicTextField(
+                        value = value,
+                        onValueChange = { value = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            color = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        singleLine = true,
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    TextButton(onClick = { onSave(value.trim()) }) { Text("Save") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun NextEpisodeThresholdModeDialog(
+    selected: com.nuvio.app.features.player.skip.NextEpisodeThresholdMode,
+    onSelect: (com.nuvio.app.features.player.skip.NextEpisodeThresholdMode) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val options = com.nuvio.app.features.player.skip.NextEpisodeThresholdMode.entries
+
+    BasicAlertDialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = "Threshold Mode",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+
+                options.forEach { mode ->
+                    val isSelected = mode == selected
+                    val containerColor = if (isSelected) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                    }
+                    val label = when (mode) {
+                        com.nuvio.app.features.player.skip.NextEpisodeThresholdMode.PERCENTAGE -> "Percentage"
+                        com.nuvio.app.features.player.skip.NextEpisodeThresholdMode.MINUTES_BEFORE_END -> "Minutes Before End"
+                    }
+
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(mode) },
+                        shape = RoundedCornerShape(12.dp),
+                        color = containerColor,
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Box(
+                                modifier = Modifier.size(24.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Check,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Tap outside to close",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

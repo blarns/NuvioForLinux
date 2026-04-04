@@ -33,8 +33,17 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.details.MetaVideo
+import com.nuvio.app.features.player.skip.NextEpisodeCard
+import com.nuvio.app.features.player.skip.NextEpisodeInfo
+import com.nuvio.app.features.player.skip.PlayerNextEpisodeRules
+import com.nuvio.app.features.player.skip.SkipIntroButton
+import com.nuvio.app.features.player.skip.SkipIntroRepository
+import com.nuvio.app.features.player.skip.SkipInterval
+import com.nuvio.app.features.streams.StreamAutoPlayMode
+import com.nuvio.app.features.streams.StreamAutoPlaySelector
 import com.nuvio.app.features.streams.StreamItem
 import com.nuvio.app.features.streams.StreamLinkCacheRepository
 import com.nuvio.app.features.streams.StreamsUiState
@@ -45,6 +54,7 @@ import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -53,6 +63,16 @@ private const val PlaybackProgressPersistIntervalMs = 60_000L
 private const val PlayerLeftGestureBoundary = 0.4f
 private const val PlayerRightGestureBoundary = 0.6f
 private const val PlayerVerticalGestureSensitivity = 1f
+private val PlayerSliderOverlayGap = 12.dp
+private val PlayerTimeRowHeight = 36.dp
+private val PlayerActionRowHeight = 50.dp
+
+private fun sliderOverlayBottomPadding(metrics: PlayerLayoutMetrics) =
+    metrics.sliderBottomOffset +
+        metrics.sliderTouchHeight +
+        PlayerTimeRowHeight +
+        PlayerActionRowHeight +
+        PlayerSliderOverlayGap
 
 private enum class PlayerSideGesture {
     Brightness,
@@ -100,6 +120,8 @@ fun PlayerScreen(
     ) {
         val horizontalSafePadding = playerHorizontalSafePadding()
         val metrics = remember(maxWidth) { PlayerLayoutMetrics.fromWidth(maxWidth) }
+        val sliderEdgePadding = horizontalSafePadding + metrics.horizontalPadding
+        val overlayBottomPadding = sliderOverlayBottomPadding(metrics)
         val scope = rememberCoroutineScope()
         val gestureController = rememberPlayerGestureController()
         var controlsVisible by rememberSaveable { mutableStateOf(true) }
@@ -167,6 +189,20 @@ fun PlayerScreen(
             metaUiState.meta?.videos ?: emptyList()
         }
         val isSeries = parentMetaType == "series"
+
+        // Skip intro/outro/recap state
+        var skipIntervals by remember { mutableStateOf<List<SkipInterval>>(emptyList()) }
+        var activeSkipInterval by remember { mutableStateOf<SkipInterval?>(null) }
+        var skipIntervalDismissed by remember { mutableStateOf(false) }
+
+        // Next episode state
+        var nextEpisodeInfo by remember { mutableStateOf<NextEpisodeInfo?>(null) }
+        var showNextEpisodeCard by remember { mutableStateOf(false) }
+        var nextEpisodeAutoPlaySearching by remember { mutableStateOf(false) }
+        var nextEpisodeAutoPlaySourceName by remember { mutableStateOf<String?>(null) }
+        var nextEpisodeAutoPlayCountdown by remember { mutableStateOf<Int?>(null) }
+        var nextEpisodeAutoPlayJob by remember { mutableStateOf<Job?>(null) }
+
         val playbackSession = remember(
             contentType,
             parentMetaId,
@@ -523,6 +559,95 @@ fun PlayerScreen(
             controlsVisible = true
         }
 
+        fun playNextEpisode() {
+            val nextVideo = allEpisodes.firstOrNull { video ->
+                video.season == nextEpisodeInfo?.season && video.episode == nextEpisodeInfo?.episode
+            } ?: return
+            if (nextEpisodeInfo?.hasAired != true) return
+
+            nextEpisodeAutoPlayJob?.cancel()
+            nextEpisodeAutoPlaySearching = true
+            nextEpisodeAutoPlaySourceName = null
+            nextEpisodeAutoPlayCountdown = null
+
+            val type = contentType ?: parentMetaType
+            val settings = playerSettingsUiState
+
+            // Determine auto-play mode for next episode
+            val effectiveMode = if (settings.streamAutoPlayMode == StreamAutoPlayMode.MANUAL) {
+                if (settings.streamAutoPlayNextEpisodeEnabled) StreamAutoPlayMode.FIRST_STREAM
+                else StreamAutoPlayMode.MANUAL
+            } else {
+                settings.streamAutoPlayMode
+            }
+
+            val currentBingeGroup = if (settings.streamAutoPlayPreferBingeGroup) {
+                // Try to find binge group of current stream (not directly available, pass empty)
+                ""
+            } else ""
+
+            nextEpisodeAutoPlayJob = scope.launch {
+                PlayerStreamsRepository.loadEpisodeStreams(
+                    type = type,
+                    videoId = nextVideo.id,
+                    season = nextVideo.season,
+                    episode = nextVideo.episode,
+                )
+
+                val installedAddonNames = AddonRepository.uiState.value.addons
+                    .mapNotNull { it.manifest?.name }
+                    .toSet()
+
+                val timeoutMs = settings.streamAutoPlayTimeoutSeconds * 1000L
+                val startTime = WatchProgressClock.nowEpochMs()
+
+                // Collect streams as they arrive
+                PlayerStreamsRepository.episodeStreamsState.collectLatest { state ->
+                    if (state.groups.isEmpty() && state.isAnyLoading) return@collectLatest
+
+                    val allStreams = state.groups.flatMap { it.streams }
+                    val elapsed = WatchProgressClock.nowEpochMs() - startTime
+
+                    val selected = if (allStreams.isNotEmpty()) {
+                        StreamAutoPlaySelector.selectAutoPlayStream(
+                            streams = allStreams,
+                            mode = effectiveMode,
+                            regexPattern = settings.streamAutoPlayRegex,
+                            source = settings.streamAutoPlaySource,
+                            installedAddonNames = installedAddonNames,
+                            selectedAddons = settings.streamAutoPlaySelectedAddons,
+                            selectedPlugins = settings.streamAutoPlaySelectedPlugins,
+                        )
+                    } else null
+
+                    if (selected != null || !state.isAnyLoading || elapsed >= timeoutMs) {
+                        nextEpisodeAutoPlaySearching = false
+                        if (selected != null) {
+                            nextEpisodeAutoPlaySourceName = selected.addonName
+                            // Countdown before playing
+                            for (i in 3 downTo 1) {
+                                nextEpisodeAutoPlayCountdown = i
+                                delay(1000)
+                            }
+                            switchToEpisodeStream(selected, nextVideo)
+                            showNextEpisodeCard = false
+                            nextEpisodeAutoPlayCountdown = null
+                            nextEpisodeAutoPlaySourceName = null
+                        } else if (!state.isAnyLoading || elapsed >= timeoutMs) {
+                            // No stream found — open the episode streams panel for manual selection
+                            episodeStreamsPanelState = EpisodeStreamsPanelState(
+                                showStreams = true,
+                                selectedEpisode = nextVideo,
+                            )
+                            showEpisodesPanel = true
+                            showNextEpisodeCard = false
+                        }
+                        return@collectLatest
+                    }
+                }
+            }
+        }
+
         fun openSourcesPanel() {
             val type = contentType ?: parentMetaType
             val vid = activeVideoId ?: return
@@ -672,6 +797,121 @@ fun PlayerScreen(
                 session = playbackSession,
                 snapshot = playbackSnapshot,
             )
+        }
+
+        // Fetch skip intervals when episode changes
+        LaunchedEffect(activeVideoId, activeSeasonNumber, activeEpisodeNumber) {
+            skipIntervals = emptyList()
+            activeSkipInterval = null
+            skipIntervalDismissed = false
+            showNextEpisodeCard = false
+            nextEpisodeAutoPlayJob?.cancel()
+            nextEpisodeAutoPlaySearching = false
+
+            val season = activeSeasonNumber
+            val episode = activeEpisodeNumber
+            val vid = activeVideoId
+
+            if (season == null || episode == null || vid == null) return@LaunchedEffect
+
+            launch {
+                val imdbId = vid.split(":").firstOrNull()?.takeIf { it.startsWith("tt") }
+                val intervals = SkipIntroRepository.getSkipIntervals(
+                    imdbId = imdbId,
+                    season = season,
+                    episode = episode,
+                )
+                skipIntervals = intervals
+            }
+        }
+
+        // Update active skip interval based on playback position
+        LaunchedEffect(playbackSnapshot.positionMs, skipIntervals) {
+            if (skipIntervals.isEmpty()) {
+                activeSkipInterval = null
+                return@LaunchedEffect
+            }
+            val positionSec = playbackSnapshot.positionMs / 1000.0
+            val current = skipIntervals.firstOrNull { interval ->
+                positionSec >= interval.startTime && positionSec < interval.endTime
+            }
+            if (current != activeSkipInterval) {
+                activeSkipInterval = current
+                if (current != null) skipIntervalDismissed = false
+            }
+        }
+
+        // Resolve next episode info when episodes list or current episode changes
+        LaunchedEffect(allEpisodes, activeSeasonNumber, activeEpisodeNumber) {
+            if (!isSeries || allEpisodes.isEmpty()) {
+                nextEpisodeInfo = null
+                return@LaunchedEffect
+            }
+            val curSeason = activeSeasonNumber ?: return@LaunchedEffect
+            val curEpisode = activeEpisodeNumber ?: return@LaunchedEffect
+            val nextVideo = PlayerNextEpisodeRules.resolveNextEpisode(
+                videos = allEpisodes,
+                currentSeason = curSeason,
+                currentEpisode = curEpisode,
+            )
+            nextEpisodeInfo = if (nextVideo != null && nextVideo.season != null && nextVideo.episode != null) {
+                NextEpisodeInfo(
+                    videoId = nextVideo.id,
+                    season = nextVideo.season!!,
+                    episode = nextVideo.episode!!,
+                    title = nextVideo.title,
+                    thumbnail = nextVideo.thumbnail,
+                    overview = nextVideo.overview,
+                    released = nextVideo.released,
+                    hasAired = PlayerNextEpisodeRules.hasEpisodeAired(nextVideo.released),
+                    unairedMessage = if (!PlayerNextEpisodeRules.hasEpisodeAired(nextVideo.released)) {
+                        "Airs ${nextVideo.released ?: "TBA"}"
+                    } else null,
+                )
+            } else null
+        }
+
+        // Show next episode card at threshold
+        LaunchedEffect(
+            playbackSnapshot.positionMs,
+            playbackSnapshot.durationMs,
+            nextEpisodeInfo,
+            skipIntervals,
+            playerSettingsUiState.nextEpisodeThresholdMode,
+            playerSettingsUiState.nextEpisodeThresholdPercent,
+            playerSettingsUiState.nextEpisodeThresholdMinutesBeforeEnd,
+        ) {
+            if (nextEpisodeInfo == null || playbackSnapshot.durationMs <= 0L) {
+                showNextEpisodeCard = false
+                return@LaunchedEffect
+            }
+            val shouldShow = PlayerNextEpisodeRules.shouldShowNextEpisodeCard(
+                positionMs = playbackSnapshot.positionMs,
+                durationMs = playbackSnapshot.durationMs,
+                skipIntervals = skipIntervals,
+                thresholdMode = playerSettingsUiState.nextEpisodeThresholdMode,
+                thresholdPercent = playerSettingsUiState.nextEpisodeThresholdPercent,
+                thresholdMinutesBeforeEnd = playerSettingsUiState.nextEpisodeThresholdMinutesBeforeEnd,
+            )
+            if (shouldShow && !showNextEpisodeCard) {
+                showNextEpisodeCard = true
+                // Auto-play if enabled
+                if (playerSettingsUiState.streamAutoPlayNextEpisodeEnabled && nextEpisodeInfo?.hasAired == true) {
+                    playNextEpisode()
+                }
+            } else if (!shouldShow) {
+                showNextEpisodeCard = false
+            }
+        }
+
+        // Auto-play on video ended if next episode card isn't already showing
+        LaunchedEffect(playbackSnapshot.isEnded, nextEpisodeInfo) {
+            if (playbackSnapshot.isEnded && nextEpisodeInfo != null && !showNextEpisodeCard) {
+                showNextEpisodeCard = true
+                if (playerSettingsUiState.streamAutoPlayNextEpisodeEnabled && nextEpisodeInfo?.hasAired == true) {
+                    playNextEpisode()
+                }
+            }
         }
 
         DisposableEffect(playbackSession.videoId, activeSourceUrl, activeSourceAudioUrl) {
@@ -898,6 +1138,47 @@ fun PlayerScreen(
                             .padding(top = 40.dp),
                     )
                 }
+            }
+
+            // Skip intro/recap/outro button
+            SkipIntroButton(
+                interval = activeSkipInterval,
+                dismissed = skipIntervalDismissed,
+                controlsVisible = controlsVisible,
+                onSkip = {
+                    val interval = activeSkipInterval ?: return@SkipIntroButton
+                    playerController?.seekTo((interval.endTime * 1000).toLong())
+                    skipIntervalDismissed = true
+                },
+                onDismiss = { skipIntervalDismissed = true },
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = sliderEdgePadding, bottom = overlayBottomPadding),
+            )
+
+            // Next episode card
+            if (isSeries) {
+                NextEpisodeCard(
+                    nextEpisode = nextEpisodeInfo,
+                    visible = showNextEpisodeCard,
+                    isAutoPlaySearching = nextEpisodeAutoPlaySearching,
+                    autoPlaySourceName = nextEpisodeAutoPlaySourceName,
+                    autoPlayCountdownSec = nextEpisodeAutoPlayCountdown,
+                    onPlayNext = {
+                        nextEpisodeAutoPlayJob?.cancel()
+                        playNextEpisode()
+                    },
+                    onDismiss = {
+                        nextEpisodeAutoPlayJob?.cancel()
+                        showNextEpisodeCard = false
+                        nextEpisodeAutoPlaySearching = false
+                        nextEpisodeAutoPlaySourceName = null
+                        nextEpisodeAutoPlayCountdown = null
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = sliderEdgePadding, bottom = overlayBottomPadding),
+                )
             }
 
             if (errorMessage != null) {

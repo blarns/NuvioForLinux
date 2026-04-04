@@ -26,6 +26,14 @@ actual object PlayerSettingsStorage {
     private const val streamAutoPlaySelectedPluginsKey = "stream_auto_play_selected_plugins"
     private const val streamAutoPlayRegexKey = "stream_auto_play_regex"
     private const val streamAutoPlayTimeoutSecondsKey = "stream_auto_play_timeout_seconds"
+    private const val skipIntroEnabledKey = "skip_intro_enabled"
+    private const val animeSkipEnabledKey = "animeskip_enabled"
+    private const val animeSkipClientIdKey = "animeskip_client_id"
+    private const val streamAutoPlayNextEpisodeEnabledKey = "stream_auto_play_next_episode_enabled"
+    private const val streamAutoPlayPreferBingeGroupKey = "stream_auto_play_prefer_binge_group"
+    private const val nextEpisodeThresholdModeKey = "next_episode_threshold_mode"
+    private const val nextEpisodeThresholdPercentKey = "next_episode_threshold_percent_v2"
+    private const val nextEpisodeThresholdMinutesBeforeEndKey = "next_episode_threshold_minutes_before_end_v2"
 
     private var preferences: SharedPreferences? = null
 
@@ -328,6 +336,128 @@ actual object PlayerSettingsStorage {
         preferences
             ?.edit()
             ?.putInt(ProfileScopedKey.of(streamAutoPlayTimeoutSecondsKey), seconds)
+            ?.apply()
+    }
+
+    actual fun loadSkipIntroEnabled(): Boolean? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(skipIntroEnabledKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getBoolean(key, true)
+            } else {
+                null
+            }
+        }
+
+    actual fun saveSkipIntroEnabled(enabled: Boolean) {
+        preferences
+            ?.edit()
+            ?.putBoolean(ProfileScopedKey.of(skipIntroEnabledKey), enabled)
+            ?.apply()
+    }
+
+    actual fun loadAnimeSkipEnabled(): Boolean? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(animeSkipEnabledKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getBoolean(key, false)
+            } else {
+                null
+            }
+        }
+
+    actual fun saveAnimeSkipEnabled(enabled: Boolean) {
+        preferences
+            ?.edit()
+            ?.putBoolean(ProfileScopedKey.of(animeSkipEnabledKey), enabled)
+            ?.apply()
+    }
+
+    actual fun loadAnimeSkipClientId(): String? =
+        preferences?.getString(ProfileScopedKey.of(animeSkipClientIdKey), null)
+
+    actual fun saveAnimeSkipClientId(clientId: String) {
+        preferences
+            ?.edit()
+            ?.putString(ProfileScopedKey.of(animeSkipClientIdKey), clientId)
+            ?.apply()
+    }
+
+    actual fun loadStreamAutoPlayNextEpisodeEnabled(): Boolean? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(streamAutoPlayNextEpisodeEnabledKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getBoolean(key, false)
+            } else {
+                null
+            }
+        }
+
+    actual fun saveStreamAutoPlayNextEpisodeEnabled(enabled: Boolean) {
+        preferences
+            ?.edit()
+            ?.putBoolean(ProfileScopedKey.of(streamAutoPlayNextEpisodeEnabledKey), enabled)
+            ?.apply()
+    }
+
+    actual fun loadStreamAutoPlayPreferBingeGroup(): Boolean? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(streamAutoPlayPreferBingeGroupKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getBoolean(key, true)
+            } else {
+                null
+            }
+        }
+
+    actual fun saveStreamAutoPlayPreferBingeGroup(enabled: Boolean) {
+        preferences
+            ?.edit()
+            ?.putBoolean(ProfileScopedKey.of(streamAutoPlayPreferBingeGroupKey), enabled)
+            ?.apply()
+    }
+
+    actual fun loadNextEpisodeThresholdMode(): String? =
+        preferences?.getString(ProfileScopedKey.of(nextEpisodeThresholdModeKey), null)
+
+    actual fun saveNextEpisodeThresholdMode(mode: String) {
+        preferences
+            ?.edit()
+            ?.putString(ProfileScopedKey.of(nextEpisodeThresholdModeKey), mode)
+            ?.apply()
+    }
+
+    actual fun loadNextEpisodeThresholdPercent(): Float? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(nextEpisodeThresholdPercentKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getFloat(key, 99f)
+            } else {
+                null
+            }
+        }
+
+    actual fun saveNextEpisodeThresholdPercent(percent: Float) {
+        preferences
+            ?.edit()
+            ?.putFloat(ProfileScopedKey.of(nextEpisodeThresholdPercentKey), percent)
+            ?.apply()
+    }
+
+    actual fun loadNextEpisodeThresholdMinutesBeforeEnd(): Float? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(nextEpisodeThresholdMinutesBeforeEndKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getFloat(key, 2f)
+            } else {
+                null
+            }
+        }
+
+    actual fun saveNextEpisodeThresholdMinutesBeforeEnd(minutes: Float) {
+        preferences
+            ?.edit()
+            ?.putFloat(ProfileScopedKey.of(nextEpisodeThresholdMinutesBeforeEndKey), minutes)
             ?.apply()
     }
 }

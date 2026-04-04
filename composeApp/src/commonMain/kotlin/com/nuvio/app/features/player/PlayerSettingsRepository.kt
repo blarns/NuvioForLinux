@@ -1,5 +1,6 @@
 package com.nuvio.app.features.player
 
+import com.nuvio.app.features.player.skip.NextEpisodeThresholdMode
 import com.nuvio.app.features.streams.StreamAutoPlayMode
 import com.nuvio.app.features.streams.StreamAutoPlaySource
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +25,14 @@ data class PlayerSettingsUiState(
     val streamAutoPlaySelectedPlugins: Set<String> = emptySet(),
     val streamAutoPlayRegex: String = "",
     val streamAutoPlayTimeoutSeconds: Int = 3,
+    val skipIntroEnabled: Boolean = true,
+    val animeSkipEnabled: Boolean = false,
+    val animeSkipClientId: String = "",
+    val streamAutoPlayNextEpisodeEnabled: Boolean = false,
+    val streamAutoPlayPreferBingeGroup: Boolean = true,
+    val nextEpisodeThresholdMode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
+    val nextEpisodeThresholdPercent: Float = 99f,
+    val nextEpisodeThresholdMinutesBeforeEnd: Float = 2f,
 )
 
 object PlayerSettingsRepository {
@@ -48,6 +57,14 @@ object PlayerSettingsRepository {
     private var streamAutoPlaySelectedPlugins: Set<String> = emptySet()
     private var streamAutoPlayRegex = ""
     private var streamAutoPlayTimeoutSeconds = 3
+    private var skipIntroEnabled = true
+    private var animeSkipEnabled = false
+    private var animeSkipClientId = ""
+    private var streamAutoPlayNextEpisodeEnabled = false
+    private var streamAutoPlayPreferBingeGroup = true
+    private var nextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE
+    private var nextEpisodeThresholdPercent = 99f
+    private var nextEpisodeThresholdMinutesBeforeEnd = 2f
 
     fun ensureLoaded() {
         if (hasLoaded) return
@@ -77,6 +94,14 @@ object PlayerSettingsRepository {
         streamAutoPlaySelectedPlugins = emptySet()
         streamAutoPlayRegex = ""
         streamAutoPlayTimeoutSeconds = 3
+        skipIntroEnabled = true
+        animeSkipEnabled = false
+        animeSkipClientId = ""
+        streamAutoPlayNextEpisodeEnabled = false
+        streamAutoPlayPreferBingeGroup = true
+        nextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE
+        nextEpisodeThresholdPercent = 99f
+        nextEpisodeThresholdMinutesBeforeEnd = 2f
         publish()
     }
 
@@ -118,6 +143,16 @@ object PlayerSettingsRepository {
         streamAutoPlaySelectedPlugins = PlayerSettingsStorage.loadStreamAutoPlaySelectedPlugins() ?: emptySet()
         streamAutoPlayRegex = PlayerSettingsStorage.loadStreamAutoPlayRegex() ?: ""
         streamAutoPlayTimeoutSeconds = PlayerSettingsStorage.loadStreamAutoPlayTimeoutSeconds() ?: 3
+        skipIntroEnabled = PlayerSettingsStorage.loadSkipIntroEnabled() ?: true
+        animeSkipEnabled = PlayerSettingsStorage.loadAnimeSkipEnabled() ?: false
+        animeSkipClientId = PlayerSettingsStorage.loadAnimeSkipClientId() ?: ""
+        streamAutoPlayNextEpisodeEnabled = PlayerSettingsStorage.loadStreamAutoPlayNextEpisodeEnabled() ?: false
+        streamAutoPlayPreferBingeGroup = PlayerSettingsStorage.loadStreamAutoPlayPreferBingeGroup() ?: true
+        nextEpisodeThresholdMode = PlayerSettingsStorage.loadNextEpisodeThresholdMode()
+            ?.let { runCatching { NextEpisodeThresholdMode.valueOf(it) }.getOrNull() }
+            ?: NextEpisodeThresholdMode.PERCENTAGE
+        nextEpisodeThresholdPercent = PlayerSettingsStorage.loadNextEpisodeThresholdPercent() ?: 99f
+        nextEpisodeThresholdMinutesBeforeEnd = PlayerSettingsStorage.loadNextEpisodeThresholdMinutesBeforeEnd() ?: 2f
         publish()
     }
 
@@ -264,6 +299,70 @@ object PlayerSettingsRepository {
         PlayerSettingsStorage.saveStreamAutoPlayTimeoutSeconds(seconds)
     }
 
+    fun setSkipIntroEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (skipIntroEnabled == enabled) return
+        skipIntroEnabled = enabled
+        publish()
+        PlayerSettingsStorage.saveSkipIntroEnabled(enabled)
+    }
+
+    fun setAnimeSkipEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (animeSkipEnabled == enabled) return
+        animeSkipEnabled = enabled
+        publish()
+        PlayerSettingsStorage.saveAnimeSkipEnabled(enabled)
+    }
+
+    fun setAnimeSkipClientId(clientId: String) {
+        ensureLoaded()
+        if (animeSkipClientId == clientId) return
+        animeSkipClientId = clientId
+        publish()
+        PlayerSettingsStorage.saveAnimeSkipClientId(clientId)
+    }
+
+    fun setStreamAutoPlayNextEpisodeEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (streamAutoPlayNextEpisodeEnabled == enabled) return
+        streamAutoPlayNextEpisodeEnabled = enabled
+        publish()
+        PlayerSettingsStorage.saveStreamAutoPlayNextEpisodeEnabled(enabled)
+    }
+
+    fun setStreamAutoPlayPreferBingeGroup(enabled: Boolean) {
+        ensureLoaded()
+        if (streamAutoPlayPreferBingeGroup == enabled) return
+        streamAutoPlayPreferBingeGroup = enabled
+        publish()
+        PlayerSettingsStorage.saveStreamAutoPlayPreferBingeGroup(enabled)
+    }
+
+    fun setNextEpisodeThresholdMode(mode: NextEpisodeThresholdMode) {
+        ensureLoaded()
+        if (nextEpisodeThresholdMode == mode) return
+        nextEpisodeThresholdMode = mode
+        publish()
+        PlayerSettingsStorage.saveNextEpisodeThresholdMode(mode.name)
+    }
+
+    fun setNextEpisodeThresholdPercent(percent: Float) {
+        ensureLoaded()
+        if (nextEpisodeThresholdPercent == percent) return
+        nextEpisodeThresholdPercent = percent
+        publish()
+        PlayerSettingsStorage.saveNextEpisodeThresholdPercent(percent)
+    }
+
+    fun setNextEpisodeThresholdMinutesBeforeEnd(minutes: Float) {
+        ensureLoaded()
+        if (nextEpisodeThresholdMinutesBeforeEnd == minutes) return
+        nextEpisodeThresholdMinutesBeforeEnd = minutes
+        publish()
+        PlayerSettingsStorage.saveNextEpisodeThresholdMinutesBeforeEnd(minutes)
+    }
+
     private fun publish() {
         _uiState.value = PlayerSettingsUiState(
             showLoadingOverlay = showLoadingOverlay,
@@ -283,6 +382,14 @@ object PlayerSettingsRepository {
             streamAutoPlaySelectedPlugins = streamAutoPlaySelectedPlugins,
             streamAutoPlayRegex = streamAutoPlayRegex,
             streamAutoPlayTimeoutSeconds = streamAutoPlayTimeoutSeconds,
+            skipIntroEnabled = skipIntroEnabled,
+            animeSkipEnabled = animeSkipEnabled,
+            animeSkipClientId = animeSkipClientId,
+            streamAutoPlayNextEpisodeEnabled = streamAutoPlayNextEpisodeEnabled,
+            streamAutoPlayPreferBingeGroup = streamAutoPlayPreferBingeGroup,
+            nextEpisodeThresholdMode = nextEpisodeThresholdMode,
+            nextEpisodeThresholdPercent = nextEpisodeThresholdPercent,
+            nextEpisodeThresholdMinutesBeforeEnd = nextEpisodeThresholdMinutesBeforeEnd,
         )
     }
 }

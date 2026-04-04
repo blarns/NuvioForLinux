@@ -41,4 +41,20 @@ internal expect object PlayerSettingsStorage {
     fun saveStreamAutoPlayRegex(regex: String)
     fun loadStreamAutoPlayTimeoutSeconds(): Int?
     fun saveStreamAutoPlayTimeoutSeconds(seconds: Int)
+    fun loadSkipIntroEnabled(): Boolean?
+    fun saveSkipIntroEnabled(enabled: Boolean)
+    fun loadAnimeSkipEnabled(): Boolean?
+    fun saveAnimeSkipEnabled(enabled: Boolean)
+    fun loadAnimeSkipClientId(): String?
+    fun saveAnimeSkipClientId(clientId: String)
+    fun loadStreamAutoPlayNextEpisodeEnabled(): Boolean?
+    fun saveStreamAutoPlayNextEpisodeEnabled(enabled: Boolean)
+    fun loadStreamAutoPlayPreferBingeGroup(): Boolean?
+    fun saveStreamAutoPlayPreferBingeGroup(enabled: Boolean)
+    fun loadNextEpisodeThresholdMode(): String?
+    fun saveNextEpisodeThresholdMode(mode: String)
+    fun loadNextEpisodeThresholdPercent(): Float?
+    fun saveNextEpisodeThresholdPercent(percent: Float)
+    fun loadNextEpisodeThresholdMinutesBeforeEnd(): Float?
+    fun saveNextEpisodeThresholdMinutesBeforeEnd(minutes: Float)
 }

@@ -24,6 +24,14 @@ actual object PlayerSettingsStorage {
     private const val streamAutoPlaySelectedPluginsKey = "stream_auto_play_selected_plugins"
     private const val streamAutoPlayRegexKey = "stream_auto_play_regex"
     private const val streamAutoPlayTimeoutSecondsKey = "stream_auto_play_timeout_seconds"
+    private const val skipIntroEnabledKey = "skip_intro_enabled"
+    private const val animeSkipEnabledKey = "animeskip_enabled"
+    private const val animeSkipClientIdKey = "animeskip_client_id"
+    private const val streamAutoPlayNextEpisodeEnabledKey = "stream_auto_play_next_episode_enabled"
+    private const val streamAutoPlayPreferBingeGroupKey = "stream_auto_play_prefer_binge_group"
+    private const val nextEpisodeThresholdModeKey = "next_episode_threshold_mode"
+    private const val nextEpisodeThresholdPercentKey = "next_episode_threshold_percent_v2"
+    private const val nextEpisodeThresholdMinutesBeforeEndKey = "next_episode_threshold_minutes_before_end_v2"
 
     actual fun loadShowLoadingOverlay(): Boolean? {
         val defaults = NSUserDefaults.standardUserDefaults
@@ -279,5 +287,109 @@ actual object PlayerSettingsStorage {
 
     actual fun saveStreamAutoPlayTimeoutSeconds(seconds: Int) {
         NSUserDefaults.standardUserDefaults.setInteger(seconds.toLong(), forKey = ProfileScopedKey.of(streamAutoPlayTimeoutSecondsKey))
+    }
+
+    actual fun loadSkipIntroEnabled(): Boolean? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(skipIntroEnabledKey)
+        return if (defaults.objectForKey(key) != null) {
+            defaults.boolForKey(key)
+        } else {
+            null
+        }
+    }
+
+    actual fun saveSkipIntroEnabled(enabled: Boolean) {
+        NSUserDefaults.standardUserDefaults.setBool(enabled, forKey = ProfileScopedKey.of(skipIntroEnabledKey))
+    }
+
+    actual fun loadAnimeSkipEnabled(): Boolean? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(animeSkipEnabledKey)
+        return if (defaults.objectForKey(key) != null) {
+            defaults.boolForKey(key)
+        } else {
+            null
+        }
+    }
+
+    actual fun saveAnimeSkipEnabled(enabled: Boolean) {
+        NSUserDefaults.standardUserDefaults.setBool(enabled, forKey = ProfileScopedKey.of(animeSkipEnabledKey))
+    }
+
+    actual fun loadAnimeSkipClientId(): String? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(animeSkipClientIdKey)
+        return defaults.stringForKey(key)
+    }
+
+    actual fun saveAnimeSkipClientId(clientId: String) {
+        NSUserDefaults.standardUserDefaults.setObject(clientId, forKey = ProfileScopedKey.of(animeSkipClientIdKey))
+    }
+
+    actual fun loadStreamAutoPlayNextEpisodeEnabled(): Boolean? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(streamAutoPlayNextEpisodeEnabledKey)
+        return if (defaults.objectForKey(key) != null) {
+            defaults.boolForKey(key)
+        } else {
+            null
+        }
+    }
+
+    actual fun saveStreamAutoPlayNextEpisodeEnabled(enabled: Boolean) {
+        NSUserDefaults.standardUserDefaults.setBool(enabled, forKey = ProfileScopedKey.of(streamAutoPlayNextEpisodeEnabledKey))
+    }
+
+    actual fun loadStreamAutoPlayPreferBingeGroup(): Boolean? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(streamAutoPlayPreferBingeGroupKey)
+        return if (defaults.objectForKey(key) != null) {
+            defaults.boolForKey(key)
+        } else {
+            null
+        }
+    }
+
+    actual fun saveStreamAutoPlayPreferBingeGroup(enabled: Boolean) {
+        NSUserDefaults.standardUserDefaults.setBool(enabled, forKey = ProfileScopedKey.of(streamAutoPlayPreferBingeGroupKey))
+    }
+
+    actual fun loadNextEpisodeThresholdMode(): String? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(nextEpisodeThresholdModeKey)
+        return defaults.stringForKey(key)
+    }
+
+    actual fun saveNextEpisodeThresholdMode(mode: String) {
+        NSUserDefaults.standardUserDefaults.setObject(mode, forKey = ProfileScopedKey.of(nextEpisodeThresholdModeKey))
+    }
+
+    actual fun loadNextEpisodeThresholdPercent(): Float? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(nextEpisodeThresholdPercentKey)
+        return if (defaults.objectForKey(key) != null) {
+            defaults.floatForKey(key)
+        } else {
+            null
+        }
+    }
+
+    actual fun saveNextEpisodeThresholdPercent(percent: Float) {
+        NSUserDefaults.standardUserDefaults.setFloat(percent, forKey = ProfileScopedKey.of(nextEpisodeThresholdPercentKey))
+    }
+
+    actual fun loadNextEpisodeThresholdMinutesBeforeEnd(): Float? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(nextEpisodeThresholdMinutesBeforeEndKey)
+        return if (defaults.objectForKey(key) != null) {
+            defaults.floatForKey(key)
+        } else {
+            null
+        }
+    }
+
+    actual fun saveNextEpisodeThresholdMinutesBeforeEnd(minutes: Float) {
+        NSUserDefaults.standardUserDefaults.setFloat(minutes, forKey = ProfileScopedKey.of(nextEpisodeThresholdMinutesBeforeEndKey))
     }
 }
