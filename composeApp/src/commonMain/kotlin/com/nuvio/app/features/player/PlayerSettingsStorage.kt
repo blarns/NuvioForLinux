@@ -29,4 +29,16 @@ internal expect object PlayerSettingsStorage {
     fun saveMapDV7ToHevc(enabled: Boolean)
     fun loadTunnelingEnabled(): Boolean?
     fun saveTunnelingEnabled(enabled: Boolean)
+    fun loadStreamAutoPlayMode(): String?
+    fun saveStreamAutoPlayMode(mode: String)
+    fun loadStreamAutoPlaySource(): String?
+    fun saveStreamAutoPlaySource(source: String)
+    fun loadStreamAutoPlaySelectedAddons(): Set<String>?
+    fun saveStreamAutoPlaySelectedAddons(addons: Set<String>)
+    fun loadStreamAutoPlaySelectedPlugins(): Set<String>?
+    fun saveStreamAutoPlaySelectedPlugins(plugins: Set<String>)
+    fun loadStreamAutoPlayRegex(): String?
+    fun saveStreamAutoPlayRegex(regex: String)
+    fun loadStreamAutoPlayTimeoutSeconds(): Int?
+    fun saveStreamAutoPlayTimeoutSeconds(seconds: Int)
 }

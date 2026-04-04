@@ -18,6 +18,12 @@ actual object PlayerSettingsStorage {
     private const val decoderPriorityKey = "decoder_priority"
     private const val mapDV7ToHevcKey = "map_dv7_to_hevc"
     private const val tunnelingEnabledKey = "tunneling_enabled"
+    private const val streamAutoPlayModeKey = "stream_auto_play_mode"
+    private const val streamAutoPlaySourceKey = "stream_auto_play_source"
+    private const val streamAutoPlaySelectedAddonsKey = "stream_auto_play_selected_addons"
+    private const val streamAutoPlaySelectedPluginsKey = "stream_auto_play_selected_plugins"
+    private const val streamAutoPlayRegexKey = "stream_auto_play_regex"
+    private const val streamAutoPlayTimeoutSecondsKey = "stream_auto_play_timeout_seconds"
 
     actual fun loadShowLoadingOverlay(): Boolean? {
         val defaults = NSUserDefaults.standardUserDefaults
@@ -205,5 +211,73 @@ actual object PlayerSettingsStorage {
 
     actual fun saveTunnelingEnabled(enabled: Boolean) {
         NSUserDefaults.standardUserDefaults.setBool(enabled, forKey = ProfileScopedKey.of(tunnelingEnabledKey))
+    }
+
+    actual fun loadStreamAutoPlayMode(): String? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(streamAutoPlayModeKey)
+        return defaults.stringForKey(key)
+    }
+
+    actual fun saveStreamAutoPlayMode(mode: String) {
+        NSUserDefaults.standardUserDefaults.setObject(mode, forKey = ProfileScopedKey.of(streamAutoPlayModeKey))
+    }
+
+    actual fun loadStreamAutoPlaySource(): String? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(streamAutoPlaySourceKey)
+        return defaults.stringForKey(key)
+    }
+
+    actual fun saveStreamAutoPlaySource(source: String) {
+        NSUserDefaults.standardUserDefaults.setObject(source, forKey = ProfileScopedKey.of(streamAutoPlaySourceKey))
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    actual fun loadStreamAutoPlaySelectedAddons(): Set<String>? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(streamAutoPlaySelectedAddonsKey)
+        val array = defaults.arrayForKey(key) as? List<String> ?: return null
+        return array.toSet()
+    }
+
+    actual fun saveStreamAutoPlaySelectedAddons(addons: Set<String>) {
+        NSUserDefaults.standardUserDefaults.setObject(addons.toList(), forKey = ProfileScopedKey.of(streamAutoPlaySelectedAddonsKey))
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    actual fun loadStreamAutoPlaySelectedPlugins(): Set<String>? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(streamAutoPlaySelectedPluginsKey)
+        val array = defaults.arrayForKey(key) as? List<String> ?: return null
+        return array.toSet()
+    }
+
+    actual fun saveStreamAutoPlaySelectedPlugins(plugins: Set<String>) {
+        NSUserDefaults.standardUserDefaults.setObject(plugins.toList(), forKey = ProfileScopedKey.of(streamAutoPlaySelectedPluginsKey))
+    }
+
+    actual fun loadStreamAutoPlayRegex(): String? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(streamAutoPlayRegexKey)
+        return defaults.stringForKey(key)
+    }
+
+    actual fun saveStreamAutoPlayRegex(regex: String) {
+        NSUserDefaults.standardUserDefaults.setObject(regex, forKey = ProfileScopedKey.of(streamAutoPlayRegexKey))
+    }
+
+    actual fun loadStreamAutoPlayTimeoutSeconds(): Int? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(streamAutoPlayTimeoutSecondsKey)
+        return if (defaults.objectForKey(key) != null) {
+            defaults.integerForKey(key).toInt()
+        } else {
+            null
+        }
+    }
+
+    actual fun saveStreamAutoPlayTimeoutSeconds(seconds: Int) {
+        NSUserDefaults.standardUserDefaults.setInteger(seconds.toLong(), forKey = ProfileScopedKey.of(streamAutoPlayTimeoutSecondsKey))
     }
 }

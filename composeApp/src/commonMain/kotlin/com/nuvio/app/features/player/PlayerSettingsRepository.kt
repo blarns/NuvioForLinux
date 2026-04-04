@@ -1,5 +1,7 @@
 package com.nuvio.app.features.player
 
+import com.nuvio.app.features.streams.StreamAutoPlayMode
+import com.nuvio.app.features.streams.StreamAutoPlaySource
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,6 +18,12 @@ data class PlayerSettingsUiState(
     val decoderPriority: Int = 1,
     val mapDV7ToHevc: Boolean = false,
     val tunnelingEnabled: Boolean = false,
+    val streamAutoPlayMode: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL,
+    val streamAutoPlaySource: StreamAutoPlaySource = StreamAutoPlaySource.ALL_SOURCES,
+    val streamAutoPlaySelectedAddons: Set<String> = emptySet(),
+    val streamAutoPlaySelectedPlugins: Set<String> = emptySet(),
+    val streamAutoPlayRegex: String = "",
+    val streamAutoPlayTimeoutSeconds: Int = 3,
 )
 
 object PlayerSettingsRepository {
@@ -34,6 +42,12 @@ object PlayerSettingsRepository {
     private var decoderPriority = 1
     private var mapDV7ToHevc = false
     private var tunnelingEnabled = false
+    private var streamAutoPlayMode = StreamAutoPlayMode.MANUAL
+    private var streamAutoPlaySource = StreamAutoPlaySource.ALL_SOURCES
+    private var streamAutoPlaySelectedAddons: Set<String> = emptySet()
+    private var streamAutoPlaySelectedPlugins: Set<String> = emptySet()
+    private var streamAutoPlayRegex = ""
+    private var streamAutoPlayTimeoutSeconds = 3
 
     fun ensureLoaded() {
         if (hasLoaded) return
@@ -57,6 +71,12 @@ object PlayerSettingsRepository {
         decoderPriority = 1
         mapDV7ToHevc = false
         tunnelingEnabled = false
+        streamAutoPlayMode = StreamAutoPlayMode.MANUAL
+        streamAutoPlaySource = StreamAutoPlaySource.ALL_SOURCES
+        streamAutoPlaySelectedAddons = emptySet()
+        streamAutoPlaySelectedPlugins = emptySet()
+        streamAutoPlayRegex = ""
+        streamAutoPlayTimeoutSeconds = 3
         publish()
     }
 
@@ -88,6 +108,16 @@ object PlayerSettingsRepository {
         decoderPriority = PlayerSettingsStorage.loadDecoderPriority() ?: 1
         mapDV7ToHevc = PlayerSettingsStorage.loadMapDV7ToHevc() ?: false
         tunnelingEnabled = PlayerSettingsStorage.loadTunnelingEnabled() ?: false
+        streamAutoPlayMode = PlayerSettingsStorage.loadStreamAutoPlayMode()
+            ?.let { runCatching { StreamAutoPlayMode.valueOf(it) }.getOrNull() }
+            ?: StreamAutoPlayMode.MANUAL
+        streamAutoPlaySource = PlayerSettingsStorage.loadStreamAutoPlaySource()
+            ?.let { runCatching { StreamAutoPlaySource.valueOf(it) }.getOrNull() }
+            ?: StreamAutoPlaySource.ALL_SOURCES
+        streamAutoPlaySelectedAddons = PlayerSettingsStorage.loadStreamAutoPlaySelectedAddons() ?: emptySet()
+        streamAutoPlaySelectedPlugins = PlayerSettingsStorage.loadStreamAutoPlaySelectedPlugins() ?: emptySet()
+        streamAutoPlayRegex = PlayerSettingsStorage.loadStreamAutoPlayRegex() ?: ""
+        streamAutoPlayTimeoutSeconds = PlayerSettingsStorage.loadStreamAutoPlayTimeoutSeconds() ?: 3
         publish()
     }
 
@@ -186,6 +216,54 @@ object PlayerSettingsRepository {
         PlayerSettingsStorage.saveTunnelingEnabled(enabled)
     }
 
+    fun setStreamAutoPlayMode(mode: StreamAutoPlayMode) {
+        ensureLoaded()
+        if (streamAutoPlayMode == mode) return
+        streamAutoPlayMode = mode
+        publish()
+        PlayerSettingsStorage.saveStreamAutoPlayMode(mode.name)
+    }
+
+    fun setStreamAutoPlaySource(source: StreamAutoPlaySource) {
+        ensureLoaded()
+        if (streamAutoPlaySource == source) return
+        streamAutoPlaySource = source
+        publish()
+        PlayerSettingsStorage.saveStreamAutoPlaySource(source.name)
+    }
+
+    fun setStreamAutoPlaySelectedAddons(addons: Set<String>) {
+        ensureLoaded()
+        if (streamAutoPlaySelectedAddons == addons) return
+        streamAutoPlaySelectedAddons = addons
+        publish()
+        PlayerSettingsStorage.saveStreamAutoPlaySelectedAddons(addons)
+    }
+
+    fun setStreamAutoPlaySelectedPlugins(plugins: Set<String>) {
+        ensureLoaded()
+        if (streamAutoPlaySelectedPlugins == plugins) return
+        streamAutoPlaySelectedPlugins = plugins
+        publish()
+        PlayerSettingsStorage.saveStreamAutoPlaySelectedPlugins(plugins)
+    }
+
+    fun setStreamAutoPlayRegex(regex: String) {
+        ensureLoaded()
+        if (streamAutoPlayRegex == regex) return
+        streamAutoPlayRegex = regex
+        publish()
+        PlayerSettingsStorage.saveStreamAutoPlayRegex(regex)
+    }
+
+    fun setStreamAutoPlayTimeoutSeconds(seconds: Int) {
+        ensureLoaded()
+        if (streamAutoPlayTimeoutSeconds == seconds) return
+        streamAutoPlayTimeoutSeconds = seconds
+        publish()
+        PlayerSettingsStorage.saveStreamAutoPlayTimeoutSeconds(seconds)
+    }
+
     private fun publish() {
         _uiState.value = PlayerSettingsUiState(
             showLoadingOverlay = showLoadingOverlay,
@@ -199,6 +277,12 @@ object PlayerSettingsRepository {
             decoderPriority = decoderPriority,
             mapDV7ToHevc = mapDV7ToHevc,
             tunnelingEnabled = tunnelingEnabled,
+            streamAutoPlayMode = streamAutoPlayMode,
+            streamAutoPlaySource = streamAutoPlaySource,
+            streamAutoPlaySelectedAddons = streamAutoPlaySelectedAddons,
+            streamAutoPlaySelectedPlugins = streamAutoPlaySelectedPlugins,
+            streamAutoPlayRegex = streamAutoPlayRegex,
+            streamAutoPlayTimeoutSeconds = streamAutoPlayTimeoutSeconds,
         )
     }
 }

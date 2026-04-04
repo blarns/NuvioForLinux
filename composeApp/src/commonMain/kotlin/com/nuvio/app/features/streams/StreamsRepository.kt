@@ -4,6 +4,7 @@ import co.touchlab.kermit.Logger
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.httpGetText
 import com.nuvio.app.features.details.MetaDetailsRepository
+import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.plugins.PluginRepository
 import com.nuvio.app.features.plugins.PluginRepositoryItem
 import com.nuvio.app.features.plugins.PluginRuntimeResult
@@ -13,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -53,6 +55,21 @@ object StreamsRepository {
         activeRequestKey = requestKey
         activeJob?.cancel()
         _uiState.value = StreamsUiState()
+
+        PlayerSettingsRepository.ensureLoaded()
+        val playerSettings = PlayerSettingsRepository.uiState.value
+        val autoPlayMode = playerSettings.streamAutoPlayMode
+        val isAutoPlayEnabled = autoPlayMode != StreamAutoPlayMode.MANUAL &&
+            !(autoPlayMode == StreamAutoPlayMode.REGEX_MATCH &&
+                !StreamAutoPlayPolicy.isRegexSelectionConfigured(playerSettings.streamAutoPlayRegex))
+        val isDirectAutoPlayFlow = isAutoPlayEnabled
+
+        if (isDirectAutoPlayFlow) {
+            _uiState.value = StreamsUiState(
+                isDirectAutoPlayFlow = true,
+                showDirectAutoPlayOverlay = true,
+            )
+        }
 
         val embeddedStreams = MetaDetailsRepository.findEmbeddedStreams(videoId)
         if (embeddedStreams.isNotEmpty()) {
@@ -128,6 +145,8 @@ object StreamsRepository {
             activeAddonIds = initialGroups.map { it.addonId }.toSet(),
             isAnyLoading = true,
             emptyStateReason = null,
+            isDirectAutoPlayFlow = isDirectAutoPlayFlow,
+            showDirectAutoPlayOverlay = isDirectAutoPlayFlow,
         )
 
         activeJob = scope.launch {
@@ -137,6 +156,53 @@ object StreamsRepository {
                 .toMutableMap()
             val pluginFirstErrorByAddonId = mutableMapOf<String, String>()
             val totalTasks = streamAddons.size + pluginRemainingByAddonId.values.sum()
+
+            val installedAddonNames = installedAddons
+                .mapNotNull { it.manifest?.name }
+                .toSet()
+            var autoSelectTriggered = false
+            var timeoutElapsed = false
+
+            val timeoutJob = if (isAutoPlayEnabled) {
+                val timeoutMs = playerSettings.streamAutoPlayTimeoutSeconds * 1_000L
+                if (timeoutMs > 0L && playerSettings.streamAutoPlayTimeoutSeconds < 11) {
+                    launch {
+                        delay(timeoutMs)
+                        timeoutElapsed = true
+                        if (!autoSelectTriggered) {
+                            val allStreams = _uiState.value.groups.flatMap { it.streams }
+                            if (allStreams.isNotEmpty()) {
+                                autoSelectTriggered = true
+                                val selected = StreamAutoPlaySelector.selectAutoPlayStream(
+                                    streams = allStreams,
+                                    mode = autoPlayMode,
+                                    regexPattern = playerSettings.streamAutoPlayRegex,
+                                    source = playerSettings.streamAutoPlaySource,
+                                    installedAddonNames = installedAddonNames,
+                                    selectedAddons = playerSettings.streamAutoPlaySelectedAddons,
+                                    selectedPlugins = playerSettings.streamAutoPlaySelectedPlugins,
+                                )
+                                _uiState.update { it.copy(autoPlayStream = selected) }
+                                if (selected == null) {
+                                    _uiState.update {
+                                        it.copy(
+                                            isDirectAutoPlayFlow = false,
+                                            showDirectAutoPlayOverlay = false,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else if (timeoutMs <= 0L) {
+                    timeoutElapsed = true
+                    null
+                } else {
+                    null
+                }
+            } else {
+                null
+            }
 
             streamAddons.forEach { manifest ->
                 launch {
@@ -276,11 +342,45 @@ object StreamsRepository {
             }
 
             completions.close()
+
+            if (isAutoPlayEnabled && !autoSelectTriggered) {
+                autoSelectTriggered = true
+                val allStreams = _uiState.value.groups.flatMap { it.streams }
+                val selected = StreamAutoPlaySelector.selectAutoPlayStream(
+                    streams = allStreams,
+                    mode = autoPlayMode,
+                    regexPattern = playerSettings.streamAutoPlayRegex,
+                    source = playerSettings.streamAutoPlaySource,
+                    installedAddonNames = installedAddonNames,
+                    selectedAddons = playerSettings.streamAutoPlaySelectedAddons,
+                    selectedPlugins = playerSettings.streamAutoPlaySelectedPlugins,
+                )
+                _uiState.update { it.copy(autoPlayStream = selected) }
+            }
+            if (isDirectAutoPlayFlow && _uiState.value.autoPlayStream == null) {
+                _uiState.update {
+                    it.copy(
+                        isDirectAutoPlayFlow = false,
+                        showDirectAutoPlayOverlay = false,
+                    )
+                }
+            }
+            timeoutJob?.cancel()
         }
     }
 
     fun selectFilter(addonId: String?) {
         _uiState.update { it.copy(selectedFilter = addonId) }
+    }
+
+    fun consumeAutoPlay() {
+        _uiState.update {
+            it.copy(
+                autoPlayStream = null,
+                isDirectAutoPlayFlow = false,
+                showDirectAutoPlayOverlay = false,
+            )
+        }
     }
 
     fun clear() {

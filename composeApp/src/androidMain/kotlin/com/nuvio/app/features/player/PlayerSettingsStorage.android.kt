@@ -20,6 +20,12 @@ actual object PlayerSettingsStorage {
     private const val decoderPriorityKey = "decoder_priority"
     private const val mapDV7ToHevcKey = "map_dv7_to_hevc"
     private const val tunnelingEnabledKey = "tunneling_enabled"
+    private const val streamAutoPlayModeKey = "stream_auto_play_mode"
+    private const val streamAutoPlaySourceKey = "stream_auto_play_source"
+    private const val streamAutoPlaySelectedAddonsKey = "stream_auto_play_selected_addons"
+    private const val streamAutoPlaySelectedPluginsKey = "stream_auto_play_selected_plugins"
+    private const val streamAutoPlayRegexKey = "stream_auto_play_regex"
+    private const val streamAutoPlayTimeoutSecondsKey = "stream_auto_play_timeout_seconds"
 
     private var preferences: SharedPreferences? = null
 
@@ -241,6 +247,87 @@ actual object PlayerSettingsStorage {
         preferences
             ?.edit()
             ?.putBoolean(ProfileScopedKey.of(tunnelingEnabledKey), enabled)
+            ?.apply()
+    }
+
+    actual fun loadStreamAutoPlayMode(): String? =
+        preferences?.getString(ProfileScopedKey.of(streamAutoPlayModeKey), null)
+
+    actual fun saveStreamAutoPlayMode(mode: String) {
+        preferences
+            ?.edit()
+            ?.putString(ProfileScopedKey.of(streamAutoPlayModeKey), mode)
+            ?.apply()
+    }
+
+    actual fun loadStreamAutoPlaySource(): String? =
+        preferences?.getString(ProfileScopedKey.of(streamAutoPlaySourceKey), null)
+
+    actual fun saveStreamAutoPlaySource(source: String) {
+        preferences
+            ?.edit()
+            ?.putString(ProfileScopedKey.of(streamAutoPlaySourceKey), source)
+            ?.apply()
+    }
+
+    actual fun loadStreamAutoPlaySelectedAddons(): Set<String>? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(streamAutoPlaySelectedAddonsKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getStringSet(key, emptySet()) ?: emptySet()
+            } else {
+                null
+            }
+        }
+
+    actual fun saveStreamAutoPlaySelectedAddons(addons: Set<String>) {
+        preferences
+            ?.edit()
+            ?.putStringSet(ProfileScopedKey.of(streamAutoPlaySelectedAddonsKey), addons)
+            ?.apply()
+    }
+
+    actual fun loadStreamAutoPlaySelectedPlugins(): Set<String>? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(streamAutoPlaySelectedPluginsKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getStringSet(key, emptySet()) ?: emptySet()
+            } else {
+                null
+            }
+        }
+
+    actual fun saveStreamAutoPlaySelectedPlugins(plugins: Set<String>) {
+        preferences
+            ?.edit()
+            ?.putStringSet(ProfileScopedKey.of(streamAutoPlaySelectedPluginsKey), plugins)
+            ?.apply()
+    }
+
+    actual fun loadStreamAutoPlayRegex(): String? =
+        preferences?.getString(ProfileScopedKey.of(streamAutoPlayRegexKey), null)
+
+    actual fun saveStreamAutoPlayRegex(regex: String) {
+        preferences
+            ?.edit()
+            ?.putString(ProfileScopedKey.of(streamAutoPlayRegexKey), regex)
+            ?.apply()
+    }
+
+    actual fun loadStreamAutoPlayTimeoutSeconds(): Int? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(streamAutoPlayTimeoutSecondsKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getInt(key, 3)
+            } else {
+                null
+            }
+        }
+
+    actual fun saveStreamAutoPlayTimeoutSeconds(seconds: Int) {
+        preferences
+            ?.edit()
+            ?.putInt(ProfileScopedKey.of(streamAutoPlayTimeoutSecondsKey), seconds)
             ?.apply()
     }
 }

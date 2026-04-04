@@ -59,6 +59,9 @@ data class StreamsUiState(
     val selectedFilter: String? = null,
     val isAnyLoading: Boolean = false,
     val emptyStateReason: StreamsEmptyStateReason? = null,
+    val autoPlayStream: StreamItem? = null,
+    val isDirectAutoPlayFlow: Boolean = false,
+    val showDirectAutoPlayOverlay: Boolean = false,
 ) {
     val filteredGroups: List<AddonStreamGroup>
         get() = if (selectedFilter == null) groups

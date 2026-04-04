@@ -1,5 +1,6 @@
 package com.nuvio.app.features.settings
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,30 +14,46 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.player.AudioLanguageOption
 import com.nuvio.app.features.player.AvailableLanguageOptions
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.player.SubtitleLanguageOption
 import com.nuvio.app.features.player.languageLabelForCode
+import com.nuvio.app.features.plugins.PluginRepository
+import com.nuvio.app.features.streams.StreamAutoPlayMode
+import com.nuvio.app.features.streams.StreamAutoPlaySource
 import com.nuvio.app.isIos
 
 internal fun LazyListScope.playbackSettingsContent(
@@ -89,6 +106,15 @@ private fun PlaybackSettingsSection(
     var showSecondarySubtitleDialog by remember { mutableStateOf(false) }
     var showReuseCacheDurationDialog by remember { mutableStateOf(false) }
     var showDecoderPriorityDialog by remember { mutableStateOf(false) }
+    var showAutoPlayModeDialog by remember { mutableStateOf(false) }
+    var showAutoPlaySourceDialog by remember { mutableStateOf(false) }
+    var showAutoPlayAddonSelectionDialog by remember { mutableStateOf(false) }
+    var showAutoPlayPluginSelectionDialog by remember { mutableStateOf(false) }
+    var showAutoPlayRegexDialog by remember { mutableStateOf(false) }
+    val autoPlayPlayerSettings by PlayerSettingsRepository.uiState.collectAsStateWithLifecycle()
+    val addonUiState by AddonRepository.uiState.collectAsStateWithLifecycle()
+    val pluginUiState by PluginRepository.uiState.collectAsStateWithLifecycle()
+    val hapticFeedback = LocalHapticFeedback.current
     val sectionSpacing = if (isTablet) 18.dp else 12.dp
 
     Column(
@@ -173,6 +199,134 @@ private fun PlaybackSettingsSection(
                         isTablet = isTablet,
                         onClick = { showReuseCacheDurationDialog = true },
                     )
+                }
+            }
+        }
+
+        SettingsSection(
+            title = "STREAM AUTO-PLAY",
+            isTablet = isTablet,
+        ) {
+            SettingsGroup(isTablet = isTablet) {
+                SettingsNavigationRow(
+                    title = "Stream Selection Mode",
+                    description = when (autoPlayPlayerSettings.streamAutoPlayMode) {
+                        StreamAutoPlayMode.MANUAL -> "Manual"
+                        StreamAutoPlayMode.FIRST_STREAM -> "First Available Stream"
+                        StreamAutoPlayMode.REGEX_MATCH -> "Regex Match"
+                    },
+                    isTablet = isTablet,
+                    onClick = { showAutoPlayModeDialog = true },
+                )
+                if (autoPlayPlayerSettings.streamAutoPlayMode != StreamAutoPlayMode.MANUAL) {
+                    if (autoPlayPlayerSettings.streamAutoPlayMode == StreamAutoPlayMode.REGEX_MATCH) {
+                        SettingsGroupDivider(isTablet = isTablet)
+                        SettingsNavigationRow(
+                            title = "Regex Pattern",
+                            description = autoPlayPlayerSettings.streamAutoPlayRegex.ifBlank { "Not set" },
+                            isTablet = isTablet,
+                            onClick = { showAutoPlayRegexDialog = true },
+                        )
+                    }
+                    SettingsGroupDivider(isTablet = isTablet)
+                    val timeoutSec = autoPlayPlayerSettings.streamAutoPlayTimeoutSeconds
+                    val timeoutLabel = when (timeoutSec) {
+                        0 -> "Instant"
+                        11 -> "Unlimited"
+                        else -> "${timeoutSec}s"
+                    }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = if (isTablet) 18.dp else 16.dp, vertical = 10.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Stream Timeout",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    text = "How long to wait for streams before auto-selecting.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Text(
+                                text = timeoutLabel,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                        var sliderValue by remember(timeoutSec) { mutableFloatStateOf(timeoutSec.toFloat()) }
+                        var lastHapticStep by remember(timeoutSec) { mutableStateOf(timeoutSec) }
+                        Slider(
+                            value = sliderValue,
+                            onValueChange = {
+                                sliderValue = it
+                                val steppedValue = it.toInt()
+                                if (steppedValue != lastHapticStep) {
+                                    lastHapticStep = steppedValue
+                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                }
+                            },
+                            onValueChangeFinished = {
+                                PlayerSettingsRepository.setStreamAutoPlayTimeoutSeconds(sliderValue.toInt())
+                            },
+                            valueRange = 0f..11f,
+                            steps = 10,
+                            colors = SliderDefaults.colors(
+                                thumbColor = MaterialTheme.colorScheme.primary,
+                                activeTrackColor = MaterialTheme.colorScheme.primary,
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsNavigationRow(
+                        title = "Source Scope",
+                        description = when (autoPlayPlayerSettings.streamAutoPlaySource) {
+                            StreamAutoPlaySource.ALL_SOURCES -> "All Sources"
+                            StreamAutoPlaySource.INSTALLED_ADDONS_ONLY -> "Installed Addons Only"
+                            StreamAutoPlaySource.ENABLED_PLUGINS_ONLY -> "Enabled Plugins Only"
+                        },
+                        isTablet = isTablet,
+                        onClick = { showAutoPlaySourceDialog = true },
+                    )
+                    if (autoPlayPlayerSettings.streamAutoPlaySource != StreamAutoPlaySource.ENABLED_PLUGINS_ONLY) {
+                        SettingsGroupDivider(isTablet = isTablet)
+                        val addonSubtitle = if (autoPlayPlayerSettings.streamAutoPlaySelectedAddons.isEmpty()) {
+                            "All Addons"
+                        } else {
+                            "${autoPlayPlayerSettings.streamAutoPlaySelectedAddons.size} selected"
+                        }
+                        SettingsNavigationRow(
+                            title = "Allowed Addons",
+                            description = addonSubtitle,
+                            isTablet = isTablet,
+                            onClick = { showAutoPlayAddonSelectionDialog = true },
+                        )
+                    }
+                    if (autoPlayPlayerSettings.streamAutoPlaySource != StreamAutoPlaySource.INSTALLED_ADDONS_ONLY) {
+                        SettingsGroupDivider(isTablet = isTablet)
+                        val pluginSubtitle = if (autoPlayPlayerSettings.streamAutoPlaySelectedPlugins.isEmpty()) {
+                            "All Plugins"
+                        } else {
+                            "${autoPlayPlayerSettings.streamAutoPlaySelectedPlugins.size} selected"
+                        }
+                        SettingsNavigationRow(
+                            title = "Allowed Plugins",
+                            description = pluginSubtitle,
+                            isTablet = isTablet,
+                            onClick = { showAutoPlayPluginSelectionDialog = true },
+                        )
+                    }
                 }
             }
         }
@@ -306,6 +460,78 @@ private fun PlaybackSettingsSection(
                 showDecoderPriorityDialog = false
             },
             onDismiss = { showDecoderPriorityDialog = false },
+        )
+    }
+
+    if (showAutoPlayModeDialog) {
+        StreamAutoPlayModeDialog(
+            selectedMode = autoPlayPlayerSettings.streamAutoPlayMode,
+            onModeSelected = {
+                PlayerSettingsRepository.setStreamAutoPlayMode(it)
+                showAutoPlayModeDialog = false
+            },
+            onDismiss = { showAutoPlayModeDialog = false },
+        )
+    }
+
+    if (showAutoPlaySourceDialog) {
+        StreamAutoPlaySourceDialog(
+            selectedSource = autoPlayPlayerSettings.streamAutoPlaySource,
+            onSourceSelected = {
+                PlayerSettingsRepository.setStreamAutoPlaySource(it)
+                showAutoPlaySourceDialog = false
+            },
+            onDismiss = { showAutoPlaySourceDialog = false },
+        )
+    }
+
+    if (showAutoPlayAddonSelectionDialog) {
+        val addonNames = addonUiState.addons
+            .mapNotNull { it.manifest }
+            .filter { manifest -> manifest.resources.any { resource -> resource.name == "stream" } }
+            .map { it.name }
+            .distinct()
+            .sorted()
+        StreamAutoPlayProviderSelectionDialog(
+            title = "Allowed Addons",
+            allLabel = "All Addons",
+            items = addonNames,
+            selectedItems = autoPlayPlayerSettings.streamAutoPlaySelectedAddons,
+            onSelectionSaved = {
+                PlayerSettingsRepository.setStreamAutoPlaySelectedAddons(it)
+                showAutoPlayAddonSelectionDialog = false
+            },
+            onDismiss = { showAutoPlayAddonSelectionDialog = false },
+        )
+    }
+
+    if (showAutoPlayPluginSelectionDialog) {
+        val pluginNames = pluginUiState.scrapers
+            .filter { it.enabled }
+            .map { it.name }
+            .distinct()
+            .sorted()
+        StreamAutoPlayProviderSelectionDialog(
+            title = "Allowed Plugins",
+            allLabel = "All Plugins",
+            items = pluginNames,
+            selectedItems = autoPlayPlayerSettings.streamAutoPlaySelectedPlugins,
+            onSelectionSaved = {
+                PlayerSettingsRepository.setStreamAutoPlaySelectedPlugins(it)
+                showAutoPlayPluginSelectionDialog = false
+            },
+            onDismiss = { showAutoPlayPluginSelectionDialog = false },
+        )
+    }
+
+    if (showAutoPlayRegexDialog) {
+        StreamAutoPlayRegexDialog(
+            initialRegex = autoPlayPlayerSettings.streamAutoPlayRegex,
+            onSave = {
+                PlayerSettingsRepository.setStreamAutoPlayRegex(it)
+                showAutoPlayRegexDialog = false
+            },
+            onDismiss = { showAutoPlayRegexDialog = false },
         )
     }
 }
@@ -587,6 +813,508 @@ private fun DecoderPriorityDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun StreamAutoPlayModeDialog(
+    selectedMode: StreamAutoPlayMode,
+    onModeSelected: (StreamAutoPlayMode) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val options = listOf(
+        Triple(StreamAutoPlayMode.MANUAL, "Manual", "Select streams manually each time."),
+        Triple(StreamAutoPlayMode.FIRST_STREAM, "First Available Stream", "Automatically play the first stream found."),
+        Triple(StreamAutoPlayMode.REGEX_MATCH, "Regex Match", "Auto-select a stream matching a regex pattern."),
+    )
+
+    BasicAlertDialog(
+        onDismissRequest = onDismiss,
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = "Stream Selection Mode",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    options.forEach { (mode, title, description) ->
+                        val isSelected = mode == selectedMode
+                        val containerColor = if (isSelected) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onModeSelected(mode) },
+                            shape = RoundedCornerShape(12.dp),
+                            color = containerColor,
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = title,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier.size(24.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Tap outside to close",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun StreamAutoPlaySourceDialog(
+    selectedSource: StreamAutoPlaySource,
+    onSourceSelected: (StreamAutoPlaySource) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val options = listOf(
+        Triple(StreamAutoPlaySource.ALL_SOURCES, "All Sources", "Consider streams from both addons and plugins."),
+        Triple(StreamAutoPlaySource.INSTALLED_ADDONS_ONLY, "Installed Addons Only", "Only consider streams from installed addons."),
+        Triple(StreamAutoPlaySource.ENABLED_PLUGINS_ONLY, "Enabled Plugins Only", "Only consider streams from enabled plugins."),
+    )
+
+    BasicAlertDialog(
+        onDismissRequest = onDismiss,
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = "Source Scope",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    options.forEach { (source, title, description) ->
+                        val isSelected = source == selectedSource
+                        val containerColor = if (isSelected) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSourceSelected(source) },
+                            shape = RoundedCornerShape(12.dp),
+                            color = containerColor,
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = title,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier.size(24.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Tap outside to close",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun StreamAutoPlayProviderSelectionDialog(
+    title: String,
+    allLabel: String,
+    items: List<String>,
+    selectedItems: Set<String>,
+    onSelectionSaved: (Set<String>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var selected by remember(selectedItems, items) {
+        mutableStateOf(selectedItems.intersect(items.toSet()))
+    }
+
+    BasicAlertDialog(
+        onDismissRequest = {
+            onSelectionSaved(selected)
+            onDismiss()
+        },
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+
+                val allContainerColor = if (selected.isEmpty()) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                }
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { selected = emptySet() },
+                    shape = RoundedCornerShape(12.dp),
+                    color = allContainerColor,
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = allLabel,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (selected.isEmpty()) {
+                            Icon(
+                                imageVector = Icons.Rounded.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
+
+                if (items.isEmpty()) {
+                    Text(
+                        text = "No items available",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 340.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(
+                            count = items.size,
+                            key = { items[it] },
+                        ) { index ->
+                            val item = items[index]
+                            val isSelected = item in selected
+                            val containerColor = if (isSelected) {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                            }
+
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selected = if (isSelected) selected - item else selected + item
+                                    },
+                                shape = RoundedCornerShape(12.dp),
+                                color = containerColor,
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = item,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Tap outside to save & close",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun StreamAutoPlayRegexDialog(
+    initialRegex: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var regex by remember(initialRegex) { mutableStateOf(initialRegex) }
+    var regexError by remember { mutableStateOf<String?>(null) }
+
+    val presets = remember {
+        listOf(
+            "Any 1080p+" to "(2160p|4k|1080p)",
+            "4K / Remux" to "(2160p|4k|remux)",
+            "1080p Standard" to "(1080p|full\\s*hd)",
+            "720p / Smaller" to "(720p|webrip|web-dl)",
+            "WEB Sources" to "(web[-\\s]?dl|webrip)",
+            "BluRay Quality" to "(bluray|b[dr]rip|remux)",
+            "HEVC / x265" to "(hevc|x265|h\\.265)",
+            "AVC / x264" to "(x264|h\\.264|avc)",
+            "HDR / Dolby Vision" to "(hdr|hdr10\\+?|dv|dolby\\s*vision)",
+            "Dolby Atmos / DTS" to "(atmos|truehd|dts[-\\s]?hd|dtsx?)",
+            "English" to "(\\beng\\b|english)",
+            "No CAM/TS" to "^(?!.*\\b(cam|hdcam|ts|telesync)\\b).*$",
+            "No REMUX/HDR" to "(?is)^(?!.*\\b(hdr|hdr10|dv|dolby|vision|hevc|remux|2160p)\\b).+$",
+        )
+    }
+
+    BasicAlertDialog(
+        onDismissRequest = onDismiss,
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .heightIn(max = 520.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = "Regex Pattern",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+
+                Text(
+                    text = "Matches against stream name, label, description, addon, and URL.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Text(
+                    text = "Presets",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(
+                        count = presets.size,
+                        key = { presets[it].first },
+                    ) { index ->
+                        val (label, pattern) = presets[index]
+                        Surface(
+                            modifier = Modifier.clickable {
+                                regex = pattern
+                                regexError = null
+                            },
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        ) {
+                            Text(
+                                text = label,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    border = BorderStroke(
+                        1.dp,
+                        if (regexError != null) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                    ),
+                ) {
+                    BasicTextField(
+                        value = regex,
+                        onValueChange = {
+                            regex = it
+                            regexError = null
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
+                        ),
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        decorationBox = { innerTextField ->
+                            if (regex.isBlank()) {
+                                Text(
+                                    text = "4K|2160p|Remux",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                )
+                            }
+                            innerTextField()
+                        },
+                    )
+                }
+
+                if (regexError != null) {
+                    Text(
+                        text = regexError ?: "",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
+                    TextButton(onClick = {
+                        regex = ""
+                        regexError = null
+                    }) {
+                        Text("Clear")
+                    }
+                    TextButton(onClick = {
+                        val value = regex.trim()
+                        if (value.isNotEmpty()) {
+                            val valid = runCatching { Regex(value, RegexOption.IGNORE_CASE) }.isSuccess
+                            if (!valid) {
+                                regexError = "Invalid regex pattern"
+                                return@TextButton
+                            }
+                        }
+                        onSave(value)
+                    }) {
+                        Text("Save")
+                    }
+                }
             }
         }
     }

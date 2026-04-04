@@ -859,6 +859,58 @@ private fun MainAppContent(
                         }
                     }
 
+                    val streamsUiState by StreamsRepository.uiState.collectAsStateWithLifecycle()
+                    var autoPlayHandled by rememberSaveable(route.videoId, effectiveVideoId) { mutableStateOf(false) }
+                    LaunchedEffect(streamsUiState.autoPlayStream, reuseHandled) {
+                        if (!reuseHandled) return@LaunchedEffect
+                        if (autoPlayHandled) return@LaunchedEffect
+                        val stream = streamsUiState.autoPlayStream ?: return@LaunchedEffect
+                        val sourceUrl = stream.directPlaybackUrl ?: return@LaunchedEffect
+                        autoPlayHandled = true
+                        if (playerSettings.streamReuseLastLinkEnabled) {
+                            val cacheKey = StreamLinkCacheRepository.contentKey(route.type, effectiveVideoId)
+                            StreamLinkCacheRepository.save(
+                                contentKey = cacheKey,
+                                url = sourceUrl,
+                                streamName = stream.streamLabel,
+                                addonName = stream.addonName,
+                                addonId = stream.addonId,
+                                filename = stream.behaviorHints.filename,
+                                videoSize = stream.behaviorHints.videoSize,
+                            )
+                        }
+                        val launchId = PlayerLaunchStore.put(
+                            PlayerLaunch(
+                                title = route.title,
+                                sourceUrl = sourceUrl,
+                                sourceHeaders = sanitizePlaybackHeaders(stream.behaviorHints.proxyHeaders?.request),
+                                logo = route.logo,
+                                poster = route.poster,
+                                background = route.background,
+                                seasonNumber = route.seasonNumber,
+                                episodeNumber = route.episodeNumber,
+                                episodeTitle = route.episodeTitle,
+                                episodeThumbnail = route.episodeThumbnail,
+                                streamTitle = stream.streamLabel,
+                                streamSubtitle = stream.streamSubtitle,
+                                pauseDescription = pauseDescription,
+                                providerName = stream.addonName,
+                                providerAddonId = stream.addonId,
+                                contentType = route.type,
+                                videoId = effectiveVideoId,
+                                parentMetaId = route.parentMetaId ?: effectiveVideoId,
+                                parentMetaType = route.parentMetaType ?: route.type,
+                                initialPositionMs = route.resumePositionMs ?: 0L,
+                                initialProgressFraction = route.resumeProgressFraction,
+                            )
+                        )
+                        StreamsRepository.consumeAutoPlay()
+                        route.streamContextId?.let(StreamContextStore::remove)
+                        navController.navigate(PlayerRoute(launchId = launchId)) {
+                            popUpTo<StreamRoute> { inclusive = true }
+                        }
+                    }
+
                     if (!hasResolvedVideoId) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
