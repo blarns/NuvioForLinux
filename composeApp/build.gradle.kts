@@ -210,6 +210,15 @@ android {
         versionCode = 1
         versionName = "1.0"
     }
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("full") {
+            dimension = "distribution"
+        }
+        create("playstore") {
+            dimension = "distribution"
+        }
+    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"

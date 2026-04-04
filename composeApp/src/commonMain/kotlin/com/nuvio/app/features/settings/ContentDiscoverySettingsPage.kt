@@ -8,6 +8,7 @@ import androidx.compose.material.icons.rounded.Tune
 
 internal fun LazyListScope.contentDiscoveryContent(
     isTablet: Boolean,
+    showPluginsEntry: Boolean,
     onAddonsClick: () -> Unit,
     onPluginsClick: () -> Unit,
     onHomescreenClick: () -> Unit,
@@ -26,13 +27,15 @@ internal fun LazyListScope.contentDiscoveryContent(
                     isTablet = isTablet,
                     onClick = onAddonsClick,
                 )
-                SettingsNavigationRow(
-                    title = "Plugins",
-                    description = "Install JavaScript scraper repositories and test providers internally.",
-                    icon = Icons.Rounded.Hub,
-                    isTablet = isTablet,
-                    onClick = onPluginsClick,
-                )
+                if (showPluginsEntry) {
+                    SettingsNavigationRow(
+                        title = "Plugins",
+                        description = "Install JavaScript scraper repositories and test providers internally.",
+                        icon = Icons.Rounded.Hub,
+                        isTablet = isTablet,
+                        onClick = onPluginsClick,
+                    )
+                }
             }
         }
     }

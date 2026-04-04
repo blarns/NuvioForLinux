@@ -44,12 +44,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.build.AppFeaturePolicy
+import com.nuvio.app.core.build.TrailerPlaybackMode
 import com.nuvio.app.core.ui.NuvioBackButton
 import com.nuvio.app.core.ui.TraktListPickerDialog
 import com.nuvio.app.core.ui.nuvioPlatformExtraBottomPadding
@@ -295,37 +298,43 @@ fun MetaDetailsScreen(
                 val hasTrailersSection = remember(meta) {
                     meta.trailers.isNotEmpty()
                 }
+                val uriHandler = LocalUriHandler.current
+                val inAppTrailerPlaybackEnabled = AppFeaturePolicy.trailerPlaybackMode == TrailerPlaybackMode.IN_APP
                 val trailerScope = rememberCoroutineScope()
                 var selectedTrailer by remember(meta.id) { mutableStateOf<MetaTrailer?>(null) }
                 var trailerPlaybackSource by remember(meta.id) { mutableStateOf<TrailerPlaybackSource?>(null) }
                 var trailerLoading by remember(meta.id) { mutableStateOf(false) }
                 var trailerErrorMessage by remember(meta.id) { mutableStateOf<String?>(null) }
                 var trailerRequestToken by remember(meta.id) { mutableIntStateOf(0) }
-                val resolveTrailer: (MetaTrailer) -> Unit = remember(meta.id) {
+                val resolveTrailer: (MetaTrailer) -> Unit = remember(meta.id, inAppTrailerPlaybackEnabled, uriHandler) {
                     { trailer ->
-                        selectedTrailer = trailer
-                        trailerPlaybackSource = null
-                        trailerErrorMessage = null
-                        trailerLoading = true
-                        trailerRequestToken += 1
-                        val currentRequestToken = trailerRequestToken
-                        trailerScope.launch {
-                            val youtubeUrl = trailer.key.takeIf {
-                                it.startsWith("http://") || it.startsWith("https://")
-                            } ?: "https://www.youtube.com/watch?v=${trailer.key}"
-                            val resolvedSource = runCatching {
-                                TrailerPlaybackResolver.resolveFromYouTubeUrl(youtubeUrl)
-                            }.getOrNull()
-                            if (currentRequestToken != trailerRequestToken) {
-                                return@launch
+                        val youtubeUrl = trailer.key.takeIf {
+                            it.startsWith("http://") || it.startsWith("https://")
+                        } ?: "https://www.youtube.com/watch?v=${trailer.key}"
+                        if (!inAppTrailerPlaybackEnabled) {
+                            runCatching { uriHandler.openUri(youtubeUrl) }
+                        } else {
+                            selectedTrailer = trailer
+                            trailerPlaybackSource = null
+                            trailerErrorMessage = null
+                            trailerLoading = true
+                            trailerRequestToken += 1
+                            val currentRequestToken = trailerRequestToken
+                            trailerScope.launch {
+                                val resolvedSource = runCatching {
+                                    TrailerPlaybackResolver.resolveFromYouTubeUrl(youtubeUrl)
+                                }.getOrNull()
+                                if (currentRequestToken != trailerRequestToken) {
+                                    return@launch
+                                }
+                                trailerPlaybackSource = resolvedSource
+                                trailerErrorMessage = if (resolvedSource == null) {
+                                    "No playable trailer stream found."
+                                } else {
+                                    null
+                                }
+                                trailerLoading = false
                             }
-                            trailerPlaybackSource = resolvedSource
-                            trailerErrorMessage = if (resolvedSource == null) {
-                                "No playable trailer stream found."
-                            } else {
-                                null
-                            }
-                            trailerLoading = false
                         }
                     }
                 }
@@ -654,25 +663,27 @@ fun MetaDetailsScreen(
                             )
                         }
 
-                        TrailerPlayerPopup(
-                            visible = selectedTrailer != null,
-                            trailerTitle = selectedTrailer?.displayName ?: selectedTrailer?.name.orEmpty(),
-                            trailerType = selectedTrailer?.type.orEmpty(),
-                            contentTitle = meta.name,
-                            playbackSource = trailerPlaybackSource,
-                            isLoading = trailerLoading,
-                            errorMessage = trailerErrorMessage,
-                            onDismiss = {
-                                trailerRequestToken += 1
-                                trailerLoading = false
-                                trailerPlaybackSource = null
-                                trailerErrorMessage = null
-                                selectedTrailer = null
-                            },
-                            onRetry = selectedTrailer?.let { trailer ->
-                                { resolveTrailer(trailer) }
-                            },
-                        )
+                        if (inAppTrailerPlaybackEnabled) {
+                            TrailerPlayerPopup(
+                                visible = selectedTrailer != null,
+                                trailerTitle = selectedTrailer?.displayName ?: selectedTrailer?.name.orEmpty(),
+                                trailerType = selectedTrailer?.type.orEmpty(),
+                                contentTitle = meta.name,
+                                playbackSource = trailerPlaybackSource,
+                                isLoading = trailerLoading,
+                                errorMessage = trailerErrorMessage,
+                                onDismiss = {
+                                    trailerRequestToken += 1
+                                    trailerLoading = false
+                                    trailerPlaybackSource = null
+                                    trailerErrorMessage = null
+                                    selectedTrailer = null
+                                },
+                                onRetry = selectedTrailer?.let { trailer ->
+                                    { resolveTrailer(trailer) }
+                                },
+                            )
+                        }
 
                         TraktListPickerDialog(
                             visible = showLibraryListPicker,

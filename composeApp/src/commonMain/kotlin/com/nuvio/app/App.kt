@@ -66,6 +66,7 @@ import coil3.ImageLoader
 import coil3.compose.setSingletonImageLoaderFactory
 import coil3.request.CachePolicy
 import coil3.request.crossfade
+import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.deeplink.AppDeepLink
@@ -609,7 +610,11 @@ private fun MainAppContent(
                                     onMetaScreenSettingsClick = { navController.navigate(MetaScreenSettingsRoute) },
                                     onContinueWatchingSettingsClick = { navController.navigate(ContinueWatchingSettingsRoute) },
                                     onAddonsSettingsClick = { navController.navigate(AddonsSettingsRoute) },
-                                    onPluginsSettingsClick = { navController.navigate(PluginsSettingsRoute) },
+                                    onPluginsSettingsClick = {
+                                        if (AppFeaturePolicy.pluginsEnabled) {
+                                            navController.navigate(PluginsSettingsRoute)
+                                        }
+                                    },
                                     onAccountSettingsClick = { navController.navigate(AccountSettingsRoute) },
                                     onInitialHomeContentRendered = { initialHomeReady = true },
                                 )
@@ -1084,10 +1089,12 @@ private fun MainAppContent(
                         onBack = { navController.popBackStack() },
                     )
                 }
-                composable<PluginsSettingsRoute> {
-                    PluginsSettingsScreen(
-                        onBack = { navController.popBackStack() },
-                    )
+                if (AppFeaturePolicy.pluginsEnabled) {
+                    composable<PluginsSettingsRoute> {
+                        PluginsSettingsScreen(
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
                 }
                 composable<AccountSettingsRoute> {
                     AccountSettingsScreen(

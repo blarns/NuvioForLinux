@@ -1,5 +1,6 @@
 package com.nuvio.app.features.settings
 
+import com.nuvio.app.core.build.AppFeaturePolicy
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -51,6 +52,7 @@ import com.nuvio.app.features.player.AvailableLanguageOptions
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.player.SubtitleLanguageOption
 import com.nuvio.app.features.player.languageLabelForCode
+import com.nuvio.app.features.plugins.PluginsUiState
 import com.nuvio.app.features.plugins.PluginRepository
 import com.nuvio.app.features.streams.StreamAutoPlayMode
 import com.nuvio.app.features.streams.StreamAutoPlaySource
@@ -111,9 +113,15 @@ private fun PlaybackSettingsSection(
     var showAutoPlayAddonSelectionDialog by remember { mutableStateOf(false) }
     var showAutoPlayPluginSelectionDialog by remember { mutableStateOf(false) }
     var showAutoPlayRegexDialog by remember { mutableStateOf(false) }
+    val pluginsEnabled = AppFeaturePolicy.pluginsEnabled
     val autoPlayPlayerSettings by PlayerSettingsRepository.uiState.collectAsStateWithLifecycle()
     val addonUiState by AddonRepository.uiState.collectAsStateWithLifecycle()
-    val pluginUiState by PluginRepository.uiState.collectAsStateWithLifecycle()
+    val pluginUiState = if (pluginsEnabled) {
+        val state by PluginRepository.uiState.collectAsStateWithLifecycle()
+        state
+    } else {
+        PluginsUiState(pluginsEnabled = false)
+    }
     val hapticFeedback = LocalHapticFeedback.current
     val sectionSpacing = if (isTablet) 18.dp else 12.dp
 
@@ -292,7 +300,7 @@ private fun PlaybackSettingsSection(
                     SettingsNavigationRow(
                         title = "Source Scope",
                         description = when (autoPlayPlayerSettings.streamAutoPlaySource) {
-                            StreamAutoPlaySource.ALL_SOURCES -> "All Sources"
+                            StreamAutoPlaySource.ALL_SOURCES -> if (pluginsEnabled) "All Sources" else "All Addons"
                             StreamAutoPlaySource.INSTALLED_ADDONS_ONLY -> "Installed Addons Only"
                             StreamAutoPlaySource.ENABLED_PLUGINS_ONLY -> "Enabled Plugins Only"
                         },
@@ -313,7 +321,7 @@ private fun PlaybackSettingsSection(
                             onClick = { showAutoPlayAddonSelectionDialog = true },
                         )
                     }
-                    if (autoPlayPlayerSettings.streamAutoPlaySource != StreamAutoPlaySource.INSTALLED_ADDONS_ONLY) {
+                    if (pluginsEnabled && autoPlayPlayerSettings.streamAutoPlaySource != StreamAutoPlaySource.INSTALLED_ADDONS_ONLY) {
                         SettingsGroupDivider(isTablet = isTablet)
                         val pluginSubtitle = if (autoPlayPlayerSettings.streamAutoPlaySelectedPlugins.isEmpty()) {
                             "All Plugins"
@@ -678,6 +686,7 @@ private fun PlaybackSettingsSection(
 
     if (showAutoPlaySourceDialog) {
         StreamAutoPlaySourceDialog(
+            pluginsEnabled = pluginsEnabled,
             selectedSource = autoPlayPlayerSettings.streamAutoPlaySource,
             onSourceSelected = {
                 PlayerSettingsRepository.setStreamAutoPlaySource(it)
@@ -707,7 +716,7 @@ private fun PlaybackSettingsSection(
         )
     }
 
-    if (showAutoPlayPluginSelectionDialog) {
+    if (pluginsEnabled && showAutoPlayPluginSelectionDialog) {
         val pluginNames = pluginUiState.scrapers
             .filter { it.enabled }
             .map { it.name }
@@ -1121,15 +1130,40 @@ private fun StreamAutoPlayModeDialog(
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun StreamAutoPlaySourceDialog(
+    pluginsEnabled: Boolean,
     selectedSource: StreamAutoPlaySource,
     onSourceSelected: (StreamAutoPlaySource) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val options = listOf(
-        Triple(StreamAutoPlaySource.ALL_SOURCES, "All Sources", "Consider streams from both addons and plugins."),
-        Triple(StreamAutoPlaySource.INSTALLED_ADDONS_ONLY, "Installed Addons Only", "Only consider streams from installed addons."),
-        Triple(StreamAutoPlaySource.ENABLED_PLUGINS_ONLY, "Enabled Plugins Only", "Only consider streams from enabled plugins."),
-    )
+    val options = buildList {
+        add(
+            Triple(
+                StreamAutoPlaySource.ALL_SOURCES,
+                if (pluginsEnabled) "All Sources" else "All Addons",
+                if (pluginsEnabled) {
+                    "Consider streams from both addons and plugins."
+                } else {
+                    "Consider streams from all installed addons."
+                },
+            ),
+        )
+        add(
+            Triple(
+                StreamAutoPlaySource.INSTALLED_ADDONS_ONLY,
+                "Installed Addons Only",
+                "Only consider streams from installed addons.",
+            ),
+        )
+        if (pluginsEnabled) {
+            add(
+                Triple(
+                    StreamAutoPlaySource.ENABLED_PLUGINS_ONLY,
+                    "Enabled Plugins Only",
+                    "Only consider streams from enabled plugins.",
+                ),
+            )
+        }
+    }
 
     BasicAlertDialog(
         onDismissRequest = onDismiss,

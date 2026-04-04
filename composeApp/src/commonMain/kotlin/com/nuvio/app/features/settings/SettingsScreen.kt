@@ -1,5 +1,7 @@
 package com.nuvio.app.features.settings
 
+import com.nuvio.app.core.build.AppFeaturePolicy
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -290,13 +292,14 @@ private fun MobileSettingsScreen(
             )
             SettingsPage.ContentDiscovery -> contentDiscoveryContent(
                 isTablet = false,
+                showPluginsEntry = AppFeaturePolicy.pluginsEnabled,
                 onAddonsClick = onAddonsClick,
                 onPluginsClick = onPluginsClick,
                 onHomescreenClick = onHomescreenClick,
                 onMetaScreenClick = onMetaScreenClick,
             )
             SettingsPage.Addons -> addonsSettingsContent()
-            SettingsPage.Plugins -> pluginsSettingsContent()
+            SettingsPage.Plugins -> if (AppFeaturePolicy.pluginsEnabled) pluginsSettingsContent() else addonsSettingsContent()
             SettingsPage.Homescreen -> homescreenSettingsContent(
                 isTablet = false,
                 heroEnabled = homescreenHeroEnabled,
@@ -484,13 +487,14 @@ private fun TabletSettingsScreen(
                 )
                 SettingsPage.ContentDiscovery -> contentDiscoveryContent(
                     isTablet = true,
+                    showPluginsEntry = AppFeaturePolicy.pluginsEnabled,
                     onAddonsClick = { openInlinePage(SettingsPage.Addons) },
                     onPluginsClick = { openInlinePage(SettingsPage.Plugins) },
                     onHomescreenClick = { openInlinePage(SettingsPage.Homescreen) },
                     onMetaScreenClick = { openInlinePage(SettingsPage.MetaScreen) },
                 )
                 SettingsPage.Addons -> addonsSettingsContent()
-                SettingsPage.Plugins -> pluginsSettingsContent()
+                SettingsPage.Plugins -> if (AppFeaturePolicy.pluginsEnabled) pluginsSettingsContent() else addonsSettingsContent()
                 SettingsPage.Homescreen -> homescreenSettingsContent(
                     isTablet = true,
                     heroEnabled = homescreenHeroEnabled,

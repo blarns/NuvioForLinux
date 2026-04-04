@@ -1,6 +1,7 @@
 package com.nuvio.app.features.player
 
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.httpGetText
 import com.nuvio.app.features.details.MetaDetailsRepository
@@ -149,8 +150,12 @@ object PlayerStreamsRepository {
         }
 
         val installedAddons = AddonRepository.uiState.value.addons
-        PluginRepository.initialize()
-        val pluginScrapers = PluginRepository.getEnabledScrapersForType(type)
+        val pluginScrapers = if (AppFeaturePolicy.pluginsEnabled) {
+            PluginRepository.initialize()
+            PluginRepository.getEnabledScrapersForType(type)
+        } else {
+            emptyList()
+        }
 
         if (installedAddons.isEmpty() && pluginScrapers.isEmpty()) {
             stateFlow.value = StreamsUiState(

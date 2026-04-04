@@ -1,11 +1,13 @@
 package com.nuvio.app.features.streams
 
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.httpGetText
 import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.plugins.PluginRepository
+import com.nuvio.app.features.plugins.PluginsUiState
 import com.nuvio.app.features.plugins.PluginRepositoryItem
 import com.nuvio.app.features.plugins.PluginRuntimeResult
 import com.nuvio.app.features.plugins.PluginScraper
@@ -39,8 +41,12 @@ object StreamsRepository {
     }
 
     private fun load(type: String, videoId: String, season: Int?, episode: Int?, forceRefresh: Boolean) {
-        PluginRepository.initialize()
-        val pluginUiState = PluginRepository.uiState.value
+        val pluginUiState = if (AppFeaturePolicy.pluginsEnabled) {
+            PluginRepository.initialize()
+            PluginRepository.uiState.value
+        } else {
+            PluginsUiState(pluginsEnabled = false)
+        }
         val requestKey = "$type::$videoId::$season::$episode::pluginsGrouped=${pluginUiState.groupStreamsByRepository}"
         val currentState = _uiState.value
         if (
@@ -89,7 +95,11 @@ object StreamsRepository {
         }
 
         val installedAddons = AddonRepository.uiState.value.addons
-        val pluginScrapers = PluginRepository.getEnabledScrapersForType(type)
+        val pluginScrapers = if (AppFeaturePolicy.pluginsEnabled) {
+            PluginRepository.getEnabledScrapersForType(type)
+        } else {
+            emptyList()
+        }
         val pluginProviderGroups = pluginScrapers.toPluginProviderGroups(
             repositories = pluginUiState.repositories,
             groupByRepository = pluginUiState.groupStreamsByRepository,

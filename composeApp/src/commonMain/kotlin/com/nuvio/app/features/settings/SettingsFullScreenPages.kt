@@ -1,5 +1,6 @@
 package com.nuvio.app.features.settings
 
+import com.nuvio.app.core.build.AppFeaturePolicy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -135,6 +136,11 @@ fun AddonsSettingsScreen(
 fun PluginsSettingsScreen(
     onBack: () -> Unit,
 ) {
+    if (!AppFeaturePolicy.pluginsEnabled) {
+        AddonsSettingsScreen(onBack = onBack)
+        return
+    }
+
     LaunchedEffect(Unit) {
         PluginRepository.initialize()
     }

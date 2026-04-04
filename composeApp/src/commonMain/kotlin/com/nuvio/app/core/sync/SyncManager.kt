@@ -1,6 +1,7 @@
 package com.nuvio.app.core.sync
 
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.features.addons.AddonRepository
@@ -31,10 +32,12 @@ object SyncManager {
                 .onSuccess { log.i { "pullAllForProfile — addons pull completed" } }
                 .onFailure { log.e(it) { "Addon pull failed" } }
 
-            log.i { "pullAllForProfile — pulling plugins (await)..." }
-            runCatching { PluginRepository.pullFromServer(profileId) }
-                .onSuccess { log.i { "pullAllForProfile — plugins pull completed" } }
-                .onFailure { log.e(it) { "Plugin pull failed" } }
+            if (AppFeaturePolicy.pluginsEnabled) {
+                log.i { "pullAllForProfile — pulling plugins (await)..." }
+                runCatching { PluginRepository.pullFromServer(profileId) }
+                    .onSuccess { log.i { "pullAllForProfile — plugins pull completed" } }
+                    .onFailure { log.e(it) { "Plugin pull failed" } }
+            }
 
             log.i { "pullAllForProfile — launching remaining pulls in parallel" }
             launch {

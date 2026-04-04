@@ -132,7 +132,9 @@ object ProfileRepository {
         LibraryRepository.onProfileChanged(profileIndex)
         WatchProgressRepository.onProfileChanged(profileIndex)
         AddonRepository.onProfileChanged(profileIndex)
-        PluginRepository.onProfileChanged(profileIndex)
+        if (com.nuvio.app.core.build.AppFeaturePolicy.pluginsEnabled) {
+            PluginRepository.onProfileChanged(profileIndex)
+        }
         ThemeSettingsRepository.onProfileChanged()
         PlayerSettingsRepository.onProfileChanged()
         HomeCatalogSettingsRepository.onProfileChanged()

@@ -41,7 +41,6 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import androidx.media3.ui.CaptionStyleCompat
-import com.nuvio.app.features.trailer.YoutubeChunkedDataSourceFactory
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -112,7 +111,7 @@ actual fun PlatformPlayerSurface(
             .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
 
         val mediaSourceFactory = DefaultMediaSourceFactory(
-            YoutubeChunkedDataSourceFactory(defaultRequestHeaders = sanitizedSourceHeaders),
+            PlatformPlaybackDataSourceFactory.create(defaultRequestHeaders = sanitizedSourceHeaders),
             extractorsFactory,
         )
 

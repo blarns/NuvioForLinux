@@ -1,5 +1,6 @@
 package com.nuvio.app.features.player
 
+import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.features.player.skip.NextEpisodeThresholdMode
 import com.nuvio.app.features.streams.StreamAutoPlayMode
 import com.nuvio.app.features.streams.StreamAutoPlaySource
@@ -141,6 +142,17 @@ object PlayerSettingsRepository {
             ?: StreamAutoPlaySource.ALL_SOURCES
         streamAutoPlaySelectedAddons = PlayerSettingsStorage.loadStreamAutoPlaySelectedAddons() ?: emptySet()
         streamAutoPlaySelectedPlugins = PlayerSettingsStorage.loadStreamAutoPlaySelectedPlugins() ?: emptySet()
+        if (!AppFeaturePolicy.pluginsEnabled) {
+            val normalizedSource = normalizeStreamAutoPlaySource(streamAutoPlaySource)
+            if (normalizedSource != streamAutoPlaySource) {
+                streamAutoPlaySource = normalizedSource
+                PlayerSettingsStorage.saveStreamAutoPlaySource(normalizedSource.name)
+            }
+            if (streamAutoPlaySelectedPlugins.isNotEmpty()) {
+                streamAutoPlaySelectedPlugins = emptySet()
+                PlayerSettingsStorage.saveStreamAutoPlaySelectedPlugins(emptySet())
+            }
+        }
         streamAutoPlayRegex = PlayerSettingsStorage.loadStreamAutoPlayRegex() ?: ""
         streamAutoPlayTimeoutSeconds = PlayerSettingsStorage.loadStreamAutoPlayTimeoutSeconds() ?: 3
         skipIntroEnabled = PlayerSettingsStorage.loadSkipIntroEnabled() ?: true
@@ -261,10 +273,11 @@ object PlayerSettingsRepository {
 
     fun setStreamAutoPlaySource(source: StreamAutoPlaySource) {
         ensureLoaded()
-        if (streamAutoPlaySource == source) return
-        streamAutoPlaySource = source
+        val normalizedSource = normalizeStreamAutoPlaySource(source)
+        if (streamAutoPlaySource == normalizedSource) return
+        streamAutoPlaySource = normalizedSource
         publish()
-        PlayerSettingsStorage.saveStreamAutoPlaySource(source.name)
+        PlayerSettingsStorage.saveStreamAutoPlaySource(normalizedSource.name)
     }
 
     fun setStreamAutoPlaySelectedAddons(addons: Set<String>) {
@@ -277,10 +290,11 @@ object PlayerSettingsRepository {
 
     fun setStreamAutoPlaySelectedPlugins(plugins: Set<String>) {
         ensureLoaded()
-        if (streamAutoPlaySelectedPlugins == plugins) return
-        streamAutoPlaySelectedPlugins = plugins
+        val normalizedPlugins = if (AppFeaturePolicy.pluginsEnabled) plugins else emptySet()
+        if (streamAutoPlaySelectedPlugins == normalizedPlugins) return
+        streamAutoPlaySelectedPlugins = normalizedPlugins
         publish()
-        PlayerSettingsStorage.saveStreamAutoPlaySelectedPlugins(plugins)
+        PlayerSettingsStorage.saveStreamAutoPlaySelectedPlugins(normalizedPlugins)
     }
 
     fun setStreamAutoPlayRegex(regex: String) {
@@ -391,5 +405,13 @@ object PlayerSettingsRepository {
             nextEpisodeThresholdPercent = nextEpisodeThresholdPercent,
             nextEpisodeThresholdMinutesBeforeEnd = nextEpisodeThresholdMinutesBeforeEnd,
         )
+    }
+
+    private fun normalizeStreamAutoPlaySource(source: StreamAutoPlaySource): StreamAutoPlaySource {
+        return if (!AppFeaturePolicy.pluginsEnabled && source == StreamAutoPlaySource.ENABLED_PLUGINS_ONLY) {
+            StreamAutoPlaySource.ALL_SOURCES
+        } else {
+            source
+        }
     }
 }
