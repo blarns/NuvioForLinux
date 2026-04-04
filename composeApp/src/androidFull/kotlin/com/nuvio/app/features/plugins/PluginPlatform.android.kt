@@ -3,7 +3,7 @@ package com.nuvio.app.features.plugins
 import android.content.Context
 import android.content.SharedPreferences
 
-internal actual object PluginStorage {
+internal object PluginStorage {
     private const val preferencesName = "nuvio_plugins"
     private const val pluginsStateKey = "plugins_state"
 
@@ -13,10 +13,10 @@ internal actual object PluginStorage {
         preferences = context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
     }
 
-    actual fun loadState(profileId: Int): String? =
+    fun loadState(profileId: Int): String? =
         preferences?.getString("${pluginsStateKey}_$profileId", null)
 
-    actual fun saveState(profileId: Int, payload: String) {
+    fun saveState(profileId: Int, payload: String) {
         preferences
             ?.edit()
             ?.putString("${pluginsStateKey}_$profileId", payload)
@@ -24,6 +24,6 @@ internal actual object PluginStorage {
     }
 }
 
-internal actual fun currentPluginPlatform(): String = "android"
+internal fun currentPluginPlatform(): String = "android"
 
-internal actual fun currentEpochMillis(): Long = System.currentTimeMillis()
+internal fun currentEpochMillis(): Long = System.currentTimeMillis()

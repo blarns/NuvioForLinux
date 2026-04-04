@@ -127,7 +127,7 @@ kotlin {
     }
     
     sourceSets {
-        commonMain {
+        val commonMain by getting {
             kotlin.srcDir(generatedRuntimeConfigDir)
         }
         androidMain.dependencies {
@@ -181,6 +181,10 @@ kotlin {
             implementation(libs.kotlin.test)
         }
     }
+}
+
+dependencies {
+    debugImplementation(libs.compose.uiTooling)
 }
 
 configurations.all {
@@ -245,6 +249,3 @@ android {
     }
 }
 
-dependencies {
-    debugImplementation(libs.compose.uiTooling)
-}

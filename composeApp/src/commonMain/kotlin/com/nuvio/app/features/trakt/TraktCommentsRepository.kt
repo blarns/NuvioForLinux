@@ -4,7 +4,6 @@ import co.touchlab.kermit.Logger
 import com.nuvio.app.features.addons.httpGetTextWithHeaders
 import com.nuvio.app.features.addons.httpRequestRaw
 import com.nuvio.app.features.details.MetaDetails
-import com.nuvio.app.features.plugins.currentEpochMillis
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
@@ -242,4 +241,4 @@ private fun toReviewModel(dto: TraktCommentDto): TraktCommentReview {
     )
 }
 
-private fun currentTimeMillis(): Long = currentEpochMillis()
+private fun currentTimeMillis(): Long = TraktPlatformClock.nowEpochMs()
