@@ -2,6 +2,8 @@ import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputDirectory
@@ -17,6 +19,12 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
     @get:Optional
     @get:InputFile
     abstract val localPropertiesFile: RegularFileProperty
+
+    @get:Input
+    abstract val appVersionName: Property<String>
+
+    @get:Input
+    abstract val appVersionCode: Property<Int>
 
     @TaskAction
     fun generate() {
@@ -67,7 +75,35 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 """.trimMargin()
             )
         }
+
+        outDir.resolve("com/nuvio/app/core/build").apply {
+            mkdirs()
+            resolve("AppVersionConfig.kt").writeText(
+                """
+                |package com.nuvio.app.core.build
+                |
+                |object AppVersionConfig {
+                |    const val VERSION_NAME = "${appVersionName.get()}"
+                |    const val VERSION_CODE = ${appVersionCode.get()}
+                |}
+                """.trimMargin()
+            )
+        }
     }
+}
+
+fun readXcconfigValue(file: File, key: String): String? {
+    if (!file.exists()) return null
+    return file.readLines()
+        .asSequence()
+        .map(String::trim)
+        .filter { it.isNotEmpty() && !it.startsWith("#") && it.contains('=') }
+        .map { line ->
+            val separatorIndex = line.indexOf('=')
+            line.substring(0, separatorIndex).trim() to line.substring(separatorIndex + 1).trim()
+        }
+        .firstOrNull { (entryKey, _) -> entryKey == key }
+        ?.second
 }
 
 plugins {
@@ -87,6 +123,12 @@ val releaseStorePassword = supabaseProps.getProperty("NUVIO_RELEASE_STORE_PASSWO
 val releaseKeyAlias = supabaseProps.getProperty("NUVIO_RELEASE_KEY_ALIAS")?.takeIf { it.isNotBlank() }
 val releaseKeyPassword = supabaseProps.getProperty("NUVIO_RELEASE_KEY_PASSWORD")?.takeIf { it.isNotBlank() }
 val releaseKeystore = releaseStoreFile?.let(rootProject::file)
+val appVersionConfigFile = rootProject.file("iosApp/Configuration/Version.xcconfig")
+val releaseAppVersionName = readXcconfigValue(appVersionConfigFile, "MARKETING_VERSION")
+    ?: error("MARKETING_VERSION is missing from ${appVersionConfigFile.path}")
+val releaseAppVersionCode = readXcconfigValue(appVersionConfigFile, "CURRENT_PROJECT_VERSION")
+    ?.toIntOrNull()
+    ?: error("CURRENT_PROJECT_VERSION is missing or invalid in ${appVersionConfigFile.path}")
 val iosDistribution = (
     providers.gradleProperty("nuvio.ios.distribution").orNull
         ?: System.getenv("NUVIO_IOS_DISTRIBUTION")
@@ -106,6 +148,8 @@ val generatedRuntimeConfigDir = layout.buildDirectory.dir("generated/runtime-con
 val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generateRuntimeConfigs") {
     outputDir.set(generatedRuntimeConfigDir)
     localPropertiesFile.set(rootProject.layout.projectDirectory.file("local.properties"))
+    appVersionName.set(releaseAppVersionName)
+    appVersionCode.set(releaseAppVersionCode)
 }
 
 tasks.withType<KotlinCompilationTask<*>>().configureEach {
@@ -238,8 +282,8 @@ android {
         applicationId = "com.nuvio.app"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = releaseAppVersionCode
+        versionName = releaseAppVersionName
     }
     flavorDimensions += "distribution"
     productFlavors {
@@ -268,6 +312,9 @@ android {
         getByName("release") {
             isMinifyEnabled = false
             signingConfig = signingConfigs.getByName("release")
+            ndk {
+                debugSymbolLevel = "FULL"
+            }
         }
     }
     compileOptions {
@@ -275,4 +322,3 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 }
-

@@ -19,3 +19,5 @@ captures
 node_modules/
 logs/
 Docs
+keystore/
+scripts/build-distribution.sh
