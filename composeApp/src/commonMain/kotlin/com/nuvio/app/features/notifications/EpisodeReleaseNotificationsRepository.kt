@@ -187,6 +187,7 @@ object EpisodeReleaseNotificationsRepository {
                 notificationBody = "Test notification from Nuvio. Tap to open ${target.name}.",
                 releaseDateIso = CurrentDateProvider.todayIsoDate(),
                 deepLinkUrl = buildMetaDeepLinkUrl(type = target.type, id = target.id),
+                backdropUrl = target.banner ?: target.poster,
             )
 
             runCatching {
@@ -442,6 +443,7 @@ object EpisodeReleaseNotificationsRepository {
                     type = trackedShow.contentType,
                     id = trackedShow.contentId,
                 ),
+                backdropUrl = meta.background ?: episode.thumbnail ?: episode.seasonPoster ?: meta.poster,
             )
         }
     }

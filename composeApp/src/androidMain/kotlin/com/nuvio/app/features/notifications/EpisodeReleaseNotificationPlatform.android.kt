@@ -1,10 +1,14 @@
 package com.nuvio.app.features.notifications
 
 import android.Manifest
+import android.app.PendingIntent
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.core.app.ActivityCompat
@@ -16,6 +20,11 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.Operation
 import androidx.work.WorkManager
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.engine.android.Android
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.request.get
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
@@ -34,10 +43,20 @@ internal actual object EpisodeReleaseNotificationPlatform {
     internal const val workerTitleKey = "title"
     internal const val workerBodyKey = "body"
     internal const val workerDeepLinkKey = "deep_link"
+    internal const val workerBackdropUrlKey = "backdrop_url"
 
     private var appContext: Context? = null
     private var currentActivity: ComponentActivity? = null
     private var pendingPermissionContinuation: kotlin.coroutines.Continuation<Boolean>? = null
+    private val httpClient by lazy {
+        HttpClient(Android) {
+            install(HttpTimeout) {
+                requestTimeoutMillis = 15_000
+                connectTimeoutMillis = 15_000
+                socketTimeoutMillis = 15_000
+            }
+        }
+    }
 
     fun initialize(context: Context) {
         appContext = context.applicationContext
@@ -127,6 +146,7 @@ internal actual object EpisodeReleaseNotificationPlatform {
                     .putString(workerTitleKey, request.notificationTitle)
                     .putString(workerBodyKey, request.notificationBody)
                     .putString(workerDeepLinkKey, request.deepLinkUrl)
+                    .putString(workerBackdropUrlKey, request.backdropUrl)
                     .build()
 
                 val workRequest = OneTimeWorkRequestBuilder<EpisodeReleaseNotificationWorker>()
@@ -169,32 +189,64 @@ internal actual object EpisodeReleaseNotificationPlatform {
         val context = appContext ?: return
         ensureNotificationChannel()
 
-        val launchIntent = android.content.Intent(context, com.nuvio.app.MainActivity::class.java).apply {
-            action = android.content.Intent.ACTION_VIEW
-            data = android.net.Uri.parse(request.deepLinkUrl)
-            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
-                android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
-        }
-        val pendingIntent = android.app.PendingIntent.getActivity(
-            context,
-            kotlin.math.abs(request.requestId.hashCode()),
-            launchIntent,
-            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
-        )
+        val notification = buildNotification(context, request)
 
-        val notification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(com.nuvio.app.R.mipmap.ic_launcher)
+        NotificationManagerCompat.from(context)
+            .notify(kotlin.math.abs(request.requestId.hashCode()), notification)
+    }
+
+    internal suspend fun buildNotification(
+        context: Context,
+        request: EpisodeReleaseNotificationRequest,
+    ): android.app.Notification {
+        val pendingIntent = buildPendingIntent(context, request)
+        val backdropBitmap = loadBackdropBitmap(request.backdropUrl)
+        val appIconBitmap = BitmapFactory.decodeResource(context.resources, com.nuvio.app.R.mipmap.ic_launcher)
+
+        return NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(com.nuvio.app.R.drawable.ic_notification_small)
             .setContentTitle(request.notificationTitle)
             .setContentText(request.notificationBody)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(request.notificationBody))
+            .setStyle(
+                backdropBitmap?.let { bitmap ->
+                    NotificationCompat.BigPictureStyle()
+                        .bigPicture(bitmap)
+                        .bigLargeIcon(appIconBitmap)
+                        .setSummaryText(request.notificationBody)
+                } ?: NotificationCompat.BigTextStyle().bigText(request.notificationBody),
+            )
+            .setLargeIcon(appIconBitmap)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pendingIntent)
             .build()
+    }
 
-        NotificationManagerCompat.from(context)
-            .notify(kotlin.math.abs(request.requestId.hashCode()), notification)
+    internal suspend fun loadBackdropBitmap(backdropUrl: String?): Bitmap? {
+        val imageUrl = backdropUrl?.trim().takeUnless { it.isNullOrEmpty() } ?: return null
+        return runCatching {
+            val bytes: ByteArray = httpClient.get(imageUrl).body()
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        }.getOrNull()
+    }
+
+    private fun buildPendingIntent(
+        context: Context,
+        request: EpisodeReleaseNotificationRequest,
+    ): PendingIntent {
+        val launchIntent = Intent(context, com.nuvio.app.MainActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            data = android.net.Uri.parse(request.deepLinkUrl)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        return PendingIntent.getActivity(
+            context,
+            kotlin.math.abs(request.requestId.hashCode()),
+            launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
     }
 
     private fun cancelTrackedWork(workManager: WorkManager) {

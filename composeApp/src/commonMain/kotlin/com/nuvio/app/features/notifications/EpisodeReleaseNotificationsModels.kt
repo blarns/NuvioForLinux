@@ -33,6 +33,7 @@ internal data class EpisodeReleaseNotificationRequest(
     val notificationBody: String,
     val releaseDateIso: String,
     val deepLinkUrl: String,
+    val backdropUrl: String? = null,
 )
 
 internal const val EpisodeReleaseNotificationHour = 9

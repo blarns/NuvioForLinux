@@ -7,7 +7,6 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.nuvio.app.MainActivity
-import com.nuvio.app.R
 import kotlin.math.abs
 
 class EpisodeReleaseNotificationWorker(
@@ -28,28 +27,21 @@ class EpisodeReleaseNotificationWorker(
             ?: return Result.failure()
         val deepLink = inputData.getString(EpisodeReleaseNotificationPlatform.workerDeepLinkKey)
             ?: return Result.failure()
+        val backdropUrl = inputData.getString(EpisodeReleaseNotificationPlatform.workerBackdropUrlKey)
 
-        val launchIntent = Intent(applicationContext, MainActivity::class.java).apply {
-            action = Intent.ACTION_VIEW
-            data = android.net.Uri.parse(deepLink)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-        }
-        val pendingIntent = PendingIntent.getActivity(
-            applicationContext,
-            abs(requestId.hashCode()),
-            launchIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        val request = EpisodeReleaseNotificationRequest(
+            requestId = requestId,
+            notificationTitle = title,
+            notificationBody = body,
+            releaseDateIso = "",
+            deepLinkUrl = deepLink,
+            backdropUrl = backdropUrl,
         )
 
-        val notification = NotificationCompat.Builder(applicationContext, EpisodeReleaseNotificationPlatform.channelId)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setAutoCancel(true)
-            .setContentIntent(pendingIntent)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .build()
+        val notification = EpisodeReleaseNotificationPlatform.buildNotification(
+            context = applicationContext,
+            request = request,
+        )
 
         NotificationManagerCompat.from(applicationContext)
             .notify(abs(requestId.hashCode()), notification)
