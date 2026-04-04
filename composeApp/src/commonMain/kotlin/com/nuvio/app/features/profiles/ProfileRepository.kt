@@ -253,12 +253,12 @@ object ProfileRepository {
             result.decodeSingle<PinVerifyResult>()
         }.getOrElse { e ->
             log.e(e) { "Failed to verify pin" }
-            PinVerifyResult(unlocked = false, retryAfterSeconds = 0)
+            PinVerifyResult(unlocked = false, retryAfterSeconds = 0, message = "Couldn't verify PIN. Try again.")
         }
     }
 
-    suspend fun setPin(profileIndex: Int, pin: String, currentPin: String? = null) {
-        runCatching {
+    suspend fun setPin(profileIndex: Int, pin: String, currentPin: String? = null): PinVerifyResult {
+        return runCatching {
             val params = buildJsonObject {
                 put("p_profile_id", profileIndex)
                 put("p_pin", pin)
@@ -266,21 +266,27 @@ object ProfileRepository {
             }
             SupabaseProvider.client.postgrest.rpc("set_profile_pin", params)
             pullProfiles()
+            PinVerifyResult(unlocked = true)
         }.onFailure { e ->
             log.e(e) { "Failed to set pin" }
+        }.getOrElse {
+            PinVerifyResult(unlocked = false, message = "Couldn't set PIN. Try again.")
         }
     }
 
-    suspend fun clearPin(profileIndex: Int, currentPin: String? = null) {
-        runCatching {
+    suspend fun clearPin(profileIndex: Int, currentPin: String? = null): PinVerifyResult {
+        return runCatching {
             val params = buildJsonObject {
                 put("p_profile_id", profileIndex)
                 currentPin?.let { put("p_current_pin", it) }
             }
             SupabaseProvider.client.postgrest.rpc("clear_profile_pin", params)
             pullProfiles()
+            PinVerifyResult(unlocked = true)
         }.onFailure { e ->
             log.e(e) { "Failed to clear pin" }
+        }.getOrElse {
+            PinVerifyResult(unlocked = false, message = "Couldn't remove PIN lock. Try again.")
         }
     }
 

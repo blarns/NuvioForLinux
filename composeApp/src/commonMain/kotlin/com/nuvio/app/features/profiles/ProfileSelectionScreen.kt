@@ -265,14 +265,11 @@ fun ProfileSelectionScreen(
     pinDialogProfile?.let { profile ->
         PinEntryDialog(
             profileName = profile.name,
-            onVerify = { pin ->
-                val result = ProfileRepository.verifyPin(profile.profileIndex, pin)
-                if (result.unlocked) {
-                    pinDialogProfile = null
-                    ProfileRepository.selectProfile(profile.profileIndex)
-                    onProfileSelected(profile)
-                }
-                result
+            onVerify = { pin -> ProfileRepository.verifyPin(profile.profileIndex, pin) },
+            onVerified = {
+                pinDialogProfile = null
+                ProfileRepository.selectProfile(profile.profileIndex)
+                onProfileSelected(profile)
             },
             onDismiss = { pinDialogProfile = null },
         )

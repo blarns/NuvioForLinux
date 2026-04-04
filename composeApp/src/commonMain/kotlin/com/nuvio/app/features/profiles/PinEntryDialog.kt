@@ -55,6 +55,7 @@ fun PinEntryDialog(
     profileName: String,
     onVerify: suspend (String) -> PinVerifyResult,
     onDismiss: () -> Unit,
+    onVerified: ((String) -> Unit)? = null,
     onForgotPin: (() -> Unit)? = null,
 ) {
     var pin by remember { mutableStateOf("") }
@@ -122,9 +123,11 @@ fun PinEntryDialog(
                                 isVerifying = true
                                 scope.launch {
                                     val result = onVerify(pin)
-                                    if (!result.unlocked) {
+                                    if (result.unlocked) {
+                                        onVerified?.invoke(pin)
+                                    } else {
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        error = if (result.retryAfterSeconds > 0) {
+                                        error = result.message ?: if (result.retryAfterSeconds > 0) {
                                             "Locked. Try again in ${result.retryAfterSeconds}s"
                                         } else {
                                             "Incorrect PIN"

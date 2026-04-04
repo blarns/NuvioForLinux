@@ -34,6 +34,7 @@ data class ProfilePushPayload(
 data class PinVerifyResult(
     val unlocked: Boolean = false,
     @SerialName("retry_after_seconds") val retryAfterSeconds: Int = 0,
+    val message: String? = null,
 )
 
 data class ProfileState(

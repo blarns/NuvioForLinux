@@ -5,14 +5,15 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -49,7 +50,6 @@ import com.nuvio.app.core.ui.NuvioInputField
 import com.nuvio.app.core.ui.NuvioPrimaryButton
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioScreenHeader
-import com.nuvio.app.core.ui.NuvioSectionLabel
 import com.nuvio.app.core.ui.NuvioStatusModal
 import com.nuvio.app.core.ui.NuvioSurfaceCard
 import kotlinx.coroutines.launch
@@ -64,11 +64,17 @@ fun ProfileEditScreen(
 ) {
     val isNew = profile == null
     val scope = rememberCoroutineScope()
+    val profileState by ProfileRepository.state.collectAsStateWithLifecycle()
+    val currentProfile = remember(profile?.profileIndex, profileState.profiles, profile) {
+        profile?.let { snapshot ->
+            profileState.profiles.find { it.profileIndex == snapshot.profileIndex } ?: snapshot
+        }
+    }
+    val fallbackColorHex = currentProfile?.avatarColorHex ?: PROFILE_COLORS.first()
 
-    var name by rememberSaveable { mutableStateOf(profile?.name ?: "") }
-    var selectedColor by rememberSaveable { mutableStateOf(profile?.avatarColorHex ?: PROFILE_COLORS.first()) }
-    var selectedAvatarId by rememberSaveable { mutableStateOf(profile?.avatarId) }
-    var usesPrimaryAddons by rememberSaveable { mutableStateOf(profile?.usesPrimaryAddons ?: false) }
+    var name by rememberSaveable { mutableStateOf(currentProfile?.name ?: "") }
+    var selectedAvatarId by rememberSaveable { mutableStateOf(currentProfile?.avatarId) }
+    var usesPrimaryAddons by rememberSaveable { mutableStateOf(currentProfile?.usesPrimaryAddons ?: false) }
     var isSaving by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showPinSetup by remember { mutableStateOf(false) }
@@ -76,8 +82,17 @@ fun ProfileEditScreen(
 
     val avatars by AvatarRepository.avatars.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { AvatarRepository.fetchAvatars() }
+    LaunchedEffect(isNew, avatars, selectedAvatarId) {
+        if (isNew && selectedAvatarId == null && avatars.isNotEmpty()) {
+            selectedAvatarId = avatars.first().id
+        }
+    }
+
     val selectedAvatarItem = remember(selectedAvatarId, avatars) {
         selectedAvatarId?.let { id -> avatars.find { it.id == id } }
+    }
+    val previewAccent = remember(selectedAvatarItem, fallbackColorHex) {
+        parseHexColor(selectedAvatarItem?.bgColor ?: fallbackColorHex)
     }
 
     NuvioScreen(modifier = modifier) {
@@ -89,144 +104,55 @@ fun ProfileEditScreen(
         }
 
         item {
+            ProfileIdentityCard(
+                name = name,
+                isNew = isNew,
+                profileIndex = currentProfile?.profileIndex,
+                usesPrimaryAddons = usesPrimaryAddons,
+                onNameChange = { name = it },
+                onUsesPrimaryAddonsChange = { usesPrimaryAddons = it },
+                selectedAvatar = selectedAvatarItem,
+                accentColor = previewAccent,
+                hasAvatarChoices = avatars.isNotEmpty(),
+            )
+        }
+
+        item {
             NuvioSurfaceCard {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    val color = remember(selectedColor) { parseHexColor(selectedColor) }
-                    Box(
-                        modifier = Modifier
-                            .size(100.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (selectedAvatarItem != null) {
-                                    selectedAvatarItem!!.bgColor?.let { parseHexColor(it) } ?: color
-                                } else {
-                                    color.copy(alpha = 0.2f)
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text(
+                        text = "Choose an avatar",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = selectedAvatarItem?.displayName
+                            ?: if (avatars.isEmpty()) "Loading avatars..." else "Select an avatar for this profile.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    if (avatars.isNotEmpty()) {
+                        val avatarSpacing = 10.dp
+                        val minAvatarSize = 58.dp
+                        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                            val columns = (((maxWidth + avatarSpacing) / (minAvatarSize + avatarSpacing)).toInt())
+                                .coerceAtLeast(1)
+                            val avatarSize = (maxWidth - avatarSpacing * (columns - 1)) / columns
+
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(avatarSpacing),
+                                verticalArrangement = Arrangement.spacedBy(avatarSpacing),
+                                maxItemsInEachRow = columns,
+                            ) {
+                                avatars.forEach { avatar ->
+                                    AvatarChoiceItem(
+                                        avatar = avatar,
+                                        size = avatarSize,
+                                        isSelected = avatar.id == selectedAvatarId,
+                                        onClick = { selectedAvatarId = avatar.id },
+                                    )
                                 }
-                            )
-                            .border(
-                                3.dp,
-                                if (selectedAvatarItem != null) Color.Transparent else color.copy(alpha = 0.6f),
-                                CircleShape,
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (selectedAvatarItem != null) {
-                            AsyncImage(
-                                model = avatarStorageUrl(selectedAvatarItem!!.storagePath),
-                                contentDescription = selectedAvatarItem!!.displayName,
-                                modifier = Modifier.size(100.dp).clip(CircleShape),
-                                contentScale = ContentScale.Crop,
-                            )
-                        } else if (name.isNotBlank()) {
-                            Text(
-                                text = name.take(1).uppercase(),
-                                style = MaterialTheme.typography.displayLarge,
-                                color = color,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Rounded.Person,
-                                contentDescription = null,
-                                tint = color,
-                                modifier = Modifier.size(48.dp),
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            NuvioSectionLabel(text = "NAME")
-        }
-        item {
-            NuvioSurfaceCard {
-                NuvioInputField(
-                    value = name,
-                    onValueChange = { name = it },
-                    placeholder = "Profile name",
-                )
-            }
-        }
-
-        item {
-            NuvioSectionLabel(text = "AVATAR")
-        }
-        item {
-            NuvioSurfaceCard {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    avatars.forEach { avatar ->
-                        val isSelected = avatar.id == selectedAvatarId
-                        Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    avatar.bgColor?.let { parseHexColor(it) }
-                                        ?: MaterialTheme.colorScheme.surfaceVariant
-                                )
-                                .then(
-                                    if (isSelected) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                                    else Modifier
-                                )
-                                .clickable {
-                                    selectedAvatarId = avatar.id
-                                },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            AsyncImage(
-                                model = avatarStorageUrl(avatar.storagePath),
-                                contentDescription = avatar.displayName,
-                                modifier = Modifier.size(56.dp).clip(CircleShape),
-                                contentScale = ContentScale.Crop,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            NuvioSectionLabel(text = "COLOR")
-        }
-        item {
-            NuvioSurfaceCard {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    PROFILE_COLORS.forEach { hex ->
-                        val color = remember(hex) { parseHexColor(hex) }
-                        val isSelected = hex == selectedColor && selectedAvatarId == null
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(color)
-                                .then(
-                                    if (isSelected) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
-                                    else Modifier
-                                )
-                                .clickable {
-                                    selectedColor = hex
-                                    selectedAvatarId = null
-                                },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (isSelected) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Check,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(22.dp),
-                                )
                             }
                         }
                     }
@@ -234,60 +160,35 @@ fun ProfileEditScreen(
             }
         }
 
-        item {
-            NuvioSectionLabel(text = "OPTIONS")
-        }
-        item {
-            NuvioSurfaceCard {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
+        if (!isNew) {
+            item {
+                NuvioSurfaceCard {
+                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         Text(
-                            text = "Use Primary Addons",
-                            style = MaterialTheme.typography.bodyLarge,
+                            text = "Security",
+                            style = MaterialTheme.typography.titleLarge,
                             color = MaterialTheme.colorScheme.onSurface,
-                            fontWeight = FontWeight.Medium,
                         )
                         Text(
-                            text = "Share addons with the main profile",
+                            text = if (currentProfile?.pinEnabled == true) {
+                                "This profile is protected with a PIN."
+                            } else {
+                                "Add a PIN if you want this profile locked before switching into it."
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Switch(
-                        checked = usesPrimaryAddons,
-                        onCheckedChange = { usesPrimaryAddons = it },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                            uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            uncheckedTrackColor = MaterialTheme.colorScheme.outlineVariant,
-                        ),
-                    )
-                }
-            }
-        }
-
-        if (!isNew) {
-            item {
-                NuvioSectionLabel(text = "SECURITY")
-            }
-            item {
-                NuvioSurfaceCard {
-                    if (profile?.pinEnabled == true) {
-                        NuvioPrimaryButton(
-                            text = "Remove PIN Lock",
-                            onClick = { showPinClear = true },
-                        )
-                    } else {
-                        NuvioPrimaryButton(
-                            text = "Set PIN Lock",
-                            onClick = { showPinSetup = true },
-                        )
+                        if (currentProfile?.pinEnabled == true) {
+                            NuvioPrimaryButton(
+                                text = "Remove PIN Lock",
+                                onClick = { showPinClear = true },
+                            )
+                        } else {
+                            NuvioPrimaryButton(
+                                text = "Set PIN Lock",
+                                onClick = { showPinSetup = true },
+                            )
+                        }
                     }
                 }
             }
@@ -296,23 +197,24 @@ fun ProfileEditScreen(
         item {
             Spacer(modifier = Modifier.height(8.dp))
             NuvioPrimaryButton(
-                text = if (isSaving) "Saving..." else "Save",
+                text = if (isSaving) "Saving..." else if (isNew) "Create Profile" else "Save Changes",
                 enabled = name.isNotBlank() && !isSaving,
                 onClick = {
                     isSaving = true
                     scope.launch {
+                        val avatarColorHex = selectedAvatarItem?.bgColor ?: fallbackColorHex
                         if (isNew) {
                             ProfileRepository.createProfile(
                                 name = name,
-                                avatarColorHex = selectedColor,
+                                avatarColorHex = avatarColorHex,
                                 avatarId = selectedAvatarId,
                                 usesPrimaryAddons = usesPrimaryAddons,
                             )
                         } else {
                             ProfileRepository.updateProfile(
-                                profileIndex = profile!!.profileIndex,
+                                profileIndex = currentProfile!!.profileIndex,
                                 name = name,
-                                avatarColorHex = selectedColor,
+                                avatarColorHex = avatarColorHex,
                                 avatarId = selectedAvatarId,
                                 usesPrimaryAddons = usesPrimaryAddons,
                             )
@@ -324,7 +226,7 @@ fun ProfileEditScreen(
             )
         }
 
-        if (!isNew && (profile?.profileIndex ?: 0) > 1) {
+        if (!isNew && (currentProfile?.profileIndex ?: 0) > 1) {
             item {
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
@@ -350,24 +252,24 @@ fun ProfileEditScreen(
 
     NuvioStatusModal(
         title = "Delete Profile?",
-        message = "All data for \"${profile?.name}\" will be permanently deleted.",
+        message = "All data for \"${currentProfile?.name}\" will be permanently deleted.",
         isVisible = showDeleteConfirm,
         confirmText = "Delete",
         dismissText = "Cancel",
         onConfirm = {
             showDeleteConfirm = false
             scope.launch {
-                profile?.let { ProfileRepository.deleteProfile(it.profileIndex) }
+                currentProfile?.let { ProfileRepository.deleteProfile(it.profileIndex) }
                 onBack()
             }
         },
         onDismiss = { showDeleteConfirm = false },
     )
 
-    if (showPinSetup && profile != null) {
+    if (showPinSetup && currentProfile != null) {
         PinSetupDialog(
-            profileIndex = profile.profileIndex,
-            hasExistingPin = profile.pinEnabled,
+            profileIndex = currentProfile.profileIndex,
+            hasExistingPin = currentProfile.pinEnabled,
             onDone = {
                 showPinSetup = false
                 scope.launch { ProfileRepository.pullProfiles() }
@@ -376,19 +278,211 @@ fun ProfileEditScreen(
         )
     }
 
-    if (showPinClear && profile != null) {
+    if (showPinClear && currentProfile != null) {
         PinEntryDialog(
-            profileName = "Remove PIN for ${profile.name}",
-            onVerify = { pin ->
-                scope.launch {
-                    ProfileRepository.clearPin(profile.profileIndex, pin)
-                }
-                PinVerifyResult(unlocked = true)
+            profileName = "Remove PIN for ${currentProfile.name}",
+            onVerify = { pin -> ProfileRepository.clearPin(currentProfile.profileIndex, pin) },
+            onVerified = {
+                showPinClear = false
             },
             onDismiss = {
                 showPinClear = false
-                scope.launch { ProfileRepository.pullProfiles() }
             },
+        )
+    }
+}
+
+@Composable
+private fun ProfileIdentityCard(
+    name: String,
+    isNew: Boolean,
+    profileIndex: Int?,
+    usesPrimaryAddons: Boolean,
+    onNameChange: (String) -> Unit,
+    onUsesPrimaryAddonsChange: (Boolean) -> Unit,
+    selectedAvatar: AvatarCatalogItem?,
+    accentColor: Color,
+    hasAvatarChoices: Boolean,
+) {
+    NuvioSurfaceCard {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(88.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (selectedAvatar != null) accentColor else accentColor.copy(alpha = 0.18f),
+                        )
+                        .border(
+                            width = 2.dp,
+                            color = if (selectedAvatar == null) accentColor.copy(alpha = 0.35f) else Color.Transparent,
+                            shape = CircleShape,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (selectedAvatar != null) {
+                        AsyncImage(
+                            model = avatarStorageUrl(selectedAvatar.storagePath),
+                            contentDescription = selectedAvatar.displayName,
+                            modifier = Modifier.size(88.dp).clip(CircleShape),
+                            contentScale = ContentScale.Crop,
+                        )
+                    } else if (name.isNotBlank()) {
+                        Text(
+                            text = name.take(1).uppercase(),
+                            style = MaterialTheme.typography.displayLarge,
+                            color = accentColor,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Rounded.Person,
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(40.dp),
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = name.ifBlank { if (isNew) "New profile" else "Unnamed profile" },
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = listOf(
+                            if (isNew) "New profile" else (profileIndex?.let { "Profile $it" } ?: "Profile"),
+                            if (usesPrimaryAddons) "Primary addons on" else "Primary addons off",
+                        ).joinToString("  |  "),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = when {
+                            selectedAvatar != null -> "Avatar: ${selectedAvatar.displayName}"
+                            hasAvatarChoices -> "Choose an avatar below."
+                            else -> "Avatar options will appear here when the catalog loads."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            NuvioInputField(
+                value = name,
+                onValueChange = onNameChange,
+                placeholder = "Profile name",
+            )
+
+            ProfileOptionRow(
+                title = "Use Primary Addons",
+                description = "Share the main profile's addon setup instead of managing a separate list.",
+                checked = usesPrimaryAddons,
+                onCheckedChange = onUsesPrimaryAddonsChange,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AvatarChoiceItem(
+    avatar: AvatarCatalogItem,
+    size: androidx.compose.ui.unit.Dp,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(
+                avatar.bgColor?.let(::parseHexColor)
+                    ?: MaterialTheme.colorScheme.surfaceVariant,
+            )
+            .border(
+                width = if (isSelected) 3.dp else 1.dp,
+                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                shape = CircleShape,
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        AsyncImage(
+            model = avatarStorageUrl(avatar.storagePath),
+            contentDescription = avatar.displayName,
+            modifier = Modifier.fillMaxSize().clip(CircleShape),
+            contentScale = ContentScale.Crop,
+        )
+
+        if (isSelected) {
+            Box(
+                modifier = Modifier
+                    .size(20.dp)
+                    .align(Alignment.BottomEnd)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Check,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(12.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileOptionRow(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                uncheckedTrackColor = MaterialTheme.colorScheme.outlineVariant,
+            ),
         )
     }
 }
@@ -407,28 +501,25 @@ fun PinSetupDialog(
     when (step) {
         "current" -> PinEntryDialog(
             profileName = "Enter current PIN",
-            onVerify = { pin ->
-                val result = ProfileRepository.verifyPin(profileIndex, pin)
-                if (result.unlocked) {
-                    currentPin = pin
-                    step = "new"
-                }
-                result
+            onVerify = { pin -> ProfileRepository.verifyPin(profileIndex, pin) },
+            onVerified = { pin ->
+                currentPin = pin
+                step = "new"
             },
             onDismiss = onDismiss,
         )
+
         "new" -> PinEntryDialog(
             profileName = "Enter new PIN",
             onVerify = { pin ->
-                scope.launch {
-                    ProfileRepository.setPin(
-                        profileIndex = profileIndex,
-                        pin = pin,
-                        currentPin = currentPin.ifEmpty { null },
-                    )
-                }
+                ProfileRepository.setPin(
+                    profileIndex = profileIndex,
+                    pin = pin,
+                    currentPin = currentPin.ifEmpty { null },
+                )
+            },
+            onVerified = {
                 onDone()
-                PinVerifyResult(unlocked = true)
             },
             onDismiss = onDismiss,
         )
