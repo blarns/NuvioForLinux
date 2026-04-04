@@ -184,7 +184,7 @@ object EpisodeReleaseNotificationsRepository {
             val request = EpisodeReleaseNotificationRequest(
                 requestId = "episode-release-test-${ProfileRepository.activeProfileId}-${TraktPlatformClock.nowEpochMs()}",
                 notificationTitle = target.name,
-                notificationBody = "Test notification from Nuvio. Tap to open ${target.name}.",
+                notificationBody = "Preview episode release alert.",
                 releaseDateIso = CurrentDateProvider.todayIsoDate(),
                 deepLinkUrl = buildMetaDeepLinkUrl(type = target.type, id = target.id),
                 backdropUrl = target.banner ?: target.poster,

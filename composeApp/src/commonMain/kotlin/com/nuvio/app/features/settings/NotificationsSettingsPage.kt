@@ -29,7 +29,7 @@ internal fun LazyListScope.notificationsSettingsContent(
             SettingsGroup(isTablet = isTablet) {
                 SettingsSwitchRow(
                     title = "Episode release alerts",
-                    description = "Schedule local notifications when a new episode for a saved show becomes available. Tapping the alert opens that show's meta screen.",
+                    description = "Schedule local notifications when a new episode for a saved show becomes available.",
                     checked = uiState.isEnabled,
                     enabled = !uiState.isLoading,
                     isTablet = isTablet,
@@ -74,15 +74,15 @@ private fun NotificationTestCard(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
-                    text = "Dummy notification",
+                    text = "Test notification",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
                     text = uiState.testTargetTitle?.let { title ->
-                        "Send a local test notification that deep-links into $title."
-                    } ?: "Save a show to your library first so the test notification has a real meta-screen target.",
+                        "Send a local test notification for $title."
+                    } ?: "Save a show to your library first to test notifications.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
