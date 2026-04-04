@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.SystemBarStyle
 import androidx.core.view.WindowCompat
+import com.nuvio.app.core.auth.AuthStorage
 import com.nuvio.app.core.deeplink.handleAppUrl
 import com.nuvio.app.core.storage.PlatformLocalAccountDataCleaner
 import com.nuvio.app.features.addons.AddonStorage
@@ -43,6 +44,7 @@ class MainActivity : ComponentActivity() {
         window.isNavigationBarContrastEnforced = false
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
         AddonStorage.initialize(applicationContext)
+        AuthStorage.initialize(applicationContext)
         LibraryStorage.initialize(applicationContext)
         WatchedStorage.initialize(applicationContext)
         MetaScreenSettingsStorage.initialize(applicationContext)

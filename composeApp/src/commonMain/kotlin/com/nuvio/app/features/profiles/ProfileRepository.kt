@@ -3,6 +3,7 @@ package com.nuvio.app.features.profiles
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
+import com.nuvio.app.core.auth.isAnonymous
 import com.nuvio.app.core.network.SupabaseProvider
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.details.MetaScreenSettingsRepository
@@ -94,6 +95,12 @@ object ProfileRepository {
     }
 
     suspend fun pullProfiles() {
+        if (AuthRepository.state.value.isAnonymous) {
+            if (!_state.value.isLoaded) {
+                _state.value = _state.value.copy(isLoaded = true)
+            }
+            return
+        }
         runCatching {
             val result = SupabaseProvider.client.postgrest.rpc("sync_pull_profiles")
             val profiles = result.decodeList<NuvioProfile>()
@@ -139,6 +146,10 @@ object ProfileRepository {
     }
 
     suspend fun pushProfiles(profiles: List<ProfilePushPayload>) {
+        if (AuthRepository.state.value.isAnonymous) {
+            applyPayloadsLocally(profiles)
+            return
+        }
         runCatching {
             val params = buildJsonObject {
                 put("p_profiles", json.encodeToJsonElement(profiles))
@@ -211,6 +222,18 @@ object ProfileRepository {
     }
 
     suspend fun deleteProfile(profileIndex: Int) {
+        if (AuthRepository.state.value.isAnonymous) {
+            val remaining = _state.value.profiles.filter { it.profileIndex != profileIndex }
+            _state.value = _state.value.copy(
+                profiles = remaining,
+                activeProfile = if (_state.value.activeProfile?.profileIndex == profileIndex) remaining.firstOrNull() else _state.value.activeProfile,
+            )
+            if (_state.value.activeProfile != null) {
+                activeProfileIndex = _state.value.activeProfile!!.profileIndex
+            }
+            persist()
+            return
+        }
         runCatching {
             val params = buildJsonObject { put("p_profile_id", profileIndex) }
             SupabaseProvider.client.postgrest.rpc("sync_delete_profile_data", params)
@@ -282,6 +305,31 @@ object ProfileRepository {
             log.e(e) { "Failed to pull profile locks" }
             emptyList()
         }
+    }
+
+    private fun applyPayloadsLocally(payloads: List<ProfilePushPayload>) {
+        val authState = AuthRepository.state.value as? AuthState.Authenticated ?: return
+        val profiles = payloads.map { p ->
+            NuvioProfile(
+                id = "",
+                userId = authState.userId,
+                profileIndex = p.profileIndex,
+                name = p.name,
+                avatarColorHex = p.avatarColorHex,
+                avatarId = p.avatarId,
+                usesPrimaryAddons = p.usesPrimaryAddons,
+                usesPrimaryPlugins = p.usesPrimaryPlugins,
+            )
+        }.sortedBy { it.profileIndex }
+        _state.value = _state.value.copy(
+            profiles = profiles,
+            isLoaded = true,
+            activeProfile = profiles.find { it.profileIndex == activeProfileIndex } ?: profiles.firstOrNull(),
+        )
+        if (_state.value.activeProfile != null) {
+            activeProfileIndex = _state.value.activeProfile!!.profileIndex
+        }
+        persist()
     }
 
     private fun persist() {

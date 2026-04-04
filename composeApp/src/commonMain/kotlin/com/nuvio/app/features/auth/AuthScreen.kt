@@ -327,11 +327,7 @@ fun AuthScreen(
 
             Button(
                 onClick = {
-                    isLoading = true
-                    scope.launch {
-                        AuthRepository.signInAnonymously()
-                        isLoading = false
-                    }
+                    AuthRepository.signInAnonymously()
                 },
                 modifier = Modifier
                     .fillMaxWidth()
