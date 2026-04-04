@@ -170,16 +170,23 @@ kotlin {
             implementation(libs.supabase.postgrest)
             implementation(libs.supabase.auth)
             implementation(libs.supabase.functions)
-            implementation(libs.quickjs.kt)
-            implementation(libs.ksoup)
             implementation(libs.reorderable)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
+            implementation(libs.quickjs.kt)
+            implementation(libs.ksoup)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
+    }
+}
+
+afterEvaluate {
+    dependencies {
+        add("androidFullImplementation", libs.quickjs.kt)
+        add("androidFullImplementation", libs.ksoup)
     }
 }
 
