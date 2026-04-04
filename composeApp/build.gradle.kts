@@ -87,6 +87,20 @@ val releaseStorePassword = supabaseProps.getProperty("NUVIO_RELEASE_STORE_PASSWO
 val releaseKeyAlias = supabaseProps.getProperty("NUVIO_RELEASE_KEY_ALIAS")?.takeIf { it.isNotBlank() }
 val releaseKeyPassword = supabaseProps.getProperty("NUVIO_RELEASE_KEY_PASSWORD")?.takeIf { it.isNotBlank() }
 val releaseKeystore = releaseStoreFile?.let(rootProject::file)
+val iosDistribution = (
+    providers.gradleProperty("nuvio.ios.distribution").orNull
+        ?: System.getenv("NUVIO_IOS_DISTRIBUTION")
+        ?: supabaseProps.getProperty("NUVIO_IOS_DISTRIBUTION")
+        ?: "appstore"
+    ).trim().lowercase()
+require(iosDistribution == "appstore" || iosDistribution == "full") {
+    "NUVIO_IOS_DISTRIBUTION must be 'appstore' or 'full'."
+}
+val iosDistributionSourceDir = if (iosDistribution == "full") {
+    "src/iosFull/kotlin"
+} else {
+    "src/iosAppStore/kotlin"
+}
 val generatedRuntimeConfigDir = layout.buildDirectory.dir("generated/runtime-config/kotlin")
 
 val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generateRuntimeConfigs") {
@@ -116,6 +130,15 @@ kotlin {
                 create("commoncrypto") {
                     defFile(project.file("src/nativeInterop/cinterop/commoncrypto.def"))
                     compilerOpts("-I${project.projectDir}/src/nativeInterop/cinterop")
+                }
+            }
+
+            defaultSourceSet.kotlin.srcDir(project.file(iosDistributionSourceDir))
+            defaultSourceSet.dependencies {
+                implementation(libs.ktor.client.darwin)
+                if (iosDistribution == "full") {
+                    implementation(libs.quickjs.kt)
+                    implementation(libs.ksoup)
                 }
             }
         }
@@ -172,11 +195,6 @@ kotlin {
             implementation(libs.supabase.functions)
             implementation(libs.reorderable)
         }
-        iosMain.dependencies {
-            implementation(libs.ktor.client.darwin)
-            implementation(libs.quickjs.kt)
-            implementation(libs.ksoup)
-        }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
@@ -184,9 +202,11 @@ kotlin {
 }
 
 afterEvaluate {
-    dependencies {
-        add("androidFullImplementation", libs.quickjs.kt)
-        add("androidFullImplementation", libs.ksoup)
+    if (iosDistribution == "full") {
+        dependencies {
+            add("androidFullImplementation", libs.quickjs.kt)
+            add("androidFullImplementation", libs.ksoup)
+        }
     }
 }
 
