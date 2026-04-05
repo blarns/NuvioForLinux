@@ -45,6 +45,7 @@ import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.components.HomeCatalogRowSection
 import com.nuvio.app.features.home.components.HomeEmptyStateCard
+import com.nuvio.app.features.home.components.homeSectionHorizontalPaddingForWidth
 import com.nuvio.app.features.home.components.HomeSkeletonRow
 import com.nuvio.app.features.watched.WatchedRepository
 import kotlinx.coroutines.delay
@@ -155,6 +156,9 @@ fun SearchScreen(
         val discoverColumns = remember(maxWidth) {
             discoverColumnCountForWidth(maxWidth)
         }
+        val homeSectionPadding = remember(maxWidth) {
+            homeSectionHorizontalPaddingForWidth(maxWidth.value)
+        }
 
         NuvioScreen(
             horizontalPadding = 0.dp,
@@ -209,7 +213,7 @@ fun SearchScreen(
             when {
                 uiState.isLoading && uiState.sections.isEmpty() -> {
                     items(2) {
-                        HomeSkeletonRow(modifier = Modifier.padding(horizontal = 0.dp))
+                        HomeSkeletonRow(modifier = Modifier.padding(horizontal = homeSectionPadding))
                     }
                 }
 
