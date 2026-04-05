@@ -6,5 +6,9 @@
         <item name="android:windowLightNavigationBar">false</item>
     </style>
 
-    <style name="Theme.Nuvio.Splash" parent="@style/Theme.Nuvio" />
+    <style name="Theme.Nuvio.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/nuvio_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo</item>
+        <item name="postSplashScreenTheme">@style/Theme.Nuvio</item>
+    </style>
 </resources>

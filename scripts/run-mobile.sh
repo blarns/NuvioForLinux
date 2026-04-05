@@ -17,7 +17,7 @@ IOS_PREFERRED_DEVICE_MODEL="iPhone 14 Pro"
 usage() {
   cat <<'EOF'
 Usage:
-  ./scripts/run-mobile.sh android
+  ./scripts/run-mobile.sh android [full|playstore]
   ./scripts/run-mobile.sh ios s
   ./scripts/run-mobile.sh ios p
 
@@ -90,6 +90,18 @@ if physical:
 }
 
 run_android() {
+  local flavor="${1:-full}"
+
+  case "$flavor" in
+    full|playstore)
+      ;;
+    *)
+      echo "Unknown Android flavor: $flavor" >&2
+      echo "Expected one of: full, playstore" >&2
+      exit 1
+      ;;
+  esac
+
   require_command adb
   require_command emulator
 
@@ -140,11 +152,21 @@ run_android() {
     wait_for_android_emulator "$serial"
   done
 
-  echo "Building Android debug APK..."
-  "$GRADLEW" :composeApp:assembleDebug
-
+  local flavor_task_part
   local apk_path
-  apk_path="$ROOT_DIR/composeApp/build/outputs/apk/debug/composeApp-debug.apk"
+  case "$flavor" in
+    full)
+      flavor_task_part="Full"
+      apk_path="$ROOT_DIR/composeApp/build/outputs/apk/full/debug/composeApp-full-debug.apk"
+      ;;
+    playstore)
+      flavor_task_part="Playstore"
+      apk_path="$ROOT_DIR/composeApp/build/outputs/apk/playstore/debug/composeApp-playstore-debug.apk"
+      ;;
+  esac
+
+  echo "Building Android $flavor debug APK..."
+  "$GRADLEW" ":composeApp:assemble${flavor_task_part}Debug"
 
   if [[ ! -f "$apk_path" ]]; then
     echo "Expected APK not found at: $apk_path" >&2
@@ -243,11 +265,11 @@ main() {
 
   case "$1" in
     android)
-      if [[ $# -ne 1 ]]; then
+      if [[ $# -gt 2 ]]; then
         usage
         exit 1
       fi
-      run_android
+      run_android "${2:-full}"
       ;;
     ios)
       if [[ $# -ne 2 ]]; then
