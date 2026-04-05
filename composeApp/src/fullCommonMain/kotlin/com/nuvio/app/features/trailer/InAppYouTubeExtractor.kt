@@ -2,37 +2,18 @@ package com.nuvio.app.features.trailer
 
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.withTimeoutOrNull
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.darwin.Darwin
-import io.ktor.client.plugins.HttpTimeout
-import io.ktor.client.plugins.timeout
-import io.ktor.client.request.header
-import io.ktor.client.request.request
-import io.ktor.client.request.setBody
-import io.ktor.client.statement.bodyAsText
-import io.ktor.client.statement.request
-import io.ktor.http.HttpMethod
-import io.ktor.http.isSuccess
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import platform.Foundation.NSURLComponents
-import platform.Foundation.NSURLQueryItem
 
-private const val TAG = "InAppYouTubeExtractorIOS"
+internal const val TRAILER_EXTRACTOR_TAG = "InAppYouTubeExtractor"
+internal const val TRAILER_REQUEST_TIMEOUT_MS = 20_000L
+
 private const val EXTRACTOR_TIMEOUT_MS = 30_000L
-private const val DEFAULT_REQUEST_TIMEOUT_MS = 20_000L
-private const val DEFAULT_USER_AGENT =
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 " +
-        "(KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"
 private const val PREFERRED_SEPARATE_CLIENT = "android_vr"
 
 private val VIDEO_ID_REGEX = Regex("^[a-zA-Z0-9_-]{11}$")
@@ -54,13 +35,14 @@ private data class WatchConfig(
     val visitorData: String?,
 )
 
-private data class StreamCandidate(
+internal data class StreamCandidate(
     val client: String,
     val priority: Int,
     val url: String,
     val score: Double,
     val hasN: Boolean,
     val height: Int,
+    val fps: Int,
     val ext: String,
 )
 
@@ -71,25 +53,21 @@ private data class ManifestBestVariant(
     val bandwidth: Long,
 )
 
-private data class ManifestCandidate(
+internal data class ManifestCandidate(
     val client: String,
     val priority: Int,
     val manifestUrl: String,
+    val selectedVariantUrl: String,
     val height: Int,
     val bandwidth: Long,
 )
 
-private data class RequestResponse(
+internal data class TrailerRequestResponse(
     val ok: Boolean,
     val status: Int,
     val statusText: String,
     val url: String,
     val body: String,
-)
-
-private val DEFAULT_HEADERS = mapOf(
-    "accept-language" to "en-US,en;q=0.9",
-    "user-agent" to DEFAULT_USER_AGENT,
 )
 
 private val JSON = Json { ignoreUnknownKeys = true }
@@ -152,12 +130,7 @@ private val CLIENTS = listOf(
 )
 
 class InAppYouTubeExtractor {
-    private val log = Logger.withTag(TAG)
-    private val httpClient = HttpClient(Darwin) {
-        install(HttpTimeout)
-        followRedirects = true
-        expectSuccess = false
-    }
+    private val log = Logger.withTag(TRAILER_EXTRACTOR_TAG)
 
     suspend fun extractPlaybackSource(youtubeUrl: String): TrailerPlaybackSource? = withContext(Dispatchers.Default) {
         if (youtubeUrl.isBlank()) return@withContext null
@@ -167,7 +140,7 @@ class InAppYouTubeExtractor {
                 extractPlaybackSourceInternal(youtubeUrl)
             }
         }.onFailure {
-            log.w { "iOS extractor failed for $youtubeUrl: ${it.message}" }
+            log.w { "Trailer extractor failed for $youtubeUrl: ${it.message}" }
         }.getOrNull()
     }
 
@@ -175,10 +148,12 @@ class InAppYouTubeExtractor {
         val videoId = extractVideoId(youtubeUrl) ?: return null
 
         val watchUrl = "https://www.youtube.com/watch?v=$videoId&hl=en"
-        val watchResponse = performRequest(
+        val watchResponse = TrailerExtractionPlatform.performRequest(
             url = watchUrl,
             method = "GET",
-            headers = DEFAULT_HEADERS,
+            headers = TrailerExtractionPlatform.defaultHeaders,
+            body = null,
+            timeoutMillis = TRAILER_REQUEST_TIMEOUT_MS,
         )
         if (!watchResponse.ok) {
             throw IllegalStateException("Failed to fetch watch page (${watchResponse.status})")
@@ -203,7 +178,6 @@ class InAppYouTubeExtractor {
                 )
 
                 val streamingData = playerResponse.objectValue("streamingData") ?: return@runCatching
-
                 val hlsManifestUrl = streamingData.stringValue("hlsManifestUrl")
                 if (!hlsManifestUrl.isNullOrBlank()) {
                     manifestUrls += Triple(client.key, client.priority, hlsManifestUrl)
@@ -231,6 +205,7 @@ class InAppYouTubeExtractor {
                         score = videoScore(height, fps, bitrate),
                         hasN = hasNParam(url),
                         height = height,
+                        fps = fps,
                         ext = if (mimeType.contains("webm")) "webm" else "mp4",
                     )
                 }
@@ -259,21 +234,23 @@ class InAppYouTubeExtractor {
                             score = videoScore(height, fps, bitrate),
                             hasN = hasNParam(url),
                             height = height,
+                            fps = fps,
                             ext = if (mimeType.contains("webm")) "webm" else "mp4",
                         )
                     } else if (hasAudio) {
                         val bitrate = format.numberValue("bitrate")
                             ?: format.numberValue("averageBitrate")
                             ?: 0.0
-                        val asr = format.numberValue("audioSampleRate") ?: 0.0
+                        val audioSampleRate = format.numberValue("audioSampleRate") ?: 0.0
 
                         adaptiveAudio += StreamCandidate(
                             client = client.key,
                             priority = client.priority,
                             url = url,
-                            score = audioScore(bitrate, asr),
+                            score = audioScore(bitrate, audioSampleRate),
                             hasN = hasNParam(url),
                             height = 0,
+                            fps = 0,
                             ext = if (mimeType.contains("webm")) "webm" else "m4a",
                         )
                     }
@@ -293,6 +270,7 @@ class InAppYouTubeExtractor {
                     client = clientKey,
                     priority = priority,
                     manifestUrl = manifestUrl,
+                    selectedVariantUrl = variant.url,
                     height = variant.height,
                     bandwidth = variant.bandwidth,
                 )
@@ -310,22 +288,11 @@ class InAppYouTubeExtractor {
         val bestVideo = pickBestForClient(adaptiveVideo, PREFERRED_SEPARATE_CLIENT)
         val bestAudio = pickBestForClient(adaptiveAudio, PREFERRED_SEPARATE_CLIENT)
 
-        val bestManifestHeight = bestManifest?.height ?: -1
-        val bestCombinedIsManifest = bestManifest != null &&
-            (bestProgressive == null || bestManifestHeight > bestProgressive.height)
-
-        val combinedUrl = if (bestCombinedIsManifest) {
-            bestManifest.manifestUrl
-        } else {
-            bestProgressive?.url
-        }
-
-        val videoUrl = resolveReachableUrl(bestVideo?.url ?: combinedUrl ?: return null)
-        val audioUrl = bestAudio?.url?.let { resolveReachableUrl(it) }
-
-        return TrailerPlaybackSource(
-            videoUrl = videoUrl,
-            audioUrl = audioUrl,
+        return TrailerExtractionPlatform.buildPlaybackSource(
+            bestManifest = bestManifest,
+            bestProgressive = bestProgressive,
+            bestVideo = bestVideo,
+            bestAudio = bestAudio,
         )
     }
 
@@ -338,7 +305,7 @@ class InAppYouTubeExtractor {
         val endpoint = "https://www.youtube.com/youtubei/v1/player?key=${encodeUrlComponent(apiKey)}"
 
         val headers = buildMap {
-            putAll(DEFAULT_HEADERS)
+            putAll(TrailerExtractionPlatform.defaultHeaders)
             put("content-type", "application/json")
             put("origin", "https://www.youtube.com")
             put("x-youtube-client-name", client.id)
@@ -357,11 +324,12 @@ class InAppYouTubeExtractor {
             ),
         )
 
-        val response = performRequest(
+        val response = TrailerExtractionPlatform.performRequest(
             url = endpoint,
             method = "POST",
             headers = headers,
             body = payload.toString(),
+            timeoutMillis = TRAILER_REQUEST_TIMEOUT_MS,
         )
 
         if (!response.ok) {
@@ -374,10 +342,12 @@ class InAppYouTubeExtractor {
     }
 
     private suspend fun parseHlsManifest(manifestUrl: String): ManifestBestVariant? {
-        val response = performRequest(
+        val response = TrailerExtractionPlatform.performRequest(
             url = manifestUrl,
             method = "GET",
-            headers = DEFAULT_HEADERS,
+            headers = TrailerExtractionPlatform.defaultHeaders,
+            body = null,
+            timeoutMillis = TRAILER_REQUEST_TIMEOUT_MS,
         )
         if (!response.ok) {
             throw IllegalStateException("Failed to fetch HLS manifest (${response.status})")
@@ -390,7 +360,6 @@ class InAppYouTubeExtractor {
             .toList()
 
         var bestVariant: ManifestBestVariant? = null
-
         for (index in lines.indices) {
             val line = lines[index]
             if (!line.startsWith("#EXT-X-STREAM-INF:")) continue
@@ -427,91 +396,27 @@ class InAppYouTubeExtractor {
         return bestVariant
     }
 
-    private suspend fun resolveReachableUrl(url: String): String {
-        if (!url.contains("googlevideo.com")) return url
-
-        val mnParam = getQueryParameter(url, "mn") ?: return url
-        val servers = mnParam.split(',').map { it.trim() }.filter { it.isNotBlank() }
-        if (servers.size < 2) return url
-
-        val host = getHost(url) ?: return url
-        val candidates = mutableListOf(url)
-
-        servers.forEachIndexed { index, server ->
-            val altHost = host
-                .replaceFirst(Regex("^rr\\d+---"), "rr${index + 1}---")
-                .replaceFirst(Regex("sn-[a-z0-9]+-[a-z0-9]+"), server)
-            if (altHost != host) {
-                candidates += url.replace(host, altHost)
-            }
-        }
-
-        if (candidates.size == 1) return candidates.first()
-
-        return coroutineScope {
-            val probes = candidates.map { candidate ->
-                async {
-                    if (isUrlReachable(candidate)) candidate else null
-                }
-            }
-            withTimeoutOrNull(2_000L) {
-                probes.awaitAll().firstOrNull { !it.isNullOrBlank() }
-            } ?: url
-        }
-    }
-
-    private suspend fun isUrlReachable(url: String): Boolean {
-        val response = runCatching {
-            performRequest(
-                url = url,
-                method = "GET",
-                headers = mapOf(
-                    "range" to "bytes=0-0",
-                    "user-agent" to DEFAULT_USER_AGENT,
-                ),
-                timeoutMillis = 2_000L,
-            )
-        }.getOrNull() ?: return false
-
-        return response.status in 200..299
-    }
-
     private fun extractVideoId(input: String): String? {
         val trimmed = input.trim()
         if (VIDEO_ID_REGEX.matches(trimmed)) return trimmed
 
-        val normalized = if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-            trimmed
-        } else {
-            "https://$trimmed"
-        }
+        val parsed = parseUrl(trimmed) ?: return null
 
-        val components = NSURLComponents(string = normalized) ?: return null
-        val host = components.host?.lowercase().orEmpty()
-
-        if (host.endsWith("youtu.be")) {
-            val id = components.path.orEmpty().trim('/').substringBefore('/')
-            if (id.isNotBlank() && VIDEO_ID_REGEX.matches(id)) {
+        if (parsed.host.endsWith("youtu.be")) {
+            val id = parsed.pathSegments.firstOrNull()
+            if (!id.isNullOrBlank() && VIDEO_ID_REGEX.matches(id)) {
                 return id
             }
         }
 
-        val queryId = queryItems(components)
-            .firstOrNull { it.name == "v" }
-            ?.value
+        val queryId = parsed.query["v"]?.firstOrNull()
         if (!queryId.isNullOrBlank() && VIDEO_ID_REGEX.matches(queryId)) {
             return queryId
         }
 
-        val segments = components.path
-            .orEmpty()
-            .trim('/')
-            .split('/')
-            .filter { it.isNotBlank() }
-
-        if (segments.size >= 2) {
-            val first = segments[0]
-            val second = segments[1]
+        if (parsed.pathSegments.size >= 2) {
+            val first = parsed.pathSegments[0]
+            val second = parsed.pathSegments[1]
             if ((first == "embed" || first == "shorts" || first == "live") && VIDEO_ID_REGEX.matches(second)) {
                 return second
             }
@@ -553,9 +458,9 @@ class InAppYouTubeExtractor {
             }
 
             if (ch == ',' && !inQuote) {
-                val k = key.toString().trim()
-                if (k.isNotEmpty()) {
-                    out[k] = value.toString().trim()
+                val parsedKey = key.toString().trim()
+                if (parsedKey.isNotEmpty()) {
+                    out[parsedKey] = value.toString().trim()
                 }
                 key.clear()
                 value.clear()
@@ -587,7 +492,9 @@ class InAppYouTubeExtractor {
         return QUALITY_LABEL_REGEX.find(label)?.groupValues?.getOrNull(1)?.toIntOrNull()
     }
 
-    private fun hasNParam(url: String): Boolean = !getQueryParameter(url, "n").isNullOrBlank()
+    private fun hasNParam(url: String): Boolean {
+        return parseUrl(url)?.query?.get("n")?.firstOrNull()?.isNotBlank() == true
+    }
 
     private fun videoScore(height: Int, fps: Int, bitrate: Double): Double {
         return height * 1_000_000_000.0 + fps * 1_000_000.0 + bitrate
@@ -622,67 +529,15 @@ class InAppYouTubeExtractor {
         }
     }
 
-    private suspend fun performRequest(
-        url: String,
-        method: String,
-        headers: Map<String, String>,
-        body: String? = null,
-        timeoutMillis: Long = DEFAULT_REQUEST_TIMEOUT_MS,
-    ): RequestResponse {
-        val response = httpClient.request(url) {
-            this.method = when (method.uppercase()) {
-                "POST" -> HttpMethod.Post
-                "PUT" -> HttpMethod.Put
-                "DELETE" -> HttpMethod.Delete
-                else -> HttpMethod.Get
-            }
-            headers.forEach { (name, value) ->
-                header(name, value)
-            }
-            if (body != null) {
-                setBody(body)
-            }
-            timeout {
-                requestTimeoutMillis = timeoutMillis
-                connectTimeoutMillis = timeoutMillis
-                socketTimeoutMillis = timeoutMillis
-            }
-        }
-        val bodyText = runCatching { response.bodyAsText() }.getOrElse { "" }
-        return RequestResponse(
-            ok = response.status.isSuccess(),
-            status = response.status.value,
-            statusText = response.status.description,
-            url = response.request.url.toString(),
-            body = bodyText,
-        )
-    }
-
-    private fun getHost(url: String): String? {
-        val components = NSURLComponents(string = url) ?: return null
-        return components.host
-    }
-
-    private fun getQueryParameter(url: String, name: String): String? {
-        val components = NSURLComponents(string = url) ?: return null
-        return queryItems(components).firstOrNull { it.name == name }?.value
-    }
-
-    private fun queryItems(components: NSURLComponents): List<NSURLQueryItem> {
-        val raw = components.queryItems as? List<*> ?: return emptyList()
-        return raw.mapNotNull { it as? NSURLQueryItem }
-    }
-
     private fun absolutizeUrl(baseUrl: String, maybeRelative: String): String {
         if (maybeRelative.startsWith("http://") || maybeRelative.startsWith("https://")) {
             return maybeRelative
         }
-
         if (maybeRelative.startsWith('/')) {
-            val origin = Regex("^(https?://[^/]+)").find(baseUrl)?.groupValues?.getOrNull(1)
-            return if (origin != null) origin + maybeRelative else maybeRelative
+            val scheme = baseUrl.substringBefore("://", "https")
+            val host = baseUrl.substringAfter("://", "").substringBefore('/')
+            return if (host.isNotBlank()) "$scheme://$host$maybeRelative" else maybeRelative
         }
-
         val baseDir = baseUrl.substringBeforeLast('/', missingDelimiterValue = baseUrl)
         return "$baseDir/$maybeRelative"
     }
@@ -695,6 +550,51 @@ class InAppYouTubeExtractor {
             .replace("&", "%26")
             .replace("=", "%3D")
     }
+}
+
+private data class ParsedUrl(
+    val host: String,
+    val pathSegments: List<String>,
+    val query: Map<String, List<String>>,
+)
+
+private fun parseUrl(input: String): ParsedUrl? {
+    val trimmed = input.trim()
+    if (trimmed.isBlank()) return null
+
+    val normalized = if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+        trimmed
+    } else {
+        "https://$trimmed"
+    }
+
+    val withoutFragment = normalized.substringBefore('#')
+    val withoutScheme = withoutFragment.substringAfter("://", withoutFragment)
+    val host = withoutScheme.substringBefore('/').substringBefore('?').lowercase()
+    if (host.isBlank()) return null
+
+    val pathAndQuery = withoutScheme.removePrefix(host)
+    val path = when {
+        pathAndQuery.startsWith("/") -> pathAndQuery.substringBefore('?')
+        pathAndQuery.startsWith("?") || pathAndQuery.isBlank() -> "/"
+        else -> "/${pathAndQuery.substringBefore('?')}"
+    }
+    val queryString = withoutFragment.substringAfter('?', "")
+    val query = LinkedHashMap<String, MutableList<String>>()
+    queryString.split('&')
+        .filter { it.isNotBlank() }
+        .forEach { pair ->
+            val key = pair.substringBefore('=').trim()
+            if (key.isBlank()) return@forEach
+            val value = pair.substringAfter('=', "")
+            query.getOrPut(key) { mutableListOf() }.add(value)
+        }
+
+    return ParsedUrl(
+        host = host,
+        pathSegments = path.trim('/').split('/').filter { it.isNotBlank() },
+        query = query,
+    )
 }
 
 private fun JsonObject.objectValue(key: String): JsonObject? {
@@ -738,10 +638,10 @@ private fun toJsonElement(value: Any): JsonElement {
         is Number -> JsonPrimitive(value.toDouble())
         is Map<*, *> -> {
             val map = LinkedHashMap<String, JsonElement>()
-            value.forEach { (k, v) ->
-                val key = k?.toString() ?: return@forEach
-                if (v != null) {
-                    map[key] = toJsonElement(v)
+            value.forEach { (key, nestedValue) ->
+                val parsedKey = key?.toString() ?: return@forEach
+                if (nestedValue != null) {
+                    map[parsedKey] = toJsonElement(nestedValue)
                 }
             }
             JsonObject(map)
@@ -750,4 +650,3 @@ private fun toJsonElement(value: Any): JsonElement {
         else -> JsonPrimitive(value.toString())
     }
 }
-
