@@ -6,6 +6,10 @@ import com.nuvio.app.features.home.HomeCatalogParser
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.stableKey
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -18,29 +22,30 @@ data class CatalogPage(
 )
 
 private val inflightMutex = Mutex()
+private val inflightRequestScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 private val inflightRequests = mutableMapOf<String, CompletableDeferred<String>>()
 
 private suspend fun deduplicatedHttpGetText(url: String): String {
-    val existing = inflightMutex.withLock { inflightRequests[url] }
-    if (existing != null) return existing.await()
-    val deferred = CompletableDeferred<String>()
-    val isOwner = inflightMutex.withLock {
-        val race = inflightRequests[url]
-        if (race != null) return@withLock false
-        inflightRequests[url] = deferred
-        true
+    val deferred = inflightMutex.withLock {
+        inflightRequests[url] ?: CompletableDeferred<String>().also { created ->
+            inflightRequests[url] = created
+            inflightRequestScope.launch {
+                try {
+                    created.complete(httpGetText(url))
+                } catch (error: Throwable) {
+                    created.completeExceptionally(error)
+                } finally {
+                    inflightMutex.withLock {
+                        if (inflightRequests[url] === created) {
+                            inflightRequests.remove(url)
+                        }
+                    }
+                }
+            }
+        }
     }
-    if (!isOwner) return inflightMutex.withLock { inflightRequests[url]!! }.await()
-    return try {
-        val result = httpGetText(url)
-        deferred.complete(result)
-        result
-    } catch (e: Throwable) {
-        deferred.completeExceptionally(e)
-        throw e
-    } finally {
-        inflightMutex.withLock { inflightRequests.remove(url) }
-    }
+
+    return deferred.await()
 }
 
 suspend fun fetchCatalogPage(
