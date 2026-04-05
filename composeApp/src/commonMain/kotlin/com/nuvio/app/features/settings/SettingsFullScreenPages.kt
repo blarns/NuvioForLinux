@@ -24,13 +24,29 @@ fun HomescreenSettingsScreen(
     onBack: () -> Unit,
 ) {
     val addonsUiState by AddonRepository.uiState.collectAsStateWithLifecycle()
+    val homescreenCatalogRefreshKey = remember(addonsUiState.addons) {
+        val allManifestsSettled = addonsUiState.addons.isNotEmpty() &&
+            addonsUiState.addons.none { it.isRefreshing }
+        if (!allManifestsSettled) return@remember emptyList<String>()
+        addonsUiState.addons.mapNotNull { addon ->
+            val manifest = addon.manifest ?: return@mapNotNull null
+            buildString {
+                append(manifest.transportUrl)
+                append(':')
+                append(manifest.catalogs.joinToString(separator = ",") { catalog ->
+                    "${catalog.type}:${catalog.id}:${catalog.extra.count { it.isRequired }}"
+                })
+            }
+        }
+    }
     val homescreenSettingsUiState by HomeCatalogSettingsRepository.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         AddonRepository.initialize()
     }
 
-    LaunchedEffect(addonsUiState.addons) {
+    LaunchedEffect(homescreenCatalogRefreshKey) {
+        if (homescreenCatalogRefreshKey.isEmpty()) return@LaunchedEffect
         HomeCatalogSettingsRepository.syncCatalogs(addonsUiState.addons)
     }
 

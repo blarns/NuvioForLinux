@@ -246,11 +246,9 @@ kotlin {
 }
 
 afterEvaluate {
-    if (iosDistribution == "full") {
-        dependencies {
-            add("androidFullImplementation", libs.quickjs.kt)
-            add("androidFullImplementation", libs.ksoup)
-        }
+    dependencies {
+        add("fullImplementation", libs.quickjs.kt)
+        add("fullImplementation", libs.ksoup)
     }
 }
 

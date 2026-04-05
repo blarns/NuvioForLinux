@@ -100,6 +100,10 @@ object HomeCatalogSettingsRepository {
     fun syncCatalogs(addons: List<ManagedAddon>) {
         ensureLoaded()
         definitions = buildHomeCatalogDefinitions(addons)
+        if (definitions.isEmpty()) {
+            publish()
+            return
+        }
         normalizePreferences()
         publish()
         persist()
