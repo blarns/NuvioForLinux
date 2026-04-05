@@ -49,6 +49,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
 
 private const val TAG = "NuvioPlayer"
 
@@ -434,11 +435,38 @@ private fun ExoPlayer.extractAudioTracks(): List<AudioTrack> {
     for (group in currentTracks.groups) {
         if (group.type != C.TRACK_TYPE_AUDIO) continue
         val format = group.mediaTrackGroup.getFormat(0)
+        val channelLabel = when {
+            format.channelCount == 1 -> "Mono"
+            format.channelCount == 2 -> "Stereo"
+            format.channelCount == 6 -> "5.1"
+            format.channelCount == 8 -> "7.1"
+            format.channelCount > 0 -> "${format.channelCount}ch"
+            else -> null
+        }
+        val mime = format.sampleMimeType?.lowercase()
+        val codecLabel = when {
+            mime == null -> null
+            mime.contains("eac3-joc") -> "Dolby Atmos"
+            mime.contains("truehd") && format.channelCount >= 8 -> "Dolby Atmos"
+            mime.contains("truehd") -> "Dolby TrueHD"
+            mime.contains("eac3") -> "Dolby Digital Plus"
+            mime.contains("ac3") -> "Dolby Digital"
+            mime.contains("opus") -> "Opus"
+            mime.contains("aac") -> "AAC"
+            mime.contains("dts-hd") -> "DTS-HD"
+            mime.contains("dts") -> "DTS"
+            else -> null
+        }
+        val resolvedLanguage = format.language?.let { lang -> Locale(lang).displayLanguage.takeIf { name -> name.isNotBlank() && name != lang } }
+        val baseName = format.label?.takeIf { it.isNotBlank() } ?: resolvedLanguage ?: format.language ?: "Track ${idx + 1}"
+        val suffix = listOfNotNull(channelLabel, codecLabel)
+            .joinToString(" ")
+            .let { if (it.isNotBlank()) " ($it)" else "" }
         tracks.add(
             AudioTrack(
                 index = idx,
                 id = format.id ?: idx.toString(),
-                label = format.label ?: "",
+                label = "$baseName$suffix",
                 language = format.language,
                 isSelected = group.isSelected,
             )
