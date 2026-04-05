@@ -147,6 +147,7 @@ fun PlayerScreen(
         var layoutSize by remember { mutableStateOf(IntSize.Zero) }
         var playbackSnapshot by remember { mutableStateOf(PlayerPlaybackSnapshot()) }
         var playerController by remember { mutableStateOf<PlayerEngineController?>(null) }
+        var playerControllerSourceUrl by remember { mutableStateOf<String?>(null) }
         var errorMessage by remember { mutableStateOf<String?>(null) }
         var scrubbingPositionMs by remember { mutableStateOf<Long?>(null) }
         var pausedOverlayVisible by remember { mutableStateOf(false) }
@@ -350,8 +351,6 @@ fun PlayerScreen(
             val selectedAudio = audioTracks.firstOrNull { it.isSelected }
             if (selectedAudio != null) selectedAudioIndex = selectedAudio.index
             val selectedSub = subtitleTracks.firstOrNull { it.isSelected }
-            println("NuvioPlayer refreshTracks: useCustom=$useCustomSubtitles selectedAddonId=$selectedAddonSubtitleId selectedSubIdx=$selectedSubtitleIndex")
-            println("NuvioPlayer refreshTracks: found ${subtitleTracks.size} subtitle tracks, selectedTrack=${selectedSub?.index}")
             if (selectedSub != null && !useCustomSubtitles) selectedSubtitleIndex = selectedSub.index
 
             if (!preferredAudioSelectionApplied) {
@@ -416,7 +415,6 @@ fun PlayerScreen(
                 }
             }
 
-            println("NuvioPlayer refreshTracks: final selectedSubtitleIndex=$selectedSubtitleIndex")
         }
 
         fun showGestureFeedback(feedback: GestureFeedbackState) {
@@ -495,7 +493,14 @@ fun PlayerScreen(
             val url = stream.directPlaybackUrl ?: return
             if (url == activeSourceUrl) return
             flushWatchProgress()
-            // Cache for reuse-last-link
+            val resumeVideoId = buildPlaybackVideoId(
+                parentMetaId = parentMetaId,
+                seasonNumber = activeSeasonNumber,
+                episodeNumber = activeEpisodeNumber,
+                fallbackVideoId = activeVideoId,
+            )
+            val entry = WatchProgressRepository.progressForVideo(resumeVideoId)
+            val resumePositionMs = entry?.lastPositionMs?.takeIf { it > 0L } ?: 0L
             if (playerSettingsUiState.streamReuseLastLinkEnabled && activeVideoId != null) {
                 val cacheKey = StreamLinkCacheRepository.contentKey(
                     contentType ?: parentMetaType,
@@ -518,7 +523,7 @@ fun PlayerScreen(
             activeStreamSubtitle = stream.streamSubtitle
             activeProviderName = stream.addonName
             activeProviderAddonId = stream.addonId
-            activeInitialPositionMs = 0L
+            activeInitialPositionMs = resumePositionMs
             activeInitialProgressFraction = null
             showSourcesPanel = false
             controlsVisible = true
@@ -527,9 +532,18 @@ fun PlayerScreen(
         fun switchToEpisodeStream(stream: StreamItem, episode: MetaVideo) {
             val url = stream.directPlaybackUrl ?: return
             flushWatchProgress()
-            // Cache for reuse-last-link
+            val epVideoId = episode.id
+            val epResumeVideoId = buildPlaybackVideoId(
+                parentMetaId = parentMetaId,
+                seasonNumber = episode.season,
+                episodeNumber = episode.episode,
+                fallbackVideoId = epVideoId,
+            )
+            val epEntry = WatchProgressRepository.progressForVideo(epResumeVideoId)
+            val epResumePositionMs = epEntry
+                ?.takeIf { !it.isCompleted }
+                ?.lastPositionMs?.takeIf { it > 0L } ?: 0L
             if (playerSettingsUiState.streamReuseLastLinkEnabled) {
-                val epVideoId = episode.id
                 val cacheKey = StreamLinkCacheRepository.contentKey(
                     contentType ?: parentMetaType,
                     epVideoId,
@@ -556,7 +570,7 @@ fun PlayerScreen(
             activeEpisodeTitle = episode.title
             activeEpisodeThumbnail = episode.thumbnail
             activeVideoId = episode.id
-            activeInitialPositionMs = 0L
+            activeInitialPositionMs = epResumePositionMs
             activeInitialProgressFraction = null
             showEpisodesPanel = false
             episodeStreamsPanelState = EpisodeStreamsPanelState()
@@ -679,6 +693,9 @@ fun PlayerScreen(
 
         LaunchedEffect(activeSourceUrl, activeSourceAudioUrl, activeSourceHeaders) {
             errorMessage = null
+            playerController = null
+            playerControllerSourceUrl = null
+            playbackSnapshot = PlayerPlaybackSnapshot()
             scrubbingPositionMs = null
             initialLoadCompleted = false
             lastProgressPersistEpochMs = 0L
@@ -723,6 +740,7 @@ fun PlayerScreen(
 
         LaunchedEffect(
             playerController,
+            playerControllerSourceUrl,
             playbackSnapshot.isLoading,
             playbackSnapshot.durationMs,
             activeInitialPositionMs,
@@ -730,6 +748,9 @@ fun PlayerScreen(
             initialSeekApplied,
         ) {
             val controller = playerController ?: return@LaunchedEffect
+            if (playerControllerSourceUrl != activeSourceUrl) {
+                return@LaunchedEffect
+            }
             if (initialSeekApplied || playbackSnapshot.isLoading) {
                 return@LaunchedEffect
             }
@@ -1034,6 +1055,7 @@ fun PlayerScreen(
                 resizeMode = resizeMode,
                 onControllerReady = { controller ->
                     playerController = controller
+                    playerControllerSourceUrl = activeSourceUrl
                 },
                 onSnapshot = { snapshot ->
                     playbackSnapshot = snapshot
@@ -1220,7 +1242,6 @@ fun PlayerScreen(
                 subtitleStyle = subtitleStyle,
                 onTabSelected = { activeSubtitleTab = it },
                 onBuiltInTrackSelected = { index ->
-                    println("NuvioPlayer onBuiltInTrackSelected: index=$index wasCustom=$useCustomSubtitles")
                     val wasCustom = useCustomSubtitles
                     selectedSubtitleIndex = index
                     selectedAddonSubtitleId = null
@@ -1232,11 +1253,9 @@ fun PlayerScreen(
                     }
                 },
                 onAddonSubtitleSelected = { addon ->
-                    println("NuvioPlayer onAddonSubtitleSelected: id=${addon.id} url=${addon.url} lang=${addon.language}")
                     selectedAddonSubtitleId = addon.id
                     selectedSubtitleIndex = -1
                     useCustomSubtitles = true
-                    println("NuvioPlayer onAddonSubtitleSelected: set useCustomSubtitles=true, calling setSubtitleUri")
                     playerController?.setSubtitleUri(addon.url)
                 },
                 onFetchAddonSubtitles = {
