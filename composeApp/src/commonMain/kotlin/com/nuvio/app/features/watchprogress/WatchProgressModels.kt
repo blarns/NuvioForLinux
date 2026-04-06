@@ -53,6 +53,18 @@ data class WatchProgressEntry(
 
     val isResumable: Boolean
         get() = !isCompleted
+
+    fun resolveResumePosition(actualDurationMs: Long): Long {
+        if (actualDurationMs <= 0L) return lastPositionMs.coerceAtLeast(0L)
+        if (durationMs > 0L && lastPositionMs > 0L) {
+            return lastPositionMs.coerceIn(0L, actualDurationMs)
+        }
+        progressPercent?.let { percent ->
+            val fraction = (percent / 100f).coerceIn(0f, 1f)
+            return (actualDurationMs * fraction).toLong()
+        }
+        return lastPositionMs.coerceAtLeast(0L)
+    }
 }
 
 data class WatchProgressUiState(

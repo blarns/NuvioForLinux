@@ -507,15 +507,8 @@ fun PlayerScreen(
         fun switchToSource(stream: StreamItem) {
             val url = stream.directPlaybackUrl ?: return
             if (url == activeSourceUrl) return
+            val currentPositionMs = playbackSnapshot.positionMs.coerceAtLeast(0L)
             flushWatchProgress()
-            val resumeVideoId = buildPlaybackVideoId(
-                parentMetaId = parentMetaId,
-                seasonNumber = activeSeasonNumber,
-                episodeNumber = activeEpisodeNumber,
-                fallbackVideoId = activeVideoId,
-            )
-            val entry = WatchProgressRepository.progressForVideo(resumeVideoId)
-            val resumePositionMs = entry?.lastPositionMs?.takeIf { it > 0L } ?: 0L
             if (playerSettingsUiState.streamReuseLastLinkEnabled && activeVideoId != null) {
                 val cacheKey = StreamLinkCacheRepository.contentKey(
                     contentType ?: parentMetaType,
@@ -538,7 +531,7 @@ fun PlayerScreen(
             activeStreamSubtitle = stream.streamSubtitle
             activeProviderName = stream.addonName
             activeProviderAddonId = stream.addonId
-            activeInitialPositionMs = resumePositionMs
+            activeInitialPositionMs = currentPositionMs
             activeInitialProgressFraction = null
             showSourcesPanel = false
             controlsVisible = true
@@ -564,9 +557,11 @@ fun PlayerScreen(
                 fallbackVideoId = epVideoId,
             )
             val epEntry = WatchProgressRepository.progressForVideo(epResumeVideoId)
-            val epResumePositionMs = epEntry
                 ?.takeIf { !it.isCompleted }
-                ?.lastPositionMs?.takeIf { it > 0L } ?: 0L
+            val epResumeFraction = epEntry?.progressPercent
+                ?.takeIf { it > 0f }
+                ?.let { (it / 100f).coerceIn(0f, 1f) }
+            val epResumePositionMs = epEntry?.lastPositionMs?.takeIf { it > 0L } ?: 0L
             if (playerSettingsUiState.streamReuseLastLinkEnabled) {
                 val cacheKey = StreamLinkCacheRepository.contentKey(
                     contentType ?: parentMetaType,
@@ -595,7 +590,7 @@ fun PlayerScreen(
             activeEpisodeThumbnail = episode.thumbnail
             activeVideoId = episode.id
             activeInitialPositionMs = epResumePositionMs
-            activeInitialProgressFraction = null
+            activeInitialProgressFraction = epResumeFraction
             controlsVisible = true
         }
 

@@ -26,7 +26,6 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 
 private const val BASE_URL = "https://api.trakt.tv"
-private const val PLAYBACK_SYNTHETIC_DURATION_MS = 100_000L
 private const val HISTORY_LIMIT = 250
 private const val METADATA_FETCH_TIMEOUT_MS = 3_500L
 private const val METADATA_FETCH_CONCURRENCY = 5
@@ -356,8 +355,6 @@ object TraktProgressRepository {
 
         val progressPercent = normalizeTraktProgressPercent(item.progress) ?: return null
         if (progressPercent <= 0f) return null
-        val progressFraction = progressPercent / 100f
-        val positionMs = (PLAYBACK_SYNTHETIC_DURATION_MS * progressFraction).toLong()
 
         return WatchProgressEntry(
             contentType = "movie",
@@ -365,8 +362,8 @@ object TraktProgressRepository {
             parentMetaType = "movie",
             videoId = parentMetaId,
             title = movie.title ?: parentMetaId,
-            lastPositionMs = positionMs,
-            durationMs = PLAYBACK_SYNTHETIC_DURATION_MS,
+            lastPositionMs = 0L,
+            durationMs = 0L,
             lastUpdatedEpochMs = rankedTimestamp(item.pausedAt, fallbackIndex),
             isCompleted = false,
             progressPercent = progressPercent,
@@ -384,8 +381,6 @@ object TraktProgressRepository {
 
         val progressPercent = normalizeTraktProgressPercent(item.progress) ?: return null
         if (progressPercent <= 0f) return null
-        val progressFraction = progressPercent / 100f
-        val positionMs = (PLAYBACK_SYNTHETIC_DURATION_MS * progressFraction).toLong()
 
         return WatchProgressEntry(
             contentType = "series",
@@ -401,8 +396,8 @@ object TraktProgressRepository {
             seasonNumber = season,
             episodeNumber = number,
             episodeTitle = episode.title,
-            lastPositionMs = positionMs,
-            durationMs = PLAYBACK_SYNTHETIC_DURATION_MS,
+            lastPositionMs = 0L,
+            durationMs = 0L,
             lastUpdatedEpochMs = rankedTimestamp(item.pausedAt, fallbackIndex),
             isCompleted = false,
             progressPercent = progressPercent,
