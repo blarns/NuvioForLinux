@@ -2,9 +2,13 @@ package com.nuvio.app.features.collection
 
 import co.touchlab.kermit.Logger
 import com.nuvio.app.features.addons.AddonRepository
+import com.nuvio.app.features.catalog.CATALOG_PAGE_SIZE
 import com.nuvio.app.features.catalog.fetchCatalogPage
+import com.nuvio.app.features.catalog.mergeCatalogItems
+import com.nuvio.app.features.catalog.supportsPagination
 import com.nuvio.app.features.home.HomeCatalogSection
 import com.nuvio.app.features.home.MetaPreview
+import com.nuvio.app.features.home.stableKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -17,11 +21,20 @@ import kotlinx.coroutines.launch
 data class FolderTab(
     val label: String,
     val typeLabel: String = "",
+    val manifestUrl: String? = null,
+    val type: String = "",
+    val catalogId: String = "",
+    val supportsPagination: Boolean = false,
     val items: List<MetaPreview> = emptyList(),
     val isLoading: Boolean = true,
+    val isLoadingMore: Boolean = false,
+    val nextSkip: Int? = null,
     val error: String? = null,
     val isAllTab: Boolean = false,
-)
+) {
+    val canLoadMore: Boolean
+        get() = supportsPagination && nextSkip != null
+}
 
 data class FolderDetailUiState(
     val folder: CollectionFolder? = null,
@@ -31,7 +44,30 @@ data class FolderDetailUiState(
     val selectedTabIndex: Int = 0,
     val isLoading: Boolean = true,
     val showAllTab: Boolean = true,
-)
+) {
+    val selectedTab: FolderTab?
+        get() = tabs.getOrNull(selectedTabIndex)
+
+    val selectedTabCanLoadMore: Boolean
+        get() {
+            val currentTab = selectedTab ?: return false
+            return if (currentTab.isAllTab) {
+                tabs.any { !it.isAllTab && it.canLoadMore }
+            } else {
+                currentTab.canLoadMore
+            }
+        }
+
+    val selectedTabIsLoadingMore: Boolean
+        get() {
+            val currentTab = selectedTab ?: return false
+            return if (currentTab.isAllTab) {
+                tabs.any { !it.isAllTab && it.isLoadingMore }
+            } else {
+                currentTab.isLoadingMore
+            }
+        }
+}
 
 object FolderDetailRepository {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -40,10 +76,24 @@ object FolderDetailRepository {
     private val _uiState = MutableStateFlow(FolderDetailUiState())
     val uiState: StateFlow<FolderDetailUiState> = _uiState.asStateFlow()
 
-    private var loadJobs = mutableListOf<Job>()
+    private val loadJobs = mutableMapOf<Int, Job>()
+    private var activeCollectionId: String? = null
+    private var activeFolderId: String? = null
 
     fun initialize(collectionId: String, folderId: String) {
+        val current = _uiState.value
+        if (
+            activeCollectionId == collectionId &&
+            activeFolderId == folderId &&
+            current.folder?.id == folderId &&
+            current.tabs.isNotEmpty()
+        ) {
+            return
+        }
+
         clear()
+        activeCollectionId = collectionId
+        activeFolderId = folderId
 
         val collection = CollectionRepository.getCollection(collectionId)
         if (collection == null) {
@@ -77,6 +127,10 @@ object FolderDetailRepository {
                     FolderTab(
                         label = "$label ($typeLabel)",
                         typeLabel = typeLabel,
+                        manifestUrl = addon?.manifestUrl,
+                        type = source.type,
+                        catalogId = source.catalogId,
+                        supportsPagination = catalog?.supportsPagination() == true,
                         isLoading = true,
                     ),
                 )
@@ -102,22 +156,7 @@ object FolderDetailRepository {
                 return@forEachIndexed
             }
 
-            val job = scope.launch {
-                runCatching {
-                    val page = fetchCatalogPage(
-                        manifestUrl = addon.manifestUrl,
-                        type = source.type,
-                        catalogId = source.catalogId,
-                    )
-                    updateTab(tabIndex) { it.copy(items = page.items, isLoading = false) }
-                    rebuildAllTab()
-                }.onFailure { e ->
-                    log.e(e) { "Failed to load catalog ${source.catalogId} from ${source.addonId}" }
-                    updateTab(tabIndex) { it.copy(isLoading = false, error = e.message) }
-                    rebuildAllTab()
-                }
-            }
-            loadJobs.add(job)
+            loadTabPage(tabIndex, reset = true)
         }
 
         // If no sources, mark as done
@@ -131,9 +170,28 @@ object FolderDetailRepository {
     }
 
     fun clear() {
-        loadJobs.forEach { it.cancel() }
+        loadJobs.values.forEach { it.cancel() }
         loadJobs.clear()
+        activeCollectionId = null
+        activeFolderId = null
         _uiState.value = FolderDetailUiState()
+    }
+
+    fun loadMoreSelectedTab() {
+        val current = _uiState.value
+        val selectedTab = current.selectedTab ?: return
+        if (selectedTab.isAllTab) {
+            current.tabs.forEachIndexed { index, tab ->
+                if (!tab.isAllTab && tab.canLoadMore && !tab.isLoading && !tab.isLoadingMore) {
+                    loadTabPage(index, reset = false)
+                }
+            }
+            return
+        }
+
+        if (selectedTab.canLoadMore && !selectedTab.isLoading && !selectedTab.isLoadingMore) {
+            loadTabPage(current.selectedTabIndex, reset = false)
+        }
     }
 
     private fun updateTab(index: Int, transform: (FolderTab) -> FolderTab) {
@@ -149,21 +207,90 @@ object FolderDetailRepository {
         )
     }
 
+    private fun loadTabPage(index: Int, reset: Boolean) {
+        val currentTab = _uiState.value.tabs.getOrNull(index) ?: return
+        val manifestUrl = currentTab.manifestUrl ?: return
+        val requestedSkip = if (reset) 0 else currentTab.nextSkip ?: return
+
+        updateTab(index) { tab ->
+            if (reset) {
+                tab.copy(
+                    items = emptyList(),
+                    isLoading = true,
+                    isLoadingMore = false,
+                    nextSkip = null,
+                    error = null,
+                )
+            } else {
+                tab.copy(
+                    isLoadingMore = true,
+                    error = null,
+                )
+            }
+        }
+
+        loadJobs.remove(index)?.cancel()
+        val job = scope.launch {
+            runCatching {
+                fetchCatalogPage(
+                    manifestUrl = manifestUrl,
+                    type = currentTab.type,
+                    catalogId = currentTab.catalogId,
+                    skip = requestedSkip.takeIf { it > 0 },
+                )
+            }.onSuccess { page ->
+                updateTab(index) { tab ->
+                    val mergedItems = if (reset) {
+                        page.items
+                    } else {
+                        mergeCatalogItems(tab.items, page.items)
+                    }
+                    val supportsPagination = tab.supportsPagination || page.rawItemCount >= CATALOG_PAGE_SIZE
+                    val loadedNewItems = reset || mergedItems.size > tab.items.size
+                    tab.copy(
+                        items = mergedItems,
+                        supportsPagination = supportsPagination,
+                        isLoading = false,
+                        isLoadingMore = false,
+                        nextSkip = if (supportsPagination && loadedNewItems) page.nextSkip else null,
+                        error = null,
+                    )
+                }
+                rebuildAllTab()
+            }.onFailure { error ->
+                log.e(error) { "Failed to load catalog ${currentTab.catalogId} from $manifestUrl" }
+                updateTab(index) { tab ->
+                    tab.copy(
+                        isLoading = false,
+                        isLoadingMore = false,
+                        nextSkip = if (reset) null else tab.nextSkip,
+                        error = error.message,
+                    )
+                }
+                rebuildAllTab()
+            }
+        }
+        loadJobs[index] = job
+    }
+
     private fun rebuildAllTab() {
         val current = _uiState.value
         if (!current.showAllTab) return
         val sourceTabs = current.tabs.filter { !it.isAllTab }
-        if (sourceTabs.any { it.isLoading }) return
 
         // Round-robin merge
         val merged = mutableListOf<MetaPreview>()
+        val seenKeys = mutableSetOf<String>()
         val iterators = sourceTabs.map { it.items.iterator() }
         var hasMore = true
         while (hasMore) {
             hasMore = false
             for (iterator in iterators) {
                 if (iterator.hasNext()) {
-                    merged.add(iterator.next())
+                    val item = iterator.next()
+                    if (seenKeys.add(item.stableKey())) {
+                        merged.add(item)
+                    }
                     hasMore = true
                 }
             }
@@ -172,9 +299,14 @@ object FolderDetailRepository {
         val updatedTabs = current.tabs.toMutableList()
         val allTabIndex = updatedTabs.indexOfFirst { it.isAllTab }
         if (allTabIndex >= 0) {
+            val hasInitialLoads = sourceTabs.any { it.isLoading }
+            val hasLoadMore = sourceTabs.any { it.isLoadingMore }
+            val errorMessage = sourceTabs.firstOrNull { it.error != null }?.error
             updatedTabs[allTabIndex] = updatedTabs[allTabIndex].copy(
                 items = merged,
-                isLoading = false,
+                isLoading = hasInitialLoads,
+                isLoadingMore = hasLoadMore,
+                error = errorMessage.takeIf { merged.isEmpty() },
             )
         }
         _uiState.value = current.copy(tabs = updatedTabs)
@@ -190,10 +322,12 @@ object FolderDetailRepository {
                 title = tab.label,
                 subtitle = tab.typeLabel,
                 addonName = "",
-                type = "",
-                manifestUrl = "",
-                catalogId = "",
+                type = tab.type,
+                manifestUrl = tab.manifestUrl.orEmpty(),
+                catalogId = tab.catalogId,
                 items = tab.items,
+                availableItemCount = tab.items.size,
+                supportsPagination = tab.supportsPagination,
             )
         }
     }

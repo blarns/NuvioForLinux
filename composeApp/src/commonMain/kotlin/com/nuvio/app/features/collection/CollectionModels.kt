@@ -12,7 +12,12 @@ enum class FolderViewMode {
 
     companion object {
         fun fromString(value: String): FolderViewMode =
-            entries.firstOrNull { it.name.equals(value, ignoreCase = true) } ?: TABBED_GRID
+            when {
+                value.equals(FOLLOW_LAYOUT.name, ignoreCase = true) -> ROWS
+                value.equals(ROWS.name, ignoreCase = true) -> ROWS
+                value.equals(TABBED_GRID.name, ignoreCase = true) -> TABBED_GRID
+                else -> TABBED_GRID
+            }
     }
 }
 

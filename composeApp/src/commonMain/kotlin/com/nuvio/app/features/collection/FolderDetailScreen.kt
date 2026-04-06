@@ -5,34 +5,33 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,26 +41,42 @@ import com.nuvio.app.core.ui.NuvioPosterCard
 import com.nuvio.app.core.ui.NuvioPosterShape
 import com.nuvio.app.core.ui.NuvioScreenHeader
 import com.nuvio.app.core.ui.nuvioPlatformExtraBottomPadding
-import com.nuvio.app.core.ui.nuvioPlatformExtraTopPadding
+import com.nuvio.app.features.home.HomeCatalogSection
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.PosterShape
+import com.nuvio.app.features.home.canOpenCatalog
+import com.nuvio.app.features.home.stableKey
 import com.nuvio.app.features.home.components.HomeCatalogRowSection
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 
 @Composable
 fun FolderDetailScreen(
     onBack: () -> Unit,
+    onCatalogClick: (HomeCatalogSection) -> Unit,
     onPosterClick: (MetaPreview) -> Unit,
 ) {
     val uiState by FolderDetailRepository.uiState.collectAsState()
     val folder = uiState.folder
+    val coverImageUrl = folder?.coverImageUrl?.takeIf { it.isNotBlank() }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
     ) {
+        if (coverImageUrl != null) {
+            FolderCoverImage(
+                imageUrl = coverImageUrl,
+                title = folder.title,
+            )
+        }
+
         NuvioScreenHeader(
             title = folder?.title ?: uiState.collectionTitle,
+            modifier = Modifier.padding(horizontal = 16.dp),
+            includeStatusBarPadding = coverImageUrl == null,
             onBack = onBack,
         )
 
@@ -87,14 +102,31 @@ fun FolderDetailScreen(
             )
             FolderViewMode.ROWS -> RowsContent(
                 uiState = uiState,
+                onCatalogClick = onCatalogClick,
                 onPosterClick = onPosterClick,
             )
             FolderViewMode.FOLLOW_LAYOUT -> RowsContent(
                 uiState = uiState,
+                onCatalogClick = onCatalogClick,
                 onPosterClick = onPosterClick,
             )
         }
     }
+}
+
+@Composable
+private fun FolderCoverImage(
+    imageUrl: String,
+    title: String,
+) {
+    AsyncImage(
+        model = imageUrl,
+        contentDescription = title,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(176.dp),
+        contentScale = ContentScale.Crop,
+    )
 }
 
 @Composable
@@ -103,33 +135,45 @@ private fun TabbedGridContent(
     onTabSelected: (Int) -> Unit,
     onPosterClick: (MetaPreview) -> Unit,
 ) {
-    val folder = uiState.folder ?: return
+    val gridState = rememberLazyGridState()
+
+    LaunchedEffect(gridState, uiState.selectedTabIndex, uiState.selectedTabCanLoadMore, uiState.selectedTabIsLoadingMore) {
+        snapshotFlow { gridState.layoutInfo }
+            .map { layoutInfo ->
+                val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+                lastVisible >= layoutInfo.totalItemsCount - 6
+            }
+            .distinctUntilChanged()
+            .filter { it && uiState.selectedTabCanLoadMore && !uiState.selectedTabIsLoadingMore }
+            .collect {
+                FolderDetailRepository.loadMoreSelectedTab()
+            }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Folder header with cover + tabs
-        FolderHeader(folder = folder)
-
         if (uiState.tabs.size > 1) {
-            ScrollableTabRow(
-                selectedTabIndex = uiState.selectedTabIndex,
-                modifier = Modifier.fillMaxWidth(),
-                edgePadding = 16.dp,
-                containerColor = MaterialTheme.colorScheme.background,
-                contentColor = MaterialTheme.colorScheme.onBackground,
-                divider = {},
-            ) {
-                uiState.tabs.forEachIndexed { index, tab ->
-                    Tab(
-                        selected = index == uiState.selectedTabIndex,
-                        onClick = { onTabSelected(index) },
-                        text = {
-                            Text(
-                                text = tab.label,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        },
-                    )
+            CompositionLocalProvider(LocalRippleConfiguration provides null) {
+                ScrollableTabRow(
+                    selectedTabIndex = uiState.selectedTabIndex,
+                    modifier = Modifier.fillMaxWidth(),
+                    edgePadding = 16.dp,
+                    containerColor = MaterialTheme.colorScheme.background,
+                    contentColor = MaterialTheme.colorScheme.onBackground,
+                    divider = {},
+                ) {
+                    uiState.tabs.forEachIndexed { index, tab ->
+                        Tab(
+                            selected = index == uiState.selectedTabIndex,
+                            onClick = { onTabSelected(index) },
+                            text = {
+                                Text(
+                                    text = tab.label,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -141,20 +185,16 @@ private fun TabbedGridContent(
         if (selectedTab == null) return
 
         when {
-            selectedTab.isLoading -> LoadingIndicator()
-            selectedTab.error != null -> ErrorMessage(selectedTab.error)
+            selectedTab.isLoading && selectedTab.items.isEmpty() -> LoadingIndicator()
+            selectedTab.error != null && selectedTab.items.isEmpty() -> ErrorMessage(selectedTab.error)
             selectedTab.items.isEmpty() -> EmptyMessage()
             else -> {
-                val posterShape = folder.posterShape
-                val nuvioShape = posterShape.toNuvioPosterShape()
-                val columns = when (nuvioShape) {
-                    NuvioPosterShape.Poster -> 3
-                    NuvioPosterShape.Square -> 3
-                    NuvioPosterShape.Landscape -> 2
-                }
+                val nuvioShape = NuvioPosterShape.Poster
+                val columns = 3
 
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(columns),
+                    state = gridState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
                         start = 16.dp,
@@ -166,7 +206,7 @@ private fun TabbedGridContent(
                 ) {
                     items(
                         items = selectedTab.items,
-                        key = { it.id },
+                        key = { item -> item.stableKey() },
                     ) { item ->
                         NuvioPosterCard(
                             title = item.name,
@@ -175,6 +215,12 @@ private fun TabbedGridContent(
                             detailLine = item.releaseInfo,
                             onClick = { onPosterClick(item) },
                         )
+                    }
+
+                    if (uiState.selectedTabIsLoadingMore) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            PaginationLoadingFooter()
+                        }
                     }
                 }
             }
@@ -185,6 +231,7 @@ private fun TabbedGridContent(
 @Composable
 private fun RowsContent(
     uiState: FolderDetailUiState,
+    onCatalogClick: (HomeCatalogSection) -> Unit,
     onPosterClick: (MetaPreview) -> Unit,
 ) {
     val sections = FolderDetailRepository.getCatalogSectionsForRows()
@@ -213,6 +260,11 @@ private fun RowsContent(
             HomeCatalogRowSection(
                 section = section,
                 entries = section.items.take(18),
+                onViewAllClick = if (section.canOpenCatalog(18)) {
+                    { onCatalogClick(section) }
+                } else {
+                    null
+                },
                 onPosterClick = { onPosterClick(it) },
             )
         }
@@ -220,57 +272,18 @@ private fun RowsContent(
 }
 
 @Composable
-private fun FolderHeader(folder: CollectionFolder) {
-    Row(
+private fun PaginationLoadingFooter() {
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(vertical = 8.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        // Cover image or emoji
-        when {
-            !folder.coverImageUrl.isNullOrBlank() -> {
-                AsyncImage(
-                    model = folder.coverImageUrl,
-                    contentDescription = folder.title,
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surface),
-                    contentScale = ContentScale.Crop,
-                )
-            }
-            !folder.coverEmoji.isNullOrBlank() -> {
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surface),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = folder.coverEmoji,
-                        style = MaterialTheme.typography.headlineMedium,
-                    )
-                }
-            }
-        }
-
-        Column {
-            Text(
-                text = folder.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = "${folder.catalogSources.size} source${if (folder.catalogSources.size != 1) "s" else ""}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        CircularProgressIndicator(
+            modifier = Modifier.size(28.dp),
+            color = MaterialTheme.colorScheme.primary,
+            strokeWidth = 3.dp,
+        )
     }
 }
 
@@ -296,7 +309,7 @@ private fun ErrorMessage(error: String) {
     ) {
         Text(
             text = error,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.error,
             textAlign = TextAlign.Center,
         )

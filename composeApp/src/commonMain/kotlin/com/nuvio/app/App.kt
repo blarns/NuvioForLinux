@@ -1155,6 +1155,7 @@ private fun MainAppContent(
                             FolderDetailRepository.clear()
                             navController.popBackStack()
                         },
+                        onCatalogClick = onCatalogClick,
                         onPosterClick = { meta ->
                             navController.navigate(DetailRoute(type = meta.type, id = meta.id))
                         },

@@ -11,20 +11,15 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
@@ -32,17 +27,13 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -60,6 +51,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.nuvio.app.core.ui.NuvioInputField
+import com.nuvio.app.core.ui.NuvioPrimaryButton
+import com.nuvio.app.core.ui.NuvioScreen
+import com.nuvio.app.core.ui.NuvioScreenHeader
+import com.nuvio.app.core.ui.NuvioSectionLabel
+import com.nuvio.app.core.ui.NuvioSurfaceCard
 import com.nuvio.app.features.home.PosterShape
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -73,8 +70,6 @@ fun CollectionEditorScreen(
     LaunchedEffect(collectionId) {
         CollectionEditorRepository.initialize(collectionId)
     }
-
-    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     if (state.showFolderEditor && state.editingFolder != null) {
         FolderEditorSheet(
@@ -92,201 +87,171 @@ fun CollectionEditorScreen(
         )
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            top = 10.dp + statusBarTop,
-            end = 16.dp,
-            bottom = 18.dp,
-        ),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    NuvioScreen {
+        stickyHeader {
+            NuvioScreenHeader(
+                title = if (state.isNew) "New Collection" else "Edit Collection",
+                onBack = onBack,
+            )
+        }
+
+            // Title
         item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onBackground,
+                NuvioInputField(
+                    value = state.title,
+                    onValueChange = { CollectionEditorRepository.setTitle(it) },
+                    placeholder = "Collection Title",
+                )
+            }
+
+            // Backdrop URL
+        item {
+                NuvioInputField(
+                    value = state.backdropImageUrl,
+                    onValueChange = { CollectionEditorRepository.setBackdropImageUrl(it) },
+                    placeholder = "Backdrop Image URL (optional)",
+                )
+            }
+
+            // Pin to Top
+        item {
+                NuvioSurfaceCard {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { CollectionEditorRepository.setPinToTop(!state.pinToTop) },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text(
+                                text = "Pin to Top",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = "Display this collection above regular catalog rows.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = state.pinToTop,
+                            onCheckedChange = { CollectionEditorRepository.setPinToTop(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                uncheckedTrackColor = MaterialTheme.colorScheme.outlineVariant,
+                            ),
                         )
                     }
-                    Text(
-                        text = if (state.isNew) "New Collection" else "Edit Collection",
-                        style = MaterialTheme.typography.displayLarge,
-                        color = MaterialTheme.colorScheme.onBackground,
-                    )
                 }
             }
-        }
 
-        // Title
+            // View Mode
         item {
-            OutlinedTextField(
-                value = state.title,
-                onValueChange = { CollectionEditorRepository.setTitle(it) },
-                label = { Text("Collection Title") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-            )
-        }
-
-        // Backdrop URL
-        item {
-            OutlinedTextField(
-                value = state.backdropImageUrl,
-                onValueChange = { CollectionEditorRepository.setBackdropImageUrl(it) },
-                label = { Text("Backdrop Image URL (optional)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-            )
-        }
-
-        // Pin to Top
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { CollectionEditorRepository.setPinToTop(!state.pinToTop) }
-                    .padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                NuvioSurfaceCard {
                     Text(
-                        text = "Pin to Top",
+                        text = "View Mode",
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
-                    Text(
-                        text = "Display this collection above regular catalog rows.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(
-                    checked = state.pinToTop,
-                    onCheckedChange = { CollectionEditorRepository.setPinToTop(it) },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                        checkedTrackColor = MaterialTheme.colorScheme.primary,
-                    ),
-                )
-            }
-        }
-
-        // View Mode
-        item {
-            Column {
-                Text(
-                    text = "View Mode",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    FolderViewMode.entries.forEach { mode ->
-                        FilterChip(
-                            selected = state.viewMode == mode,
-                            onClick = { CollectionEditorRepository.setViewMode(mode) },
-                            label = {
-                                Text(
-                                    when (mode) {
-                                        FolderViewMode.TABBED_GRID -> "Tabbed Grid"
-                                        FolderViewMode.ROWS -> "Rows"
-                                        FolderViewMode.FOLLOW_LAYOUT -> "Follow Layout"
-                                    }
-                                )
-                            },
-                            leadingIcon = if (state.viewMode == mode) {
-                                {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Check,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
+                    Spacer(modifier = Modifier.height(8.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        FolderViewMode.entries
+                            .filter { it != FolderViewMode.FOLLOW_LAYOUT }
+                            .forEach { mode ->
+                            FilterChip(
+                                selected = state.viewMode == mode,
+                                onClick = { CollectionEditorRepository.setViewMode(mode) },
+                                label = {
+                                    Text(
+                                        when (mode) {
+                                            FolderViewMode.TABBED_GRID -> "Tabbed Grid"
+                                            FolderViewMode.ROWS -> "Rows"
+                                            FolderViewMode.FOLLOW_LAYOUT -> "Rows"
+                                        }
                                     )
-                                }
-                            } else null,
+                                },
+                                leadingIcon = if (state.viewMode == mode) {
+                                    {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                } else null,
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Show All Tab
+        item {
+                NuvioSurfaceCard {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { CollectionEditorRepository.setShowAllTab(!state.showAllTab) },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text(
+                                text = "Show \"All\" Tab",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = "Combine all folder catalogs into a single tab.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = state.showAllTab,
+                            onCheckedChange = { CollectionEditorRepository.setShowAllTab(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                uncheckedTrackColor = MaterialTheme.colorScheme.outlineVariant,
+                            ),
                         )
                     }
                 }
             }
-        }
 
-        // Show All Tab
+            // Folders Section Header
         item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { CollectionEditorRepository.setShowAllTab(!state.showAllTab) }
-                    .padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                    Text(
-                        text = "Show \"All\" Tab",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Text(
-                        text = "Combine all folder catalogs into a single tab.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(
-                    checked = state.showAllTab,
-                    onCheckedChange = { CollectionEditorRepository.setShowAllTab(it) },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                        checkedTrackColor = MaterialTheme.colorScheme.primary,
-                    ),
-                )
-            }
-        }
-
-        // Folders Section Header
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "FOLDERS",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                )
-                TextButton(onClick = { CollectionEditorRepository.addFolder() }) {
-                    Icon(
-                        imageVector = Icons.Rounded.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Add Folder")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    NuvioSectionLabel(text = "FOLDERS")
+                    TextButton(onClick = { CollectionEditorRepository.addFolder() }) {
+                        Icon(
+                            imageVector = Icons.Rounded.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Add Folder")
+                    }
                 }
             }
-        }
 
-        // Folder Items
+            // Folder Items
         itemsIndexed(
             items = state.folders,
             key = { _, folder -> folder.id },
@@ -304,42 +269,36 @@ fun CollectionEditorScreen(
 
         if (state.folders.isEmpty()) {
             item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 24.dp),
-                    contentAlignment = Alignment.Center,
+                NuvioSurfaceCard(
+                    modifier = Modifier.padding(top = 8.dp),
                 ) {
                     Text(
-                        text = "No folders yet. Add one to get started.",
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = "No folders yet",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Add one to get started.",
+                        style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
         }
 
-        // Save button
+            // Save button
         item {
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(
-                onClick = {
-                    if (CollectionEditorRepository.save()) {
-                        onBack()
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                enabled = state.title.isNotBlank(),
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Check,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
+                Spacer(modifier = Modifier.height(8.dp))
+                NuvioPrimaryButton(
+                    text = if (state.isNew) "Create Collection" else "Save Changes",
+                    enabled = state.title.isNotBlank(),
+                    onClick = {
+                        if (CollectionEditorRepository.save()) {
+                            onBack()
+                        }
+                    },
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(if (state.isNew) "Create Collection" else "Save Changes")
-            }
         }
     }
 }
@@ -354,87 +313,80 @@ private fun FolderListItem(
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-        ),
-        shape = RoundedCornerShape(12.dp),
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Folder cover preview
-                if (folder.coverEmoji != null) {
-                    Surface(
-                        modifier = Modifier.size(40.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(text = folder.coverEmoji, style = MaterialTheme.typography.titleLarge)
-                        }
+    NuvioSurfaceCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Folder cover preview
+            if (folder.coverEmoji != null) {
+                Surface(
+                    modifier = Modifier.size(40.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(text = folder.coverEmoji, style = MaterialTheme.typography.titleLarge)
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = folder.title,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = "${folder.catalogSources.size} source${if (folder.catalogSources.size != 1) "s" else ""} · ${folder.posterShape.name}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Spacer(modifier = Modifier.width(12.dp))
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                IconButton(
-                    onClick = onMoveUp,
-                    enabled = index > 0,
-                    modifier = Modifier.size(32.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.ArrowUpward,
-                        contentDescription = "Move up",
-                        modifier = Modifier.size(16.dp).alpha(if (index > 0) 1f else 0.3f),
-                    )
-                }
-                IconButton(
-                    onClick = onMoveDown,
-                    enabled = index < totalCount - 1,
-                    modifier = Modifier.size(32.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.ArrowDownward,
-                        contentDescription = "Move down",
-                        modifier = Modifier.size(16.dp).alpha(if (index < totalCount - 1) 1f else 0.3f),
-                    )
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
-                    Icon(
-                        imageVector = Icons.Rounded.Edit,
-                        contentDescription = "Edit",
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                    Icon(
-                        imageVector = Icons.Rounded.Delete,
-                        contentDescription = "Delete",
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.error,
-                    )
-                }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = folder.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "${folder.catalogSources.size} source${if (folder.catalogSources.size != 1) "s" else ""} · ${folder.posterShape.name}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            IconButton(
+                onClick = onMoveUp,
+                enabled = index > 0,
+                modifier = Modifier.size(36.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.ArrowUpward,
+                    contentDescription = "Move up",
+                    modifier = Modifier.size(20.dp).alpha(if (index > 0) 1f else 0.3f),
+                )
+            }
+            IconButton(
+                onClick = onMoveDown,
+                enabled = index < totalCount - 1,
+                modifier = Modifier.size(36.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.ArrowDownward,
+                    contentDescription = "Move down",
+                    modifier = Modifier.size(20.dp).alpha(if (index < totalCount - 1) 1f else 0.3f),
+                )
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    imageVector = Icons.Rounded.Edit,
+                    contentDescription = "Edit",
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+            IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    imageVector = Icons.Rounded.Delete,
+                    contentDescription = "Delete",
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.error,
+                )
             }
         }
     }
@@ -463,16 +415,15 @@ private fun FolderEditorSheet(
                     text = "Edit Folder",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
 
             item {
-                OutlinedTextField(
+                NuvioInputField(
                     value = folder.title,
                     onValueChange = { CollectionEditorRepository.updateFolderTitle(it) },
-                    label = { Text("Folder Title") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
+                    placeholder = "Folder Title",
                 )
             }
 
@@ -483,6 +434,7 @@ private fun FolderEditorSheet(
                         text = "Cover",
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -512,22 +464,19 @@ private fun FolderEditorSheet(
                     }
                     if (folder.coverEmoji != null) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
+                        NuvioInputField(
                             value = folder.coverEmoji,
                             onValueChange = { CollectionEditorRepository.updateFolderCoverEmoji(it) },
-                            label = { Text("Emoji") },
+                            placeholder = "Emoji",
                             modifier = Modifier.width(100.dp),
-                            singleLine = true,
                         )
                     }
                     if (folder.coverImageUrl != null) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
+                        NuvioInputField(
                             value = folder.coverImageUrl,
                             onValueChange = { CollectionEditorRepository.updateFolderCoverImage(it) },
-                            label = { Text("Image URL") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
+                            placeholder = "Image URL",
                         )
                     }
                 }
@@ -540,6 +489,7 @@ private fun FolderEditorSheet(
                         text = "Tile Shape",
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -577,6 +527,7 @@ private fun FolderEditorSheet(
                         text = "Hide Title",
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     Switch(
                         checked = folder.hideTitle,
@@ -584,6 +535,8 @@ private fun FolderEditorSheet(
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                             checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            uncheckedTrackColor = MaterialTheme.colorScheme.outlineVariant,
                         ),
                     )
                 }
@@ -596,12 +549,7 @@ private fun FolderEditorSheet(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = "CATALOG SOURCES",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                    )
+                    NuvioSectionLabel(text = "CATALOG SOURCES")
                     TextButton(onClick = { CollectionEditorRepository.showCatalogPicker() }) {
                         Icon(
                             imageVector = Icons.Rounded.Add,
@@ -615,28 +563,22 @@ private fun FolderEditorSheet(
             }
 
             itemsIndexed(folder.catalogSources) { index, source ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                    ),
-                    shape = RoundedCornerShape(8.dp),
-                ) {
+                NuvioSurfaceCard {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "${source.catalogId} (${source.type})",
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
                                 text = source.addonId,
-                                style = MaterialTheme.typography.bodySmall,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -644,12 +586,12 @@ private fun FolderEditorSheet(
                         }
                         IconButton(
                             onClick = { CollectionEditorRepository.removeCatalogSource(index) },
-                            modifier = Modifier.size(32.dp),
+                            modifier = Modifier.size(36.dp),
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Close,
                                 contentDescription = "Remove",
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(20.dp),
                                 tint = MaterialTheme.colorScheme.error,
                             )
                         }
@@ -661,7 +603,7 @@ private fun FolderEditorSheet(
                 item {
                     Text(
                         text = "No catalog sources. Tap \"Add\" to select from installed addons.",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 8.dp),
                     )
@@ -670,25 +612,30 @@ private fun FolderEditorSheet(
 
             // Save / Cancel
             item {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 8.dp, bottom = 24.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    TextButton(
-                        onClick = { CollectionEditorRepository.cancelFolderEdit() },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text("Cancel")
-                    }
-                    Button(
-                        onClick = { CollectionEditorRepository.saveFolderEdit() },
-                        modifier = Modifier.weight(1f),
+                    NuvioPrimaryButton(
+                        text = "Save Folder",
                         enabled = folder.title.isNotBlank(),
-                        shape = RoundedCornerShape(12.dp),
+                        onClick = { CollectionEditorRepository.saveFolderEdit() },
+                    )
+                    androidx.compose.material3.Button(
+                        onClick = { CollectionEditorRepository.cancelFolderEdit() },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                        ),
                     ) {
-                        Text("Save Folder")
+                        Text(
+                            text = "Cancel",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
                     }
                 }
             }
@@ -727,6 +674,7 @@ private fun CatalogPickerSheet(
                         text = "Select Catalog Sources",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     TextButton(onClick = onDismiss) {
                         Text("Done")
@@ -737,11 +685,8 @@ private fun CatalogPickerSheet(
             val grouped = availableCatalogs.groupBy { it.addonName }
             grouped.forEach { (addonName, catalogs) ->
                 item {
-                    Text(
-                        text = addonName,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
+                    NuvioSectionLabel(
+                        text = addonName.uppercase(),
                         modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
                     )
                 }
@@ -774,14 +719,15 @@ private fun CatalogPickerSheet(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = catalog.catalogName,
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                 )
                                 Text(
                                     text = catalog.type.replaceFirstChar {
                                         if (it.isLowerCase()) it.titlecase() else it.toString()
                                     },
-                                    style = MaterialTheme.typography.bodySmall,
+                                    style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
