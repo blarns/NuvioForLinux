@@ -58,8 +58,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import coil3.ImageLoader
@@ -1096,40 +1099,68 @@ private fun MainAppContent(
                     )
                 }
                 composable<HomescreenSettingsRoute> {
+                    val onBack = rememberGuardedPopBackStack(
+                        navController = navController,
+                        backStackEntry = it,
+                    )
                     HomescreenSettingsScreen(
-                        onBack = { navController.popBackStack() },
+                        onBack = onBack,
                     )
                 }
-                composable<MetaScreenSettingsRoute> {
+                composable<MetaScreenSettingsRoute> { backStackEntry ->
+                    val onBack = rememberGuardedPopBackStack(
+                        navController = navController,
+                        backStackEntry = backStackEntry,
+                    )
                     MetaScreenSettingsScreen(
-                        onBack = { navController.popBackStack() },
+                        onBack = onBack,
                     )
                 }
-                composable<ContinueWatchingSettingsRoute> {
+                composable<ContinueWatchingSettingsRoute> { backStackEntry ->
+                    val onBack = rememberGuardedPopBackStack(
+                        navController = navController,
+                        backStackEntry = backStackEntry,
+                    )
                     ContinueWatchingSettingsScreen(
-                        onBack = { navController.popBackStack() },
+                        onBack = onBack,
                     )
                 }
-                composable<AddonsSettingsRoute> {
+                composable<AddonsSettingsRoute> { backStackEntry ->
+                    val onBack = rememberGuardedPopBackStack(
+                        navController = navController,
+                        backStackEntry = backStackEntry,
+                    )
                     AddonsSettingsScreen(
-                        onBack = { navController.popBackStack() },
+                        onBack = onBack,
                     )
                 }
                 if (AppFeaturePolicy.pluginsEnabled) {
-                    composable<PluginsSettingsRoute> {
+                    composable<PluginsSettingsRoute> { backStackEntry ->
+                        val onBack = rememberGuardedPopBackStack(
+                            navController = navController,
+                            backStackEntry = backStackEntry,
+                        )
                         PluginsSettingsScreen(
-                            onBack = { navController.popBackStack() },
+                            onBack = onBack,
                         )
                     }
                 }
-                composable<AccountSettingsRoute> {
+                composable<AccountSettingsRoute> { backStackEntry ->
+                    val onBack = rememberGuardedPopBackStack(
+                        navController = navController,
+                        backStackEntry = backStackEntry,
+                    )
                     AccountSettingsScreen(
-                        onBack = { navController.popBackStack() },
+                        onBack = onBack,
                     )
                 }
-                composable<CollectionsRoute> {
+                composable<CollectionsRoute> { backStackEntry ->
+                    val onBack = rememberGuardedPopBackStack(
+                        navController = navController,
+                        backStackEntry = backStackEntry,
+                    )
                     CollectionManagementScreen(
-                        onBack = { navController.popBackStack() },
+                        onBack = onBack,
                         onNavigateToEditor = { collectionId ->
                             navController.navigate(CollectionEditorRoute(collectionId = collectionId))
                         },
@@ -1271,6 +1302,26 @@ private fun MainAppContent(
                 }
             }
         }
+}
+
+@Composable
+private fun rememberGuardedPopBackStack(
+    navController: NavHostController,
+    backStackEntry: NavBackStackEntry,
+    beforePop: () -> Unit = {},
+): () -> Unit {
+    val currentBackStackEntry by navController.currentBackStackEntryAsState()
+    var popHandled by remember(backStackEntry) { mutableStateOf(false) }
+
+    return remember(navController, backStackEntry, currentBackStackEntry, popHandled, beforePop) {
+        {
+            if (!popHandled && currentBackStackEntry == backStackEntry) {
+                popHandled = true
+                beforePop()
+                navController.popBackStack()
+            }
+        }
+    }
 }
 
 @Composable
