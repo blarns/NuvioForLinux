@@ -106,15 +106,17 @@ fun NuvioScreenHeader(
     title: String,
     modifier: Modifier = Modifier,
     includeStatusBarPadding: Boolean = true,
+    topPadding: Dp? = null,
     onBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val resolvedTopPadding = topPadding ?: if (includeStatusBarPadding) statusBarTop else 0.dp
     Row(
         modifier = modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
-            .padding(top = if (includeStatusBarPadding) statusBarTop else 0.dp, bottom = 4.dp),
+            .padding(top = resolvedTopPadding, bottom = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.Bottom,
     ) {
