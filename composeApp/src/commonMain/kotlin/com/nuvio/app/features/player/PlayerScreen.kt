@@ -186,9 +186,10 @@ fun PlayerScreen(
         val sourceStreamsState by PlayerStreamsRepository.sourceState.collectAsStateWithLifecycle()
         val episodeStreamsRepoState by PlayerStreamsRepository.episodeStreamsState.collectAsStateWithLifecycle()
         val metaUiState by MetaDetailsRepository.uiState.collectAsStateWithLifecycle()
-        val allEpisodes = remember(metaUiState.meta?.videos) {
-            metaUiState.meta?.videos ?: emptyList()
+        var playerMetaVideos by remember(parentMetaType, parentMetaId) {
+            mutableStateOf(MetaDetailsRepository.peek(parentMetaType, parentMetaId)?.videos ?: emptyList())
         }
+        val allEpisodes = remember(playerMetaVideos) { playerMetaVideos }
         val isSeries = parentMetaType == "series"
 
         // Skip intro/outro/recap state
@@ -203,6 +204,20 @@ fun PlayerScreen(
         var nextEpisodeAutoPlaySourceName by remember { mutableStateOf<String?>(null) }
         var nextEpisodeAutoPlayCountdown by remember { mutableStateOf<Int?>(null) }
         var nextEpisodeAutoPlayJob by remember { mutableStateOf<Job?>(null) }
+
+        LaunchedEffect(parentMetaType, parentMetaId) {
+            playerMetaVideos = MetaDetailsRepository.peek(parentMetaType, parentMetaId)?.videos ?: emptyList()
+            if (playerMetaVideos.isEmpty()) {
+                playerMetaVideos = MetaDetailsRepository.fetch(parentMetaType, parentMetaId)?.videos ?: emptyList()
+            }
+        }
+
+        LaunchedEffect(metaUiState.meta, parentMetaType, parentMetaId) {
+            val currentMeta = metaUiState.meta ?: return@LaunchedEffect
+            if (currentMeta.type == parentMetaType && currentMeta.id == parentMetaId) {
+                playerMetaVideos = currentMeta.videos
+            }
+        }
 
         ManagePlayerPictureInPicture(
             isPlaying = playbackSnapshot.isPlaying,
@@ -579,9 +594,8 @@ fun PlayerScreen(
         }
 
         fun playNextEpisode() {
-            val nextVideo = allEpisodes.firstOrNull { video ->
-                video.season == nextEpisodeInfo?.season && video.episode == nextEpisodeInfo?.episode
-            } ?: return
+            val nextVideoId = nextEpisodeInfo?.videoId ?: return
+            val nextVideo = allEpisodes.firstOrNull { video -> video.id == nextVideoId } ?: return
             if (nextEpisodeInfo?.hasAired != true) return
 
             nextEpisodeAutoPlayJob?.cancel()
@@ -684,7 +698,9 @@ fun PlayerScreen(
         fun openEpisodesPanel() {
             // Ensure meta is loaded for episodes
             if (allEpisodes.isEmpty()) {
-                MetaDetailsRepository.load(parentMetaType, parentMetaId)
+                scope.launch {
+                    playerMetaVideos = MetaDetailsRepository.fetch(parentMetaType, parentMetaId)?.videos ?: emptyList()
+                }
             }
             showEpisodesPanel = true
             showSourcesPanel = false
