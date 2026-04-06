@@ -27,9 +27,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.VideoLibrary
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -37,9 +35,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
+
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -75,7 +71,7 @@ import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.deeplink.AppDeepLink
 import com.nuvio.app.core.deeplink.AppDeepLinkRepository
 import com.nuvio.app.core.sync.SyncManager
-import com.nuvio.app.core.ui.nuvioBottomNavigationBarInsets
+import com.nuvio.app.core.ui.NuvioNavigationBar
 import com.nuvio.app.core.ui.NuvioPosterActionSheet
 import com.nuvio.app.core.ui.PlatformBackHandler
 import com.nuvio.app.core.ui.TraktListPickerDialog
@@ -145,6 +141,9 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.app_logo_wordmark
+import nuvio.composeapp.generated.resources.sidebar_library
+import nuvio.composeapp.generated.resources.sidebar_search
+import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
 @Serializable
@@ -556,52 +555,36 @@ private fun MainAppContent(
                             contentWindowInsets = WindowInsets(0),
                             bottomBar = {
                                 if (!isTabletLayout) {
-                                    val navigationItemColors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    NavigationBar(
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                        windowInsets = nuvioBottomNavigationBarInsets(),
-                                    ) {
-                                        NavigationBarItem(
+                                    NuvioNavigationBar {
+                                        NavItem(
                                             selected = selectedTab == AppScreenTab.Home,
                                             onClick = { selectedTab = AppScreenTab.Home },
-                                            icon = { Icon(Icons.Rounded.Home, contentDescription = null) },
-                                            label = { Text("Home") },
-                                            colors = navigationItemColors,
+                                            icon = Icons.Filled.Home,
+                                            contentDescription = "Home",
                                         )
-                                        NavigationBarItem(
+                                        NavItem(
                                             selected = selectedTab == AppScreenTab.Search,
                                             onClick = { selectedTab = AppScreenTab.Search },
-                                            icon = { Icon(Icons.Rounded.Search, contentDescription = null) },
-                                            label = { Text("Search") },
-                                            colors = navigationItemColors,
+                                            icon = Res.drawable.sidebar_search,
+                                            contentDescription = "Search",
                                         )
-                                        NavigationBarItem(
+                                        NavItem(
                                             selected = selectedTab == AppScreenTab.Library,
                                             onClick = { selectedTab = AppScreenTab.Library },
-                                            icon = { Icon(Icons.Rounded.VideoLibrary, contentDescription = null) },
-                                            label = { Text("Library") },
-                                            colors = navigationItemColors,
+                                            icon = Res.drawable.sidebar_library,
+                                            contentDescription = "Library",
                                         )
-                                        NavigationBarItem(
+                                        NavItem(
                                             selected = selectedTab == AppScreenTab.Settings,
                                             onClick = { selectedTab = AppScreenTab.Settings },
-                                            icon = {
-                                                ProfileSwitcherTab(
-                                                    selected = selectedTab == AppScreenTab.Settings,
-                                                    onClick = { selectedTab = AppScreenTab.Settings },
-                                                    onProfileSelected = onProfileSelected,
-                                                    onAddProfileRequested = onSwitchProfile,
-                                                )
-                                            },
-                                            label = { Text("Profile") },
-                                            colors = navigationItemColors,
-                                        )
+                                        ) {
+                                            ProfileSwitcherTab(
+                                                selected = selectedTab == AppScreenTab.Settings,
+                                                onClick = { selectedTab = AppScreenTab.Settings },
+                                                onProfileSelected = onProfileSelected,
+                                                onAddProfileRequested = onSwitchProfile,
+                                            )
+                                        }
                                     }
                                 }
                             },
@@ -1430,9 +1413,14 @@ private fun TabletFloatingTopBar(
                     onClick = { onTabSelected(AppScreenTab.Home) },
                     icon = {
                         Icon(
-                            imageVector = Icons.Rounded.Home,
-                            contentDescription = null,
+                            imageVector = Icons.Filled.Home,
+                            contentDescription = "Home",
                             modifier = Modifier.size(18.dp),
+                            tint = if (selectedTab == AppScreenTab.Home) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
                         )
                     },
                 )
@@ -1442,9 +1430,14 @@ private fun TabletFloatingTopBar(
                     onClick = { onTabSelected(AppScreenTab.Search) },
                     icon = {
                         Icon(
-                            imageVector = Icons.Rounded.Search,
-                            contentDescription = null,
+                            painter = painterResource(Res.drawable.sidebar_search),
+                            contentDescription = "Search",
                             modifier = Modifier.size(18.dp),
+                            tint = if (selectedTab == AppScreenTab.Search) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
                         )
                     },
                 )
@@ -1454,9 +1447,14 @@ private fun TabletFloatingTopBar(
                     onClick = { onTabSelected(AppScreenTab.Library) },
                     icon = {
                         Icon(
-                            imageVector = Icons.Rounded.VideoLibrary,
-                            contentDescription = null,
+                            painter = painterResource(Res.drawable.sidebar_library),
+                            contentDescription = "Library",
                             modifier = Modifier.size(18.dp),
+                            tint = if (selectedTab == AppScreenTab.Library) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
                         )
                     },
                 )

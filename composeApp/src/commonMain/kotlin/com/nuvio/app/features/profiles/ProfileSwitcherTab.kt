@@ -73,6 +73,7 @@ fun ProfileSwitcherTab(
     onClick: () -> Unit,
     onProfileSelected: (NuvioProfile) -> Unit,
     onAddProfileRequested: () -> Unit,
+    triggerContent: (@Composable (selected: Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val profileState by ProfileRepository.state.collectAsStateWithLifecycle()
@@ -144,13 +145,16 @@ fun ProfileSwitcherTab(
             },
         contentAlignment = Alignment.Center,
     ) {
-        // The avatar icon for the bottom navigation
-        ActiveProfileMiniAvatar(
-            profile = activeProfile,
-            avatars = avatars,
-            selected = selected,
-            size = 28,
-        )
+        if (triggerContent != null) {
+            triggerContent(selected)
+        } else {
+            ActiveProfileMiniAvatar(
+                profile = activeProfile,
+                avatars = avatars,
+                selected = selected,
+                size = 28,
+            )
+        }
 
         // Floating profile popup (stays composed during exit animation)
         if (popupVisible && profiles.isNotEmpty()) {
