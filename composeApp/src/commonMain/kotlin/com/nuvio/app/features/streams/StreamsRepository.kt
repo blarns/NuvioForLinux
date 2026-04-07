@@ -127,6 +127,10 @@ object StreamsRepository {
             return
         }
 
+        val addonDisplayNames = installedAddons.associate {
+            (it.manifest?.id ?: it.manifestUrl) to it.displayTitle
+        }
+
         val streamAddons = installedAddons
             .mapNotNull { it.manifest }
             .filter { manifest ->
@@ -151,7 +155,7 @@ object StreamsRepository {
         // Initialise loading placeholders
         val initialGroups = streamAddons.map { manifest ->
             AddonStreamGroup(
-                addonName = manifest.name,
+                addonName = addonDisplayNames[manifest.id] ?: manifest.name,
                 addonId = manifest.id,
                 streams = emptyList(),
                 isLoading = true,
@@ -182,7 +186,7 @@ object StreamsRepository {
             val totalTasks = streamAddons.size + pluginRemainingByAddonId.values.sum()
 
             val installedAddonNames = installedAddons
-                .mapNotNull { it.manifest?.name }
+                .map { it.displayTitle }
                 .toSet()
             var autoSelectTriggered = false
             var timeoutElapsed = false
@@ -237,27 +241,28 @@ object StreamsRepository {
                     val url = "$baseUrl/stream/$type/$encodedId.json"
                     log.d { "Fetching streams from: $url" }
 
+                    val displayName = addonDisplayNames[manifest.id] ?: manifest.name
                     val group = runCatching {
                         val payload = httpGetText(url)
                         StreamParser.parse(
                             payload = payload,
-                            addonName = manifest.name,
+                            addonName = displayName,
                             addonId = manifest.id,
                         )
                     }.fold(
                         onSuccess = { streams ->
-                            log.d { "Got ${streams.size} streams from ${manifest.name}" }
+                            log.d { "Got ${streams.size} streams from ${displayName}" }
                             AddonStreamGroup(
-                                addonName = manifest.name,
+                                addonName = displayName,
                                 addonId = manifest.id,
                                 streams = streams,
                                 isLoading = false,
                             )
                         },
                         onFailure = { err ->
-                            log.w(err) { "Failed to fetch streams from ${manifest.name}" }
+                            log.w(err) { "Failed to fetch streams from ${displayName}" }
                             AddonStreamGroup(
-                                addonName = manifest.name,
+                                addonName = displayName,
                                 addonId = manifest.id,
                                 streams = emptyList(),
                                 isLoading = false,

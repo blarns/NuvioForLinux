@@ -71,7 +71,7 @@ object SubtitleRepository {
                                 id = id,
                                 url = url,
                                 language = lang,
-                                display = "${formatLanguage(lang)} (${manifest.name})",
+                                display = "${formatLanguage(lang)} (${addon.displayTitle})",
                             )
                         )
                     }

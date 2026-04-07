@@ -162,7 +162,7 @@ object CollectionRepository {
                 .map { catalog ->
                     AvailableCatalog(
                         addonId = manifest.id,
-                        addonName = manifest.name,
+                        addonName = addon.displayTitle,
                         type = catalog.type,
                         catalogId = catalog.id,
                         catalogName = catalog.name,

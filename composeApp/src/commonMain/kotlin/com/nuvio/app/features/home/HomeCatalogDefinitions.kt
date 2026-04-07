@@ -24,7 +24,7 @@ fun buildHomeCatalogDefinitions(addons: List<ManagedAddon>): List<HomeCatalogDef
                 HomeCatalogDefinition(
                     key = "${manifest.id}:${catalog.type}:${catalog.id}",
                     defaultTitle = "${catalog.name} - ${catalog.type.displayLabel()}",
-                    addonName = manifest.name,
+                    addonName = addon.displayTitle,
                     manifestUrl = addon.manifestUrl,
                     type = catalog.type,
                     catalogId = catalog.id,

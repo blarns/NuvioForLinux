@@ -288,7 +288,7 @@ object SearchRepository {
                     val genreExtra = catalog.genreExtra()
                     DiscoverCatalogOption(
                         key = "${manifest.id}:${catalog.type}:${catalog.id}",
-                        addonName = manifest.name,
+                        addonName = addon.displayTitle,
                         manifestUrl = addon.manifestUrl,
                         type = catalog.type,
                         catalogId = catalog.id,
@@ -314,8 +314,8 @@ object SearchRepository {
         return HomeCatalogSection(
             key = "${manifest.id}:search:$type:$catalogId:${query.lowercase()}",
             title = "$catalogName - ${type.displayLabel()}",
-            subtitle = manifest.name,
-            addonName = manifest.name,
+            subtitle = addon.displayTitle,
+            addonName = addon.displayTitle,
             type = type,
             manifestUrl = manifest.transportUrl,
             catalogId = catalogId,

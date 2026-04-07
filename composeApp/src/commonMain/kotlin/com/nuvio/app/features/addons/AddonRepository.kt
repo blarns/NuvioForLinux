@@ -108,6 +108,13 @@ object AddonRepository {
                 }
                 .decodeList<AddonRow>()
 
+            val namesByUrl = mutableMapOf<String, String>()
+            rows.forEach { row ->
+                if (!row.name.isNullOrBlank()) {
+                    namesByUrl[ensureManifestSuffix(row.url)] = row.name
+                }
+            }
+
             val urls = dedupeManifestUrls(rows.map { it.url })
             log.i { "pullFromServer() — server returned ${rows.size} addons" }
             urls.forEachIndexed { i, u -> log.d { "  server[$i]: $u" } }
@@ -164,7 +171,7 @@ object AddonRepository {
             val existingByUrl = _uiState.value.addons.associateBy(ManagedAddon::manifestUrl)
             _uiState.value = AddonsUiState(
                 addons = urls.map { url ->
-                    existingByUrl[url].toPendingAddon(url)
+                    existingByUrl[url].toPendingAddon(url, namesByUrl[url])
                 },
             )
             persist()
@@ -311,7 +318,7 @@ object AddonRepository {
                     .mapIndexed { index, addon ->
                     AddonPushItem(
                         url = addon.manifestUrl,
-                        name = addon.manifest?.name ?: "",
+                        name = addon.userSetName?.takeIf { it.isNotBlank() } ?: addon.manifest?.name ?: "",
                         enabled = true,
                         sortOrder = index,
                     )
@@ -369,21 +376,27 @@ object AddonRepository {
     }
 }
 
-private fun ManagedAddon?.toPendingAddon(manifestUrl: String): ManagedAddon =
+private fun ManagedAddon?.toPendingAddon(manifestUrl: String, userSetName: String? = null): ManagedAddon =
     when {
         this == null -> ManagedAddon(
             manifestUrl = manifestUrl,
             isRefreshing = true,
+            userSetName = userSetName,
         )
         manifest != null -> copy(
             manifestUrl = manifestUrl,
             isRefreshing = false,
+            userSetName = userSetName ?: this.userSetName,
         )
-        isRefreshing -> copy(manifestUrl = manifestUrl)
+        isRefreshing -> copy(
+            manifestUrl = manifestUrl,
+            userSetName = userSetName ?: this.userSetName,
+        )
         else -> copy(
             manifestUrl = manifestUrl,
             isRefreshing = true,
             errorMessage = null,
+            userSetName = userSetName ?: this.userSetName,
         )
     }
 

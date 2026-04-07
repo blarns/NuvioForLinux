@@ -330,7 +330,7 @@ private fun InstalledAddonCard(
                 Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = manifest?.name ?: addon.displayTitle,
+                        text = addon.displayTitle,
                         style = MaterialTheme.typography.headlineLarge,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 2,

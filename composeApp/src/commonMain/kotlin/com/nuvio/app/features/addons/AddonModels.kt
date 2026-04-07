@@ -44,6 +44,7 @@ data class AddonBehaviorHints(
 data class ManagedAddon(
     val manifestUrl: String,
     val manifest: AddonManifest? = null,
+    val userSetName: String? = null,
     val isRefreshing: Boolean = false,
     val errorMessage: String? = null,
 ) {
@@ -51,7 +52,9 @@ data class ManagedAddon(
         get() = manifest != null
 
     val displayTitle: String
-        get() = manifest?.name ?: manifestUrl.substringBefore("?").substringAfterLast("/").ifBlank { "Addon" }
+        get() = userSetName?.takeIf { it.isNotBlank() && it != manifest?.name }
+            ?: manifest?.name
+            ?: manifestUrl.substringBefore("?").substringAfterLast("/").ifBlank { "Addon" }
 }
 
 data class AddonsUiState(

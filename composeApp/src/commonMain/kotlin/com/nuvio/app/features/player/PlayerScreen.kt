@@ -629,7 +629,7 @@ fun PlayerScreen(
                 )
 
                 val installedAddonNames = AddonRepository.uiState.value.addons
-                    .mapNotNull { it.manifest?.name }
+                    .map { it.displayTitle }
                     .toSet()
 
                 val timeoutMs = settings.streamAutoPlayTimeoutSeconds * 1000L

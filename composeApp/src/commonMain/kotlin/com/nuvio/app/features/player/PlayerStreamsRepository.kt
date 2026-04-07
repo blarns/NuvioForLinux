@@ -165,6 +165,10 @@ object PlayerStreamsRepository {
             return
         }
 
+        val addonDisplayNames = installedAddons.associate {
+            (it.manifest?.id ?: it.manifestUrl) to it.displayTitle
+        }
+
         val streamAddons = installedAddons
             .mapNotNull { it.manifest }
             .filter { manifest ->
@@ -186,7 +190,7 @@ object PlayerStreamsRepository {
 
         val initialGroups = streamAddons.map { manifest ->
             AddonStreamGroup(
-                addonName = manifest.name,
+                addonName = addonDisplayNames[manifest.id] ?: manifest.name,
                 addonId = manifest.id,
                 streams = emptyList(),
                 isLoading = true,
@@ -214,16 +218,17 @@ object PlayerStreamsRepository {
                         .removeSuffix("/manifest.json")
                     val url = "$baseUrl/stream/$type/$encodedId.json"
 
+                    val displayName = addonDisplayNames[manifest.id] ?: manifest.name
                     runCatching {
                         val payload = httpGetText(url)
-                        StreamParser.parse(payload, manifest.name, manifest.id)
+                        StreamParser.parse(payload, displayName, manifest.id)
                     }.fold(
                         onSuccess = { streams ->
-                            AddonStreamGroup(manifest.name, manifest.id, streams, isLoading = false)
+                            AddonStreamGroup(displayName, manifest.id, streams, isLoading = false)
                         },
                         onFailure = { err ->
-                            log.w(err) { "Failed: ${manifest.name}" }
-                            AddonStreamGroup(manifest.name, manifest.id, emptyList(), isLoading = false, error = err.message)
+                            log.w(err) { "Failed: ${displayName}" }
+                            AddonStreamGroup(displayName, manifest.id, emptyList(), isLoading = false, error = err.message)
                         },
                     )
                 }
