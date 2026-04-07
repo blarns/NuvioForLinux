@@ -70,9 +70,7 @@ fun SettingsScreen(
     onCollectionsClick: () -> Unit = {},
 ) {
     BoxWithConstraints(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+        modifier = modifier.fillMaxSize(),
     ) {
         val playerSettingsUiState by remember {
             PlayerSettingsRepository.ensureLoaded()

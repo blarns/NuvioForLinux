@@ -1,10 +1,7 @@
 package com.nuvio.app.features.settings
 
 import com.nuvio.app.core.build.AppFeaturePolicy
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -58,9 +55,7 @@ fun HomescreenSettingsScreen(
     }
 
     NuvioScreen(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+        modifier = Modifier.fillMaxSize(),
     ) {
         stickyHeader {
             NuvioScreenHeader(
@@ -86,9 +81,7 @@ fun MetaScreenSettingsScreen(
     }.collectAsStateWithLifecycle()
 
     NuvioScreen(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+        modifier = Modifier.fillMaxSize(),
     ) {
         stickyHeader {
             NuvioScreenHeader(
@@ -113,9 +106,7 @@ fun ContinueWatchingSettingsScreen(
     }.collectAsStateWithLifecycle()
 
     NuvioScreen(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+        modifier = Modifier.fillMaxSize(),
     ) {
         stickyHeader {
             NuvioScreenHeader(
@@ -141,9 +132,7 @@ fun AddonsSettingsScreen(
     }
 
     NuvioScreen(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+        modifier = Modifier.fillMaxSize(),
     ) {
         stickyHeader {
             NuvioScreenHeader(
@@ -169,9 +158,7 @@ fun PluginsSettingsScreen(
     }
 
     NuvioScreen(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+        modifier = Modifier.fillMaxSize(),
     ) {
         stickyHeader {
             NuvioScreenHeader(
@@ -188,9 +175,7 @@ fun AccountSettingsScreen(
     onBack: () -> Unit,
 ) {
     NuvioScreen(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+        modifier = Modifier.fillMaxSize(),
     ) {
         stickyHeader {
             NuvioScreenHeader(

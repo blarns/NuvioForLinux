@@ -149,9 +149,7 @@ fun SearchScreen(
     }
 
     BoxWithConstraints(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+        modifier = modifier.fillMaxSize(),
     ) {
         val discoverColumns = remember(maxWidth) {
             discoverColumnCountForWidth(maxWidth)
@@ -163,14 +161,12 @@ fun SearchScreen(
         NuvioScreen(
             horizontalPadding = 0.dp,
             listState = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
+            modifier = Modifier.fillMaxSize(),
         ) {
         stickyHeader {
             androidx.compose.foundation.layout.Column(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.background),
             ) {
                 NuvioScreenHeader(

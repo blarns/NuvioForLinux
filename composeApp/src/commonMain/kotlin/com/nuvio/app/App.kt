@@ -45,6 +45,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Modifier
@@ -601,7 +602,7 @@ private fun MainAppContent(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .alpha(if (initialHomeReady) 1f else 0f),
-                            containerColor = MaterialTheme.colorScheme.background,
+                            containerColor = Color.Transparent,
                             contentWindowInsets = WindowInsets(0),
                             bottomBar = {
                                 if (!isTabletLayout) {
