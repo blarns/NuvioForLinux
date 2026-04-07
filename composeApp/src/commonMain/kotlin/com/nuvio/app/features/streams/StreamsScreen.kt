@@ -94,6 +94,7 @@ fun StreamsScreen(
     episodeThumbnail: String? = null,
     resumePositionMs: Long? = null,
     resumeProgressFraction: Float? = null,
+    manualSelection: Boolean = false,
     onStreamSelected: (stream: StreamItem, resumePositionMs: Long?, resumeProgressFraction: Float?) -> Unit = { _, _, _ -> },
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -131,12 +132,13 @@ fun StreamsScreen(
         (resumePositionMs ?: storedProgress?.lastPositionMs)?.takeIf { it > 0L }
     }
 
-    LaunchedEffect(type, videoId) {
+    LaunchedEffect(type, videoId, manualSelection) {
         StreamsRepository.load(
             type = type,
             videoId = videoId,
             season = seasonNumber,
             episode = episodeNumber,
+            manualSelection = manualSelection,
         )
     }
 
@@ -223,6 +225,7 @@ fun StreamsScreen(
                                 videoId = videoId,
                                 season = seasonNumber,
                                 episode = episodeNumber,
+                                manualSelection = manualSelection,
                             )
                         },
                     ),

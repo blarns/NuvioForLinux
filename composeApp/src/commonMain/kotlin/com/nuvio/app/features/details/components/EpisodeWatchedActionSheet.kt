@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAddCheckCircle
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -44,6 +45,8 @@ fun EpisodeWatchedActionSheet(
     onToggleWatched: () -> Unit,
     onTogglePreviousWatched: () -> Unit,
     onToggleSeasonWatched: () -> Unit,
+    showPlayManually: Boolean = false,
+    onPlayManually: (() -> Unit)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
@@ -108,6 +111,19 @@ fun EpisodeWatchedActionSheet(
                     }
                 },
             )
+            if (showPlayManually && onPlayManually != null) {
+                NuvioBottomSheetDivider()
+                NuvioBottomSheetActionRow(
+                    icon = Icons.Default.PlayArrow,
+                    title = "Play manually",
+                    onClick = {
+                        onPlayManually()
+                        coroutineScope.launch {
+                            dismissNuvioBottomSheet(sheetState = sheetState, onDismiss = onDismiss)
+                        }
+                    },
+                )
+            }
         }
     }
 }

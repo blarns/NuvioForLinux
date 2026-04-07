@@ -212,6 +212,7 @@ data class StreamRoute(
     val streamContextId: Long? = null,
     val resumePositionMs: Long? = null,
     val resumeProgressFraction: Float? = null,
+    val manualSelection: Boolean = false,
 )
 
 @Serializable
@@ -460,6 +461,33 @@ private fun MainAppContent(
                 )
             }
 
+        val onPlayManually: (String, String, String, String, String, String?, String?, String?, Int?, Int?, String?, String?, String?, Long?) -> Unit =
+            { type, videoId, parentMetaId, parentMetaType, title, logo, poster, background, seasonNumber, episodeNumber, episodeTitle, episodeThumbnail, pauseDescription, resumePositionMs ->
+                val streamContextId = pauseDescription
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { StreamContextStore.put(StreamContext(pauseDescription = it)) }
+                navController.navigate(
+                    StreamRoute(
+                        type = type,
+                        videoId = videoId,
+                        parentMetaId = parentMetaId,
+                        parentMetaType = parentMetaType,
+                        title = title,
+                        logo = logo,
+                        poster = poster,
+                        background = background,
+                        seasonNumber = seasonNumber,
+                        episodeNumber = episodeNumber,
+                        episodeTitle = episodeTitle,
+                        episodeThumbnail = episodeThumbnail,
+                        streamContextId = streamContextId,
+                        resumePositionMs = resumePositionMs,
+                        resumeProgressFraction = null,
+                        manualSelection = true,
+                    )
+                )
+            }
+
         val onCatalogClick: (HomeCatalogSection) -> Unit = { section ->
             navController.navigate(
                 CatalogRoute(
@@ -650,6 +678,7 @@ private fun MainAppContent(
                             navController.popBackStack()
                         },
                         onPlay = onPlay,
+                        onPlayManually = onPlayManually,
                         onOpenMeta = { preview ->
                             coroutineScope.launch {
                                 val resolvedId = if (preview.id.startsWith("tmdb:")) {
@@ -835,10 +864,11 @@ private fun MainAppContent(
                     // Reuse Last Link: auto-play from cache if enabled (only on first entry)
                     var reuseHandled by rememberSaveable(route.videoId, effectiveVideoId) { mutableStateOf(false) }
                     var reuseNavigated by remember { mutableStateOf(false) }
-                    LaunchedEffect(effectiveVideoId, hasResolvedVideoId, playerSettings.streamReuseLastLinkEnabled) {
+                    LaunchedEffect(effectiveVideoId, hasResolvedVideoId, playerSettings.streamReuseLastLinkEnabled, route.manualSelection) {
                         if (!hasResolvedVideoId) return@LaunchedEffect
                         if (reuseHandled) return@LaunchedEffect
                         reuseHandled = true
+                        if (route.manualSelection) return@LaunchedEffect
                         if (!playerSettings.streamReuseLastLinkEnabled) return@LaunchedEffect
                         val cacheKey = StreamLinkCacheRepository.contentKey(route.type, effectiveVideoId)
                         val maxAgeMs = playerSettings.streamReuseLastLinkCacheHours * 60L * 60L * 1000L
@@ -879,8 +909,9 @@ private fun MainAppContent(
 
                     val streamsUiState by StreamsRepository.uiState.collectAsStateWithLifecycle()
                     var autoPlayHandled by rememberSaveable(route.videoId, effectiveVideoId) { mutableStateOf(false) }
-                    LaunchedEffect(streamsUiState.autoPlayStream, reuseHandled) {
+                    LaunchedEffect(streamsUiState.autoPlayStream, reuseHandled, route.manualSelection) {
                         if (!reuseHandled) return@LaunchedEffect
+                        if (route.manualSelection) return@LaunchedEffect
                         if (reuseNavigated) return@LaunchedEffect
                         if (autoPlayHandled) return@LaunchedEffect
                         val stream = streamsUiState.autoPlayStream ?: return@LaunchedEffect
@@ -955,6 +986,7 @@ private fun MainAppContent(
                         episodeThumbnail = route.episodeThumbnail,
                         resumePositionMs = route.resumePositionMs,
                         resumeProgressFraction = route.resumeProgressFraction,
+                        manualSelection = route.manualSelection,
                         onStreamSelected = { stream, resolvedResumePositionMs, resolvedResumeProgressFraction ->
                             val sourceUrl = stream.directPlaybackUrl
                             if (sourceUrl != null) {

@@ -32,22 +32,36 @@ object StreamsRepository {
     private var activeJob: Job? = null
     private var activeRequestKey: String? = null
 
-    fun load(type: String, videoId: String, season: Int? = null, episode: Int? = null) {
-        load(type = type, videoId = videoId, season = season, episode = episode, forceRefresh = false)
+    fun load(type: String, videoId: String, season: Int? = null, episode: Int? = null, manualSelection: Boolean = false) {
+        load(
+            type = type,
+            videoId = videoId,
+            season = season,
+            episode = episode,
+            manualSelection = manualSelection,
+            forceRefresh = false,
+        )
     }
 
-    fun reload(type: String, videoId: String, season: Int? = null, episode: Int? = null) {
-        load(type = type, videoId = videoId, season = season, episode = episode, forceRefresh = true)
+    fun reload(type: String, videoId: String, season: Int? = null, episode: Int? = null, manualSelection: Boolean = false) {
+        load(
+            type = type,
+            videoId = videoId,
+            season = season,
+            episode = episode,
+            manualSelection = manualSelection,
+            forceRefresh = true,
+        )
     }
 
-    private fun load(type: String, videoId: String, season: Int?, episode: Int?, forceRefresh: Boolean) {
+    private fun load(type: String, videoId: String, season: Int?, episode: Int?, manualSelection: Boolean, forceRefresh: Boolean) {
         val pluginUiState = if (AppFeaturePolicy.pluginsEnabled) {
             PluginRepository.initialize()
             PluginRepository.uiState.value
         } else {
             PluginsUiState(pluginsEnabled = false)
         }
-        val requestKey = "$type::$videoId::$season::$episode::pluginsGrouped=${pluginUiState.groupStreamsByRepository}"
+        val requestKey = "$type::$videoId::$season::$episode::$manualSelection::pluginsGrouped=${pluginUiState.groupStreamsByRepository}"
         val currentState = _uiState.value
         if (
             !forceRefresh &&
@@ -65,7 +79,7 @@ object StreamsRepository {
         PlayerSettingsRepository.ensureLoaded()
         val playerSettings = PlayerSettingsRepository.uiState.value
         val autoPlayMode = playerSettings.streamAutoPlayMode
-        val isAutoPlayEnabled = autoPlayMode != StreamAutoPlayMode.MANUAL &&
+        val isAutoPlayEnabled = !manualSelection && autoPlayMode != StreamAutoPlayMode.MANUAL &&
             !(autoPlayMode == StreamAutoPlayMode.REGEX_MATCH &&
                 !StreamAutoPlayPolicy.isRegexSelectionConfigured(playerSettings.streamAutoPlayRegex))
         val isDirectAutoPlayFlow = isAutoPlayEnabled

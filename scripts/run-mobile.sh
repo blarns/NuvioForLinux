@@ -17,12 +17,13 @@ IOS_PREFERRED_DEVICE_MODEL="iPhone 14 Pro"
 usage() {
   cat <<'EOF'
 Usage:
+  ./scripts/run-mobile.sh android [e|p] [full|playstore]
   ./scripts/run-mobile.sh android [full|playstore]
   ./scripts/run-mobile.sh ios [s|p] [full|appstore]
 
 Builds the debug app for the selected platform, installs it on all available
-Android emulators, a booted iOS simulator, or the configured iOS physical
-device, and launches the app.
+Android emulators or connected physical devices, a booted iOS simulator, or
+the configured iOS physical device, and launches the app.
 EOF
 }
 
@@ -39,6 +40,16 @@ android_emulator_avds() {
 
 booted_android_emulator_serials() {
   adb devices | awk '$2 == "device" && $1 ~ /^emulator-/ { print $1 }'
+}
+
+connected_android_physical_serials() {
+  adb devices | awk '$2 == "device" && $1 !~ /^emulator-/ { print $1 }'
+}
+
+wait_for_android_device() {
+  local serial="$1"
+
+  adb -s "$serial" wait-for-device >/dev/null
 }
 
 wait_for_android_emulator() {
@@ -102,14 +113,8 @@ validate_ios_distribution() {
   esac
 }
 
-ios_derived_data_path() {
-  local target="$1"
-  local distribution="$2"
-  echo "$IOS_DERIVED_DATA_BASE-$distribution-$target"
-}
-
-run_android() {
-  local flavor="${1:-full}"
+validate_android_flavor() {
+  local flavor="$1"
 
   case "$flavor" in
     full|playstore)
@@ -120,6 +125,78 @@ run_android() {
       exit 1
       ;;
   esac
+}
+
+android_flavor_task_part() {
+  local flavor="$1"
+
+  case "$flavor" in
+    full)
+      echo "Full"
+      ;;
+    playstore)
+      echo "Playstore"
+      ;;
+  esac
+}
+
+android_apk_path() {
+  local flavor="$1"
+
+  case "$flavor" in
+    full)
+      echo "$ROOT_DIR/composeApp/build/outputs/apk/full/debug/composeApp-full-debug.apk"
+      ;;
+    playstore)
+      echo "$ROOT_DIR/composeApp/build/outputs/apk/playstore/debug/composeApp-playstore-debug.apk"
+      ;;
+  esac
+}
+
+build_android_apk() {
+  local flavor="$1"
+  local flavor_task_part
+  local apk_path
+
+  flavor_task_part="$(android_flavor_task_part "$flavor")"
+  apk_path="$(android_apk_path "$flavor")"
+
+  echo "Building Android $flavor debug APK..." >&2
+  "$GRADLEW" ":composeApp:assemble${flavor_task_part}Debug" >&2
+
+  if [[ ! -f "$apk_path" ]]; then
+    echo "Expected APK not found at: $apk_path" >&2
+    exit 1
+  fi
+
+  printf '%s\n' "$apk_path"
+}
+
+install_and_launch_android() {
+  local device_label="$1"
+  local apk_path="$2"
+  shift 2
+
+  local serial
+  for serial in "$@"; do
+    echo "Installing on $device_label $serial..."
+    adb -s "$serial" install -r "$apk_path"
+
+    echo "Launching app on $serial..."
+    adb -s "$serial" shell am start -n "$ANDROID_APP_ID/$ANDROID_ACTIVITY"
+  done
+}
+
+ios_derived_data_path() {
+  local target="$1"
+  local distribution="$2"
+  echo "$IOS_DERIVED_DATA_BASE-$distribution-$target"
+}
+
+run_android_emulator() {
+  local flavor="${1:-full}"
+
+  validate_android_flavor "$flavor"
 
   require_command adb
   require_command emulator
@@ -134,19 +211,19 @@ run_android() {
   if [[ ${#booted_serials[@]} -gt 0 ]]; then
     echo "Using running Android emulators: ${booted_serials[*]}"
   else
-  local avds=()
-  while IFS= read -r avd_name; do
-    [[ -n "$avd_name" ]] || continue
-    avds+=("$avd_name")
-  done < <(android_emulator_avds)
+    local avds=()
+    local avd_name
+    while IFS= read -r avd_name; do
+      [[ -n "$avd_name" ]] || continue
+      avds+=("$avd_name")
+    done < <(android_emulator_avds)
 
     if [[ ${#avds[@]} -eq 0 ]]; then
       echo "No Android emulators available." >&2
-      echo "Create an AVD first, then rerun: ./scripts/run-mobile.sh android" >&2
+      echo "Create an AVD first, then rerun: ./scripts/run-mobile.sh android e" >&2
       exit 1
     fi
 
-    local avd_name
     for avd_name in "${avds[@]}"; do
       boot_android_emulator "$avd_name"
     done
@@ -171,34 +248,42 @@ run_android() {
     wait_for_android_emulator "$serial"
   done
 
-  local flavor_task_part
   local apk_path
-  case "$flavor" in
-    full)
-      flavor_task_part="Full"
-      apk_path="$ROOT_DIR/composeApp/build/outputs/apk/full/debug/composeApp-full-debug.apk"
-      ;;
-    playstore)
-      flavor_task_part="Playstore"
-      apk_path="$ROOT_DIR/composeApp/build/outputs/apk/playstore/debug/composeApp-playstore-debug.apk"
-      ;;
-  esac
+  apk_path="$(build_android_apk "$flavor")"
 
-  echo "Building Android $flavor debug APK..."
-  "$GRADLEW" ":composeApp:assemble${flavor_task_part}Debug"
+  install_and_launch_android "emulator" "$apk_path" "${booted_serials[@]}"
+}
 
-  if [[ ! -f "$apk_path" ]]; then
-    echo "Expected APK not found at: $apk_path" >&2
+run_android_physical() {
+  local flavor="${1:-full}"
+
+  validate_android_flavor "$flavor"
+
+  require_command adb
+
+  local serials=()
+  local serial
+  while IFS= read -r serial; do
+    [[ -n "$serial" ]] || continue
+    serials+=("$serial")
+  done < <(connected_android_physical_serials)
+
+  if [[ ${#serials[@]} -eq 0 ]]; then
+    echo "No Android physical devices available." >&2
+    echo "Connect and authorize a device, then rerun: ./scripts/run-mobile.sh android p" >&2
     exit 1
   fi
 
-  for serial in "${booted_serials[@]}"; do
-    echo "Installing on emulator $serial..."
-    adb -s "$serial" install -r "$apk_path"
+  echo "Using connected Android physical devices: ${serials[*]}"
 
-    echo "Launching app on $serial..."
-    adb -s "$serial" shell am start -n "$ANDROID_APP_ID/$ANDROID_ACTIVITY"
+  for serial in "${serials[@]}"; do
+    wait_for_android_device "$serial"
   done
+
+  local apk_path
+  apk_path="$(build_android_apk "$flavor")"
+
+  install_and_launch_android "physical device" "$apk_path" "${serials[@]}"
 }
 
 run_ios_simulator() {
@@ -296,11 +381,42 @@ main() {
 
   case "$1" in
     android)
-      if [[ $# -gt 2 ]]; then
+      if [[ $# -gt 3 ]]; then
         usage
         exit 1
       fi
-      run_android "${2:-full}"
+
+      local android_target="e"
+      local android_flavor="full"
+
+      if [[ $# -ge 2 ]]; then
+        case "$2" in
+          e|p)
+            android_target="$2"
+            ;;
+          full|playstore)
+            android_flavor="$2"
+            ;;
+          *)
+            echo "Unknown Android target or flavor: $2" >&2
+            usage
+            exit 1
+            ;;
+        esac
+      fi
+
+      if [[ $# -eq 3 ]]; then
+        android_flavor="$3"
+      fi
+
+      case "$android_target" in
+        e)
+          run_android_emulator "$android_flavor"
+          ;;
+        p)
+          run_android_physical "$android_flavor"
+          ;;
+      esac
       ;;
     ios)
       if [[ $# -lt 2 || $# -gt 3 ]]; then

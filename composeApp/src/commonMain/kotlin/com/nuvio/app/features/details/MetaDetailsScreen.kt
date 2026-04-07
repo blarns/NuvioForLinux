@@ -73,6 +73,8 @@ import com.nuvio.app.features.details.components.TrailerPlayerPopup
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.library.LibraryRepository
 import com.nuvio.app.features.library.toLibraryItem
+import com.nuvio.app.features.player.PlayerSettingsRepository
+import com.nuvio.app.features.streams.StreamAutoPlayPolicy
 import com.nuvio.app.features.trakt.TraktAuthRepository
 import com.nuvio.app.features.trakt.TraktCommentReview
 import com.nuvio.app.features.trakt.TraktCommentsRepository
@@ -99,6 +101,7 @@ fun MetaDetailsScreen(
     id: String,
     onBack: () -> Unit,
     onPlay: ((type: String, videoId: String, parentMetaId: String, parentMetaType: String, title: String, logo: String?, poster: String?, background: String?, seasonNumber: Int?, episodeNumber: Int?, episodeTitle: String?, episodeThumbnail: String?, pauseDescription: String?, resumePositionMs: Long?) -> Unit)? = null,
+    onPlayManually: ((type: String, videoId: String, parentMetaId: String, parentMetaType: String, title: String, logo: String?, poster: String?, background: String?, seasonNumber: Int?, episodeNumber: Int?, episodeTitle: String?, episodeThumbnail: String?, pauseDescription: String?, resumePositionMs: Long?) -> Unit)? = null,
     onOpenMeta: ((MetaPreview) -> Unit)? = null,
     onCastClick: ((MetaPerson) -> Unit)? = null,
     onCompanyClick: ((MetaCompany, String) -> Unit)? = null,
@@ -126,6 +129,10 @@ fun MetaDetailsScreen(
     val watchProgressUiState by remember {
         WatchProgressRepository.ensureLoaded()
         WatchProgressRepository.uiState
+    }.collectAsStateWithLifecycle()
+    val playerSettingsUiState by remember {
+        PlayerSettingsRepository.ensureLoaded()
+        PlayerSettingsRepository.uiState
     }.collectAsStateWithLifecycle()
     val needsFreshLoad = displayedMeta == null && !uiState.isLoading
     var selectedEpisodeForActions by remember(type, id) { mutableStateOf<MetaVideo?>(null) }
@@ -397,6 +404,53 @@ fun MetaDetailsScreen(
                         }
                     }
                 }
+                val manualPlayHandler = onPlayManually
+                val showManualPlayOption = manualPlayHandler != null && StreamAutoPlayPolicy.isEffectivelyEnabled(playerSettingsUiState)
+                val onPrimaryPlayLongClick: (() -> Unit)? = manualPlayHandler
+                    ?.takeIf { showManualPlayOption }
+                    ?.let { manualPlay ->
+                        {
+                            when {
+                                (meta.type == "series" || hasEpisodes) && seriesAction != null -> {
+                                    manualPlay(
+                                        meta.type,
+                                        seriesStreamVideoId ?: seriesAction.videoId,
+                                        meta.id,
+                                        meta.type,
+                                        meta.name,
+                                        meta.logo,
+                                        meta.poster,
+                                        meta.background,
+                                        seriesAction.seasonNumber,
+                                        seriesAction.episodeNumber,
+                                        seriesAction.episodeTitle,
+                                        seriesAction.episodeThumbnail,
+                                        seriesPauseDescription,
+                                        seriesAction.resumePositionMs,
+                                    )
+                                }
+
+                                else -> {
+                                    manualPlay(
+                                        meta.type,
+                                        meta.id,
+                                        meta.id,
+                                        meta.type,
+                                        meta.name,
+                                        meta.logo,
+                                        meta.poster,
+                                        meta.background,
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        meta.description,
+                                        movieProgress?.lastPositionMs,
+                                    )
+                                }
+                            }
+                        }
+                    }
                 val onEpisodePlayClick: (MetaVideo) -> Unit = { video ->
                     val season = video.season
                     val episode = video.episode
@@ -410,6 +464,35 @@ fun MetaDetailsScreen(
                     val savedProgress = watchProgressUiState.byVideoId[playbackVideoId]
                         ?.takeUnless { it.isCompleted }
                     onPlay?.invoke(
+                        meta.type,
+                        streamVideoId,
+                        meta.id,
+                        meta.type,
+                        meta.name,
+                        meta.logo,
+                        meta.poster,
+                        meta.background,
+                        season,
+                        episode,
+                        video.title,
+                        video.thumbnail,
+                        video.overview,
+                        savedProgress?.lastPositionMs,
+                    )
+                }
+                val onEpisodeManualPlayClick: (MetaVideo) -> Unit = { video ->
+                    val season = video.season
+                    val episode = video.episode
+                    val playbackVideoId = buildPlaybackVideoId(
+                        parentMetaId = meta.id,
+                        seasonNumber = season,
+                        episodeNumber = episode,
+                        fallbackVideoId = video.id,
+                    )
+                    val streamVideoId = video.id.takeIf { it.isNotBlank() } ?: playbackVideoId
+                    val savedProgress = watchProgressUiState.byVideoId[playbackVideoId]
+                        ?.takeUnless { it.isCompleted }
+                    onPlayManually?.invoke(
                         meta.type,
                         streamVideoId,
                         meta.id,
@@ -500,7 +583,9 @@ fun MetaDetailsScreen(
                                     playButtonLabel = playButtonLabel,
                                     isSaved = isSaved,
                                     onPrimaryPlayClick = onPrimaryPlayClick,
+                                    onPrimaryPlayLongClick = onPrimaryPlayLongClick,
                                     onSaveClick = toggleSaved,
+                                    showManualPlayOption = showManualPlayOption,
                                     preferredEpisodeSeasonNumber = seriesAction?.seasonNumber,
                                     hasProductionSection = hasProductionSection,
                                     hasTrailersSection = hasTrailersSection,
@@ -670,6 +755,10 @@ fun MetaDetailsScreen(
                                         areCurrentlyWatched = isSeasonWatched,
                                     )
                                 },
+                                showPlayManually = showManualPlayOption,
+                                onPlayManually = {
+                                    onEpisodeManualPlayClick(selectedEpisode)
+                                },
                             )
                         }
 
@@ -795,7 +884,9 @@ private fun ConfiguredMetaSections(
     playButtonLabel: String,
     isSaved: Boolean,
     onPrimaryPlayClick: () -> Unit,
+    onPrimaryPlayLongClick: (() -> Unit)?,
     onSaveClick: () -> Unit,
+    showManualPlayOption: Boolean,
     preferredEpisodeSeasonNumber: Int?,
     hasProductionSection: Boolean,
     hasTrailersSection: Boolean,
@@ -850,6 +941,7 @@ private fun ConfiguredMetaSections(
                     isSaved = isSaved,
                     isTablet = isTablet,
                     onPlayClick = onPrimaryPlayClick,
+                    onPlayLongClick = if (showManualPlayOption) onPrimaryPlayLongClick else null,
                     onSaveClick = onSaveClick,
                 )
             }
