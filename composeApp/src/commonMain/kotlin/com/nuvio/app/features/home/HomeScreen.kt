@@ -129,8 +129,19 @@ fun HomeScreen(
         }.toMap()
     }
 
-    val effectivNextUpItems = remember(nextUpItemsBySeries, cachedNextUpItems) {
-        if (nextUpItemsBySeries.isNotEmpty()) nextUpItemsBySeries else cachedNextUpItems
+    val effectivNextUpItems = remember(
+        nextUpItemsBySeries,
+        cachedNextUpItems,
+        continueWatchingPreferences.dismissedNextUpKeys,
+    ) {
+        val liveNextUpItems = nextUpItemsBySeries.filterValues { (_, item) ->
+            nextUpDismissKey(
+                item.parentMetaId,
+                item.nextUpSeedSeasonNumber,
+                item.nextUpSeedEpisodeNumber,
+            ) !in continueWatchingPreferences.dismissedNextUpKeys
+        }
+        if (liveNextUpItems.isNotEmpty()) liveNextUpItems else cachedNextUpItems
     }
 
     val continueWatchingItems = remember(
