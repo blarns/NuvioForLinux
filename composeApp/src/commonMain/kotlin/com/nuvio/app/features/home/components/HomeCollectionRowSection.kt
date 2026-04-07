@@ -34,25 +34,49 @@ import com.nuvio.app.features.home.PosterShape
 fun HomeCollectionRowSection(
     collection: Collection,
     modifier: Modifier = Modifier,
+    sectionPadding: Dp? = null,
     onFolderClick: ((collectionId: String, folderId: String) -> Unit)? = null,
 ) {
     if (collection.folders.isEmpty()) return
 
-    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        val sectionPadding = homeSectionHorizontalPaddingForWidth(maxWidth.value)
-        NuvioShelfSection(
-            title = collection.title,
-            entries = collection.folders,
-            modifier = Modifier.fillMaxWidth(),
-            headerHorizontalPadding = sectionPadding,
-            rowContentPadding = PaddingValues(horizontal = sectionPadding),
-            key = { folder -> "collection_${collection.id}_folder_${folder.id}" },
-        ) { folder ->
-            CollectionFolderCard(
-                folder = folder,
-                onClick = onFolderClick?.let { { it(collection.id, folder.id) } },
+    if (sectionPadding != null) {
+        HomeCollectionRowSectionContent(
+            collection = collection,
+            modifier = modifier.fillMaxWidth(),
+            sectionPadding = sectionPadding,
+            onFolderClick = onFolderClick,
+        )
+    } else {
+        BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+            HomeCollectionRowSectionContent(
+                collection = collection,
+                modifier = Modifier.fillMaxWidth(),
+                sectionPadding = homeSectionHorizontalPaddingForWidth(maxWidth.value),
+                onFolderClick = onFolderClick,
             )
         }
+    }
+}
+
+@Composable
+private fun HomeCollectionRowSectionContent(
+    collection: Collection,
+    modifier: Modifier,
+    sectionPadding: Dp,
+    onFolderClick: ((collectionId: String, folderId: String) -> Unit)?,
+) {
+    NuvioShelfSection(
+        title = collection.title,
+        entries = collection.folders,
+        modifier = modifier,
+        headerHorizontalPadding = sectionPadding,
+        rowContentPadding = PaddingValues(horizontal = sectionPadding),
+        key = { folder -> "collection_${collection.id}_folder_${folder.id}" },
+    ) { folder ->
+        CollectionFolderCard(
+            folder = folder,
+            onClick = onFolderClick?.let { { it(collection.id, folder.id) } },
+        )
     }
 }
 

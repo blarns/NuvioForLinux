@@ -1,5 +1,7 @@
 package com.nuvio.app.features.home
 
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -45,6 +47,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import com.nuvio.app.features.home.components.homeSectionHorizontalPaddingForWidth
+import com.nuvio.app.features.home.components.rememberContinueWatchingLayout
 
 @Composable
 fun HomeScreen(
@@ -286,127 +290,148 @@ fun HomeScreen(
         onFirstCatalogRendered?.invoke()
     }
 
-    NuvioScreen(
-        modifier = modifier,
-        horizontalPadding = 0.dp,
-        topPadding = if (showHeroSlot) 0.dp else null,
-    ) {
-        if (showHeroSlot) {
-            item {
-                when {
-                    showHeroSkeleton -> HomeSkeletonHero(
-                        modifier = Modifier,
-                    )
+    val visibleCollections = remember(collections) {
+        collections.filter { it.folders.isNotEmpty() }
+    }
+    val collectionsMap = remember(visibleCollections) {
+        visibleCollections.associateBy { "collection_${it.id}" }
+    }
+    val sectionsMap = remember(homeUiState.sections) {
+        homeUiState.sections.associateBy(HomeCatalogSection::key)
+    }
+    val enabledHomeItems = remember(homeSettingsUiState.items) {
+        homeSettingsUiState.items.filter { it.enabled }
+    }
 
-                    homeUiState.heroItems.isNotEmpty() -> HomeHeroSection(
-                        items = homeUiState.heroItems,
-                        modifier = Modifier,
-                        onItemClick = onPosterClick,
-                    )
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val homeSectionPadding = homeSectionHorizontalPaddingForWidth(maxWidth.value)
+        val continueWatchingLayout = rememberContinueWatchingLayout(maxWidth.value)
 
-                    else -> HomeHeroReservedSpace(modifier = Modifier)
-                }
-            }
-        }
-
-        when {
-            addonsUiState.addons.none { it.manifest != null } -> {
-                if (continueWatchingPreferences.isVisible && continueWatchingItems.isNotEmpty()) {
-                    item {
-                        HomeContinueWatchingSection(
-                            items = continueWatchingItems,
-                            style = continueWatchingPreferences.style,
-                            modifier = Modifier.padding(bottom = 12.dp),
-                            onItemClick = onContinueWatchingClick,
-                            onItemLongPress = onContinueWatchingLongPress,
-                        )
-                    }
-                }
+        NuvioScreen(
+            modifier = Modifier.fillMaxSize(),
+            horizontalPadding = 0.dp,
+            topPadding = if (showHeroSlot) 0.dp else null,
+        ) {
+            if (showHeroSlot) {
                 item {
-                    HomeEmptyStateCard(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        title = "No active addons",
-                        message = "Install and validate at least one addon before loading catalog rows on Home.",
-                    )
-                }
-            }
-
-            homeUiState.isLoading && homeUiState.sections.isEmpty() -> {
-                if (continueWatchingPreferences.isVisible && continueWatchingItems.isNotEmpty()) {
-                    item {
-                        HomeContinueWatchingSection(
-                            items = continueWatchingItems,
-                            style = continueWatchingPreferences.style,
-                            modifier = Modifier.padding(bottom = 12.dp),
-                            onItemClick = onContinueWatchingClick,
-                            onItemLongPress = onContinueWatchingLongPress,
+                    when {
+                        showHeroSkeleton -> HomeSkeletonHero(
+                            modifier = Modifier,
                         )
+
+                        homeUiState.heroItems.isNotEmpty() -> HomeHeroSection(
+                            items = homeUiState.heroItems,
+                            modifier = Modifier,
+                            onItemClick = onPosterClick,
+                        )
+
+                        else -> HomeHeroReservedSpace(modifier = Modifier)
                     }
                 }
-                items(3) {
-                    HomeSkeletonRow(modifier = Modifier.padding(horizontal = 16.dp))
-                }
             }
 
-            homeUiState.sections.isEmpty() && homeUiState.heroItems.isEmpty() &&
-                (!continueWatchingPreferences.isVisible || continueWatchingItems.isEmpty()) -> {
-                item {
-                    HomeEmptyStateCard(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        title = "No home rows available",
-                        message = homeUiState.errorMessage
-                            ?: "Installed addons do not currently expose board-compatible catalogs without required extras.",
-                    )
-                }
-            }
-
-            else -> {
-                if (continueWatchingPreferences.isVisible && continueWatchingItems.isNotEmpty()) {
-                    item {
-                        HomeContinueWatchingSection(
-                            items = continueWatchingItems,
-                            style = continueWatchingPreferences.style,
-                            modifier = Modifier.padding(bottom = 12.dp),
-                            onItemClick = onContinueWatchingClick,
-                            onItemLongPress = onContinueWatchingLongPress,
-                        )
-                    }
-                }
-
-                val collectionsMap = collections.filter { it.folders.isNotEmpty() }
-                    .associateBy { "collection_${it.id}" }
-                val sectionsMap = homeUiState.sections.associateBy { it.key }
-                val orderedItems = homeSettingsUiState.items.filter { it.enabled }
-
-                orderedItems.forEach { settingsItem ->
-                    if (settingsItem.isCollection) {
-                        val collection = collectionsMap[settingsItem.key]
-                        if (collection != null) {
-                            item(key = settingsItem.key) {
-                                HomeCollectionRowSection(
-                                    collection = collection,
-                                    modifier = Modifier.padding(bottom = 12.dp),
-                                    onFolderClick = onFolderClick,
-                                )
-                            }
+            when {
+                addonsUiState.addons.none { it.manifest != null } -> {
+                    if (continueWatchingPreferences.isVisible && continueWatchingItems.isNotEmpty()) {
+                        item {
+                            HomeContinueWatchingSection(
+                                items = continueWatchingItems,
+                                style = continueWatchingPreferences.style,
+                                modifier = Modifier.padding(bottom = 12.dp),
+                                sectionPadding = homeSectionPadding,
+                                layout = continueWatchingLayout,
+                                onItemClick = onContinueWatchingClick,
+                                onItemLongPress = onContinueWatchingLongPress,
+                            )
                         }
-                    } else {
-                        val section = sectionsMap[settingsItem.key]
-                        if (section != null && section.items.isNotEmpty()) {
-                            item(key = settingsItem.key) {
-                                HomeCatalogRowSection(
-                                    section = section,
-                                    entries = section.items.take(HOME_CATALOG_PREVIEW_LIMIT),
-                                    modifier = Modifier.padding(bottom = 12.dp),
-                                    onViewAllClick = if (section.canOpenCatalog(HOME_CATALOG_PREVIEW_LIMIT)) {
-                                        onCatalogClick?.let { { it(section) } }
-                                    } else {
-                                        null
-                                    },
-                                    watchedKeys = watchedUiState.watchedKeys,
-                                    onPosterClick = onPosterClick,
-                                    onPosterLongClick = onPosterLongClick,
-                                )
+                    }
+                    item {
+                        HomeEmptyStateCard(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            title = "No active addons",
+                            message = "Install and validate at least one addon before loading catalog rows on Home.",
+                        )
+                    }
+                }
+
+                homeUiState.isLoading && homeUiState.sections.isEmpty() -> {
+                    if (continueWatchingPreferences.isVisible && continueWatchingItems.isNotEmpty()) {
+                        item {
+                            HomeContinueWatchingSection(
+                                items = continueWatchingItems,
+                                style = continueWatchingPreferences.style,
+                                modifier = Modifier.padding(bottom = 12.dp),
+                                sectionPadding = homeSectionPadding,
+                                layout = continueWatchingLayout,
+                                onItemClick = onContinueWatchingClick,
+                                onItemLongPress = onContinueWatchingLongPress,
+                            )
+                        }
+                    }
+                    items(3) {
+                        HomeSkeletonRow(modifier = Modifier.padding(horizontal = 16.dp))
+                    }
+                }
+
+                homeUiState.sections.isEmpty() && homeUiState.heroItems.isEmpty() &&
+                    (!continueWatchingPreferences.isVisible || continueWatchingItems.isEmpty()) -> {
+                    item {
+                        HomeEmptyStateCard(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            title = "No home rows available",
+                            message = homeUiState.errorMessage
+                                ?: "Installed addons do not currently expose board-compatible catalogs without required extras.",
+                        )
+                    }
+                }
+
+                else -> {
+                    if (continueWatchingPreferences.isVisible && continueWatchingItems.isNotEmpty()) {
+                        item {
+                            HomeContinueWatchingSection(
+                                items = continueWatchingItems,
+                                style = continueWatchingPreferences.style,
+                                modifier = Modifier.padding(bottom = 12.dp),
+                                sectionPadding = homeSectionPadding,
+                                layout = continueWatchingLayout,
+                                onItemClick = onContinueWatchingClick,
+                                onItemLongPress = onContinueWatchingLongPress,
+                            )
+                        }
+                    }
+
+                    enabledHomeItems.forEach { settingsItem ->
+                        if (settingsItem.isCollection) {
+                            val collection = collectionsMap[settingsItem.key]
+                            if (collection != null) {
+                                item(key = settingsItem.key) {
+                                    HomeCollectionRowSection(
+                                        collection = collection,
+                                        modifier = Modifier.padding(bottom = 12.dp),
+                                        sectionPadding = homeSectionPadding,
+                                        onFolderClick = onFolderClick,
+                                    )
+                                }
+                            }
+                        } else {
+                            val section = sectionsMap[settingsItem.key]
+                            if (section != null && section.items.isNotEmpty()) {
+                                item(key = settingsItem.key) {
+                                    HomeCatalogRowSection(
+                                        section = section,
+                                        entries = section.items.take(HOME_CATALOG_PREVIEW_LIMIT),
+                                        modifier = Modifier.padding(bottom = 12.dp),
+                                        sectionPadding = homeSectionPadding,
+                                        onViewAllClick = if (section.canOpenCatalog(HOME_CATALOG_PREVIEW_LIMIT)) {
+                                            onCatalogClick?.let { { it(section) } }
+                                        } else {
+                                            null
+                                        },
+                                        watchedKeys = watchedUiState.watchedKeys,
+                                        onPosterClick = onPosterClick,
+                                        onPosterLongClick = onPosterLongClick,
+                                    )
+                                }
                             }
                         }
                     }

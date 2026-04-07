@@ -45,41 +45,74 @@ import com.nuvio.app.features.watchprogress.ContinueWatchingSectionStyle
 import kotlin.math.roundToInt
 
 @Composable
-fun HomeContinueWatchingSection(
+internal fun HomeContinueWatchingSection(
     items: List<ContinueWatchingItem>,
     style: ContinueWatchingSectionStyle,
     modifier: Modifier = Modifier,
+    sectionPadding: Dp? = null,
+    layout: ContinueWatchingLayout? = null,
     onItemClick: ((ContinueWatchingItem) -> Unit)? = null,
     onItemLongPress: ((ContinueWatchingItem) -> Unit)? = null,
 ) {
     if (items.isEmpty()) return
 
-    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        val layout = rememberContinueWatchingLayout(maxWidth.value)
-        val sectionPadding = homeSectionHorizontalPaddingForWidth(maxWidth.value)
-        NuvioShelfSection(
-            title = "Continue Watching",
-            entries = items,
-            modifier = Modifier.fillMaxWidth(),
-            headerHorizontalPadding = sectionPadding,
-            rowContentPadding = PaddingValues(horizontal = sectionPadding),
-            itemSpacing = layout.itemGap,
-            key = { item -> item.videoId },
-        ) { item ->
-            when (style) {
-                ContinueWatchingSectionStyle.Wide -> ContinueWatchingWideCard(
-                    item = item,
-                    layout = layout,
-                    onClick = onItemClick?.let { { it(item) } },
-                    onLongClick = onItemLongPress?.let { { it(item) } },
-                )
-                ContinueWatchingSectionStyle.Poster -> ContinueWatchingPosterCard(
-                    item = item,
-                    layout = layout,
-                    onClick = onItemClick?.let { { it(item) } },
-                    onLongClick = onItemLongPress?.let { { it(item) } },
-                )
-            }
+    if (sectionPadding != null && layout != null) {
+        HomeContinueWatchingSectionContent(
+            items = items,
+            style = style,
+            modifier = modifier.fillMaxWidth(),
+            sectionPadding = sectionPadding,
+            layout = layout,
+            onItemClick = onItemClick,
+            onItemLongPress = onItemLongPress,
+        )
+    } else {
+        BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+            HomeContinueWatchingSectionContent(
+                items = items,
+                style = style,
+                modifier = Modifier.fillMaxWidth(),
+                sectionPadding = homeSectionHorizontalPaddingForWidth(maxWidth.value),
+                layout = rememberContinueWatchingLayout(maxWidth.value),
+                onItemClick = onItemClick,
+                onItemLongPress = onItemLongPress,
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeContinueWatchingSectionContent(
+    items: List<ContinueWatchingItem>,
+    style: ContinueWatchingSectionStyle,
+    modifier: Modifier,
+    sectionPadding: Dp,
+    layout: ContinueWatchingLayout,
+    onItemClick: ((ContinueWatchingItem) -> Unit)?,
+    onItemLongPress: ((ContinueWatchingItem) -> Unit)?,
+) {
+    NuvioShelfSection(
+        title = "Continue Watching",
+        entries = items,
+        modifier = modifier,
+        headerHorizontalPadding = sectionPadding,
+        rowContentPadding = PaddingValues(horizontal = sectionPadding),
+        itemSpacing = layout.itemGap,
+        key = { item -> item.videoId },
+    ) { item ->
+        when (style) {
+            ContinueWatchingSectionStyle.Wide -> ContinueWatchingWideCard(
+                item = item,
+                layout = layout,
+                onClick = onItemClick?.let { { it(item) } },
+                onLongClick = onItemLongPress?.let { { it(item) } },
+            )
+            ContinueWatchingSectionStyle.Poster -> ContinueWatchingPosterCard(
+                item = item,
+                layout = layout,
+                onClick = onItemClick?.let { { it(item) } },
+                onLongClick = onItemLongPress?.let { { it(item) } },
+            )
         }
     }
 }
@@ -460,7 +493,7 @@ private fun UpNextBadge(
     }
 }
 
-private data class ContinueWatchingLayout(
+internal data class ContinueWatchingLayout(
     val itemGap: Dp,
     val wideCardWidth: Dp,
     val wideCardHeight: Dp,
@@ -479,7 +512,7 @@ private data class ContinueWatchingLayout(
     val posterBadgeTextSize: androidx.compose.ui.unit.TextUnit,
 )
 
-private fun rememberContinueWatchingLayout(maxWidthDp: Float): ContinueWatchingLayout =
+internal fun rememberContinueWatchingLayout(maxWidthDp: Float): ContinueWatchingLayout =
     when {
         maxWidthDp >= 1440f -> ContinueWatchingLayout(
             itemGap = 20.dp,

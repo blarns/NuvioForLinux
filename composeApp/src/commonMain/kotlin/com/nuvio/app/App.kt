@@ -1,7 +1,6 @@
 package com.nuvio.app
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -12,7 +11,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -43,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.alpha
@@ -1427,53 +1426,54 @@ private fun AppTabHost(
     onFolderClick: ((collectionId: String, folderId: String) -> Unit)? = null,
     onInitialHomeContentRendered: () -> Unit = {},
 ) {
+    val tabStateHolder = rememberSaveableStateHolder()
+
     Box(modifier = modifier.fillMaxSize()) {
-        keepAliveTab(
-            selected = selectedTab == AppScreenTab.Home,
-        ) {
-            HomeScreen(
-                modifier = Modifier.fillMaxSize(),
-                onCatalogClick = onCatalogClick,
-                onPosterClick = onPosterClick,
-                onPosterLongClick = onPosterLongClick,
-                onContinueWatchingClick = onContinueWatchingClick,
-                onContinueWatchingLongPress = onContinueWatchingLongPress,
-                onFolderClick = onFolderClick,
-                onFirstCatalogRendered = onInitialHomeContentRendered,
-            )
-        }
-        keepAliveTab(
-            selected = selectedTab == AppScreenTab.Search,
-        ) {
-            SearchScreen(
-                modifier = Modifier.fillMaxSize(),
-                onPosterClick = onPosterClick,
-                onPosterLongClick = onPosterLongClick,
-            )
-        }
-        keepAliveTab(
-            selected = selectedTab == AppScreenTab.Library,
-        ) {
-            LibraryScreen(
-                modifier = Modifier.fillMaxSize(),
-                onPosterClick = onLibraryPosterClick,
-                onSectionViewAllClick = onLibrarySectionViewAllClick,
-            )
-        }
-        keepAliveTab(
-            selected = selectedTab == AppScreenTab.Settings,
-        ) {
-            SettingsScreen(
-                modifier = Modifier.fillMaxSize(),
-                onSwitchProfile = onSwitchProfile,
-                onHomescreenClick = onHomescreenSettingsClick,
-                onMetaScreenClick = onMetaScreenSettingsClick,
-                onContinueWatchingClick = onContinueWatchingSettingsClick,
-                onAddonsClick = onAddonsSettingsClick,
-                onPluginsClick = onPluginsSettingsClick,
-                onAccountClick = onAccountSettingsClick,
-                onCollectionsClick = onCollectionsSettingsClick,
-            )
+        tabStateHolder.SaveableStateProvider(selectedTab.name) {
+            when (selectedTab) {
+                AppScreenTab.Home -> {
+                    HomeScreen(
+                        modifier = Modifier.fillMaxSize(),
+                        onCatalogClick = onCatalogClick,
+                        onPosterClick = onPosterClick,
+                        onPosterLongClick = onPosterLongClick,
+                        onContinueWatchingClick = onContinueWatchingClick,
+                        onContinueWatchingLongPress = onContinueWatchingLongPress,
+                        onFolderClick = onFolderClick,
+                        onFirstCatalogRendered = onInitialHomeContentRendered,
+                    )
+                }
+
+                AppScreenTab.Search -> {
+                    SearchScreen(
+                        modifier = Modifier.fillMaxSize(),
+                        onPosterClick = onPosterClick,
+                        onPosterLongClick = onPosterLongClick,
+                    )
+                }
+
+                AppScreenTab.Library -> {
+                    LibraryScreen(
+                        modifier = Modifier.fillMaxSize(),
+                        onPosterClick = onLibraryPosterClick,
+                        onSectionViewAllClick = onLibrarySectionViewAllClick,
+                    )
+                }
+
+                AppScreenTab.Settings -> {
+                    SettingsScreen(
+                        modifier = Modifier.fillMaxSize(),
+                        onSwitchProfile = onSwitchProfile,
+                        onHomescreenClick = onHomescreenSettingsClick,
+                        onMetaScreenClick = onMetaScreenSettingsClick,
+                        onContinueWatchingClick = onContinueWatchingSettingsClick,
+                        onAddonsClick = onAddonsSettingsClick,
+                        onPluginsClick = onPluginsSettingsClick,
+                        onAccountClick = onAccountSettingsClick,
+                        onCollectionsClick = onCollectionsSettingsClick,
+                    )
+                }
+            }
         }
     }
 }
@@ -1648,26 +1648,5 @@ private fun AppLaunchOverlay(
             Spacer(modifier = Modifier.height(24.dp))
             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
         }
-    }
-}
-
-@Composable
-private fun BoxScope.keepAliveTab(
-    selected: Boolean,
-    content: @Composable () -> Unit,
-) {
-    val contentAlpha by animateFloatAsState(
-        targetValue = if (selected) 1f else 0f,
-        animationSpec = tween(durationMillis = 220),
-        label = "tab_content_alpha",
-    )
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .alpha(contentAlpha)
-            .zIndex(if (selected) 1f else 0f),
-    ) {
-        content()
     }
 }
