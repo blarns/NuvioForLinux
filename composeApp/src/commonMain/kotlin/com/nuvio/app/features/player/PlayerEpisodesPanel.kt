@@ -25,7 +25,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -37,6 +39,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -183,6 +186,40 @@ private fun EpisodesListSubView(
         (groupedEpisodes[selectedSeason] ?: emptyList())
             .sortedBy { it.episode ?: 0 }
     }
+    val seasonListState = rememberLazyListState()
+    val episodeListState = rememberLazyListState()
+    var hasPositionedSeasonRow by remember(availableSeasons) { mutableStateOf(false) }
+    var hasPositionedEpisodeList by remember(selectedSeason) { mutableStateOf(false) }
+
+    LaunchedEffect(selectedSeason, availableSeasons) {
+        val selectedSeasonIndex = availableSeasons.indexOf(selectedSeason)
+        if (selectedSeasonIndex >= 0) {
+            if (hasPositionedSeasonRow) {
+                seasonListState.animateScrollToItem(selectedSeasonIndex)
+            } else {
+                seasonListState.scrollToItem(selectedSeasonIndex)
+                hasPositionedSeasonRow = true
+            }
+        }
+    }
+
+    LaunchedEffect(selectedSeason, seasonEpisodes, currentSeason, currentEpisode) {
+        if (seasonEpisodes.isEmpty()) return@LaunchedEffect
+        val activeEpisodeIndex = if (selectedSeason == currentSeason && currentEpisode != null) {
+            seasonEpisodes.indexOfFirst { episode ->
+                episode.season == currentSeason && episode.episode == currentEpisode
+            }
+        } else {
+            -1
+        }
+        val targetIndex = activeEpisodeIndex.takeIf { it >= 0 } ?: 0
+        if (hasPositionedEpisodeList) {
+            episodeListState.animateScrollToItem(targetIndex)
+        } else {
+            episodeListState.scrollToItem(targetIndex)
+            hasPositionedEpisodeList = true
+        }
+    }
 
     Column {
         // Header
@@ -204,15 +241,15 @@ private fun EpisodesListSubView(
 
         // Season tabs
         if (availableSeasons.size > 1) {
-            Row(
+            LazyRow(
+                state = seasonListState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
                     .padding(bottom = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                availableSeasons.forEach { season ->
+                items(availableSeasons, key = { season -> season }) { season ->
                     val label = if (season == 0) "Specials" else "Season $season"
                     AddonFilterChip(
                         label = label,
@@ -242,6 +279,7 @@ private fun EpisodesListSubView(
             }
         } else {
             LazyColumn(
+                state = episodeListState,
                 modifier = Modifier.padding(horizontal = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp),

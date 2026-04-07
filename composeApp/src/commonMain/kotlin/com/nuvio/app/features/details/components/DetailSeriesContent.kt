@@ -27,11 +27,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -71,6 +75,7 @@ fun DetailSeriesContent(
     meta: MetaDetails,
     modifier: Modifier = Modifier,
     showHeader: Boolean = true,
+    preferredSeasonNumber: Int? = null,
     progressByVideoId: Map<String, WatchProgressEntry> = emptyMap(),
     watchedKeys: Set<String> = emptySet(),
     onEpisodeClick: ((MetaVideo) -> Unit)? = null,
@@ -136,9 +141,13 @@ fun DetailSeriesContent(
     }
 
     val seasons = groupedEpisodes.keys.sortedBy(::seasonSortKey)
-    val defaultSeason = seasons.first()
-    var selectedSeason by rememberSaveable(meta.id) { mutableStateOf(defaultSeason) }
-    val currentSeason = selectedSeason.takeIf { it in groupedEpisodes } ?: defaultSeason
+    val defaultSeason = preferredSeasonNumber
+        ?.takeIf { it in groupedEpisodes }
+        ?: seasons.first()
+    var selectedSeasonOverride by rememberSaveable(meta.id) { mutableStateOf<Int?>(null) }
+    val currentSeason = selectedSeasonOverride
+        ?.takeIf { it in groupedEpisodes }
+        ?: defaultSeason
 
     var seasonViewMode by remember {
         mutableStateOf(SeasonViewModeStorage.load() ?: SeasonViewMode.Posters)
@@ -199,13 +208,13 @@ fun DetailSeriesContent(
                                     meta = meta,
                                     currentSeason = currentSeason,
                                     sizing = sizing,
-                                    onSelect = { selectedSeason = it },
+                                    onSelect = { selectedSeasonOverride = it },
                                 )
                                 SeasonViewMode.Text -> SeasonTextChipScrollRow(
                                     seasons = seasons,
                                     currentSeason = currentSeason,
                                     sizing = sizing,
-                                    onSelect = { selectedSeason = it },
+                                    onSelect = { selectedSeasonOverride = it },
                                 )
                             }
                         }
@@ -214,7 +223,7 @@ fun DetailSeriesContent(
                             seasons = seasons,
                             currentSeason = currentSeason,
                             sizing = sizing,
-                            onSelect = { selectedSeason = it },
+                            onSelect = { selectedSeasonOverride = it },
                         )
                     }
                 }
@@ -325,13 +334,27 @@ private fun SeasonTextChipScrollRow(
     sizing: SeriesContentSizing,
     onSelect: (Int) -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
+    val seasonListState = rememberLazyListState()
+    var hasPositionedSeasonRow by remember(seasons) { mutableStateOf(false) }
+
+    LaunchedEffect(seasons, currentSeason) {
+        val currentIndex = seasons.indexOf(currentSeason)
+        if (currentIndex >= 0) {
+            if (hasPositionedSeasonRow) {
+                seasonListState.animateScrollToItem(currentIndex)
+            } else {
+                seasonListState.scrollToItem(currentIndex)
+                hasPositionedSeasonRow = true
+            }
+        }
+    }
+
+    LazyRow(
+        state = seasonListState,
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(sizing.seasonChipGap),
     ) {
-        seasons.forEach { season ->
+        items(seasons, key = { season -> season }) { season ->
             val isSelected = season == currentSeason
             Box(
                 modifier = Modifier
@@ -376,13 +399,27 @@ private fun SeasonPosterScrollRow(
     sizing: SeriesContentSizing,
     onSelect: (Int) -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
+    val seasonListState = rememberLazyListState()
+    var hasPositionedSeasonRow by remember(seasons) { mutableStateOf(false) }
+
+    LaunchedEffect(seasons, currentSeason) {
+        val currentIndex = seasons.indexOf(currentSeason)
+        if (currentIndex >= 0) {
+            if (hasPositionedSeasonRow) {
+                seasonListState.animateScrollToItem(currentIndex)
+            } else {
+                seasonListState.scrollToItem(currentIndex)
+                hasPositionedSeasonRow = true
+            }
+        }
+    }
+
+    LazyRow(
+        state = seasonListState,
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(sizing.seasonChipGap),
     ) {
-        seasons.forEach { season ->
+        items(seasons, key = { season -> season }) { season ->
             SeasonPosterButton(
                 label = season.label(),
                 imageUrl = groupedEpisodes[season]

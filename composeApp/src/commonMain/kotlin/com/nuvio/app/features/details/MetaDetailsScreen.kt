@@ -501,6 +501,7 @@ fun MetaDetailsScreen(
                                     isSaved = isSaved,
                                     onPrimaryPlayClick = onPrimaryPlayClick,
                                     onSaveClick = toggleSaved,
+                                    preferredEpisodeSeasonNumber = seriesAction?.seasonNumber,
                                     hasProductionSection = hasProductionSection,
                                     hasTrailersSection = hasTrailersSection,
                                     hasEpisodes = hasEpisodes,
@@ -795,6 +796,7 @@ private fun ConfiguredMetaSections(
     isSaved: Boolean,
     onPrimaryPlayClick: () -> Unit,
     onSaveClick: () -> Unit,
+    preferredEpisodeSeasonNumber: Int?,
     hasProductionSection: Boolean,
     hasTrailersSection: Boolean,
     hasEpisodes: Boolean,
@@ -887,6 +889,7 @@ private fun ConfiguredMetaSections(
                     DetailSeriesContent(
                         meta = meta,
                         showHeader = showHeader,
+                        preferredSeasonNumber = preferredEpisodeSeasonNumber,
                         progressByVideoId = progressByVideoId,
                         watchedKeys = watchedKeys,
                         onEpisodeClick = onEpisodeClick,
