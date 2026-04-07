@@ -91,17 +91,19 @@ object WatchingState {
 }
 
 private fun WatchProgressEntry.toDomainProgressRecord(): WatchingProgressRecord =
-    WatchingProgressRecord(
-        content = WatchingContentRef(type = parentMetaType, id = parentMetaId),
-        videoId = videoId,
-        seasonNumber = seasonNumber,
-        episodeNumber = episodeNumber,
-        lastUpdatedEpochMs = lastUpdatedEpochMs,
-        lastPositionMs = lastPositionMs,
-        isCompleted = isCompleted,
-        episodeTitle = episodeTitle,
-        episodeThumbnail = episodeThumbnail,
-    )
+    normalizedCompletion().let { entry ->
+        WatchingProgressRecord(
+            content = WatchingContentRef(type = entry.parentMetaType, id = entry.parentMetaId),
+            videoId = entry.videoId,
+            seasonNumber = entry.seasonNumber,
+            episodeNumber = entry.episodeNumber,
+            lastUpdatedEpochMs = entry.lastUpdatedEpochMs,
+            lastPositionMs = entry.lastPositionMs,
+            isCompleted = entry.isCompleted,
+            episodeTitle = entry.episodeTitle,
+            episodeThumbnail = entry.episodeThumbnail,
+        )
+    }
 
 private fun WatchedItem.toDomainWatchedRecord(): WatchingWatchedRecord =
     WatchingWatchedRecord(

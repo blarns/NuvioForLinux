@@ -95,6 +95,49 @@ class WatchProgressRulesTest {
     }
 
     @Test
+    fun `continue watching excludes explicit 100 percent entries even when completion flag is false`() {
+        val completedByPercent = entry(
+            videoId = "movie-complete",
+            lastUpdatedEpochMs = 20L,
+            lastPositionMs = 0L,
+            durationMs = 0L,
+            isCompleted = false,
+            progressPercent = 100f,
+        )
+        val inProgress = entry(
+            videoId = "movie-progress",
+            lastUpdatedEpochMs = 10L,
+            lastPositionMs = 120_000L,
+            durationMs = 1_000_000L,
+            progressPercent = 12f,
+        )
+
+        val result = listOf(completedByPercent, inProgress).continueWatchingEntries()
+
+        assertEquals(listOf("movie-progress"), result.map { it.videoId })
+    }
+
+    @Test
+    fun `codec normalizes completed entries inferred from percent`() {
+        val payload = WatchProgressCodec.encodeEntries(
+            listOf(
+                entry(
+                    videoId = "movie-complete",
+                    lastPositionMs = 0L,
+                    durationMs = 0L,
+                    isCompleted = false,
+                    progressPercent = 100f,
+                ),
+            ),
+        )
+
+        val decoded = WatchProgressCodec.decodeEntries(payload)
+
+        assertEquals(1, decoded.size)
+        assertTrue(decoded.single().isCompleted)
+    }
+
+    @Test
     fun `build playback video id uses season and episode when present`() {
         assertEquals("show:1:2", buildPlaybackVideoId(parentMetaId = "show", seasonNumber = 1, episodeNumber = 2, fallbackVideoId = "fallback"))
         assertEquals("fallback", buildPlaybackVideoId(parentMetaId = "movie", seasonNumber = null, episodeNumber = null, fallbackVideoId = "fallback"))
@@ -107,6 +150,10 @@ class WatchProgressRulesTest {
         seasonNumber: Int? = null,
         episodeNumber: Int? = null,
         lastUpdatedEpochMs: Long = 1L,
+        lastPositionMs: Long = 120_000L,
+        durationMs: Long = 1_000_000L,
+        isCompleted: Boolean = false,
+        progressPercent: Float? = null,
     ): WatchProgressEntry =
         WatchProgressEntry(
             contentType = if (seasonNumber != null && episodeNumber != null) "series" else "movie",
@@ -116,8 +163,10 @@ class WatchProgressRulesTest {
             title = "Title",
             seasonNumber = seasonNumber,
             episodeNumber = episodeNumber,
-            lastPositionMs = 120_000L,
-            durationMs = 1_000_000L,
+            lastPositionMs = lastPositionMs,
+            durationMs = durationMs,
             lastUpdatedEpochMs = lastUpdatedEpochMs,
+            isCompleted = isCompleted,
+            progressPercent = progressPercent,
         )
 }

@@ -42,6 +42,7 @@ class HomeScreenTest {
         val inProgress = progressEntry(
             videoId = "show:1:5",
             title = "Show",
+            episodeNumber = 5,
             episodeTitle = "The Wolf and the Lion",
             lastUpdatedEpochMs = 500L,
         )

@@ -3,6 +3,7 @@ package com.nuvio.app.features.trakt
 import co.touchlab.kermit.Logger
 import com.nuvio.app.features.addons.httpGetTextWithHeaders
 import com.nuvio.app.features.details.MetaDetailsRepository
+import com.nuvio.app.features.watchprogress.WatchProgressCompletionPercentThreshold
 import com.nuvio.app.features.watchprogress.WatchProgressEntry
 import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
 import kotlinx.coroutines.CancellationException
@@ -157,9 +158,10 @@ object TraktProgressRepository {
     fun applyOptimisticProgress(entry: WatchProgressEntry) {
         if (!TraktAuthRepository.isAuthenticated.value) return
         val current = _uiState.value.entries.associateBy { it.videoId }.toMutableMap()
-        val existing = current[entry.videoId]
-        if (existing == null || entry.lastUpdatedEpochMs >= existing.lastUpdatedEpochMs) {
-            current[entry.videoId] = entry
+        val normalizedEntry = entry.normalizedCompletion()
+        val existing = current[normalizedEntry.videoId]
+        if (existing == null || normalizedEntry.lastUpdatedEpochMs >= existing.lastUpdatedEpochMs) {
+            current[normalizedEntry.videoId] = normalizedEntry
         }
         _uiState.value = _uiState.value.copy(entries = current.values.sortedByDescending { it.lastUpdatedEpochMs })
     }
@@ -240,7 +242,8 @@ object TraktProgressRepository {
 
     private fun mergeNewestByVideoId(entries: List<WatchProgressEntry>): List<WatchProgressEntry> {
         val mergedByVideoId = linkedMapOf<String, WatchProgressEntry>()
-        entries.forEach { entry ->
+        entries.forEach { rawEntry ->
+            val entry = rawEntry.normalizedCompletion()
             val existing = mergedByVideoId[entry.videoId]
             if (existing == null || entry.lastUpdatedEpochMs > existing.lastUpdatedEpochMs) {
                 mergedByVideoId[entry.videoId] = entry
@@ -365,9 +368,9 @@ object TraktProgressRepository {
             lastPositionMs = 0L,
             durationMs = 0L,
             lastUpdatedEpochMs = rankedTimestamp(item.pausedAt, fallbackIndex),
-            isCompleted = false,
+            isCompleted = progressPercent >= WatchProgressCompletionPercentThreshold,
             progressPercent = progressPercent,
-        )
+        ).normalizedCompletion()
     }
 
     private fun mapPlaybackEpisode(item: TraktPlaybackItem, fallbackIndex: Int): WatchProgressEntry? {
@@ -399,9 +402,9 @@ object TraktProgressRepository {
             lastPositionMs = 0L,
             durationMs = 0L,
             lastUpdatedEpochMs = rankedTimestamp(item.pausedAt, fallbackIndex),
-            isCompleted = false,
+            isCompleted = progressPercent >= WatchProgressCompletionPercentThreshold,
             progressPercent = progressPercent,
-        )
+        ).normalizedCompletion()
     }
 
     private fun mapHistoryEpisode(item: TraktHistoryEpisodeItem, fallbackIndex: Int): WatchProgressEntry? {

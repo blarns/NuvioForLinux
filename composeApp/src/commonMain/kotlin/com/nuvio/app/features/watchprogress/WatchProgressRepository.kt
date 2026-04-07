@@ -294,7 +294,7 @@ object WatchProgressRepository {
             pauseDescription = session.pauseDescription,
             lastSourceUrl = session.lastSourceUrl,
             isCompleted = isCompleted,
-        )
+        ).normalizedCompletion()
 
         entriesByVideoId[session.videoId] = entry
         if (shouldUseTraktProgress()) {

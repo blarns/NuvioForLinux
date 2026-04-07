@@ -4,6 +4,8 @@ import com.nuvio.app.features.details.MetaVideo
 import com.nuvio.app.features.watching.domain.WatchingContentRef
 import kotlinx.serialization.Serializable
 
+internal const val WatchProgressCompletionPercentThreshold = 99.5f
+
 @Serializable
 enum class ContinueWatchingSectionStyle {
     Wide,
@@ -36,9 +38,17 @@ data class WatchProgressEntry(
     val isCompleted: Boolean = false,
     val progressPercent: Float? = null,
 ) {
+    val normalizedProgressPercent: Float?
+        get() = progressPercent?.coerceIn(0f, 100f)
+
+    val isEffectivelyCompleted: Boolean
+        get() = isCompleted ||
+            (normalizedProgressPercent?.let { it >= WatchProgressCompletionPercentThreshold } == true) ||
+            (durationMs > 0L && lastPositionMs >= durationMs)
+
     val progressFraction: Float
         get() {
-            progressPercent?.let { explicitPercent ->
+            normalizedProgressPercent?.let { explicitPercent ->
                 return (explicitPercent / 100f).coerceIn(0f, 1f)
             }
             return if (durationMs > 0L) {
@@ -52,14 +62,41 @@ data class WatchProgressEntry(
         get() = seasonNumber != null && episodeNumber != null
 
     val isResumable: Boolean
-        get() = !isCompleted
+        get() = !isEffectivelyCompleted
+
+    fun normalizedCompletion(): WatchProgressEntry {
+        val completed = isEffectivelyCompleted
+        val normalizedPositionMs = when {
+            completed && durationMs > 0L -> durationMs
+            else -> lastPositionMs.coerceAtLeast(0L)
+        }
+        val normalizedPercent = when {
+            normalizedProgressPercent != null -> normalizedProgressPercent
+            completed && durationMs <= 0L -> 100f
+            else -> null
+        }
+
+        return if (
+            completed == isCompleted &&
+            normalizedPositionMs == lastPositionMs &&
+            normalizedPercent == progressPercent
+        ) {
+            this
+        } else {
+            copy(
+                lastPositionMs = normalizedPositionMs,
+                isCompleted = completed,
+                progressPercent = normalizedPercent,
+            )
+        }
+    }
 
     fun resolveResumePosition(actualDurationMs: Long): Long {
         if (actualDurationMs <= 0L) return lastPositionMs.coerceAtLeast(0L)
         if (durationMs > 0L && lastPositionMs > 0L) {
             return lastPositionMs.coerceIn(0L, actualDurationMs)
         }
-        progressPercent?.let { percent ->
+        normalizedProgressPercent?.let { percent ->
             val fraction = (percent / 100f).coerceIn(0f, 1f)
             return (actualDurationMs * fraction).toLong()
         }
@@ -126,17 +163,18 @@ data class ContinueWatchingPreferencesUiState(
 )
 
 internal fun WatchProgressEntry.toContinueWatchingItem(): ContinueWatchingItem {
-    val explicitResumeProgressFraction = progressPercent
+    val normalizedEntry = normalizedCompletion()
+    val explicitResumeProgressFraction = normalizedEntry.normalizedProgressPercent
         ?.takeIf { durationMs <= 0L && it > 0f }
         ?.let { explicitPercent -> (explicitPercent / 100f).coerceIn(0f, 1f) }
 
-    val subtitle = if (seasonNumber != null && episodeNumber != null) {
+    val subtitle = if (normalizedEntry.seasonNumber != null && normalizedEntry.episodeNumber != null) {
         buildString {
             append("S")
-            append(seasonNumber)
+            append(normalizedEntry.seasonNumber)
             append("E")
-            append(episodeNumber)
-            episodeTitle?.takeIf { it.isNotBlank() }?.let {
+            append(normalizedEntry.episodeNumber)
+            normalizedEntry.episodeTitle?.takeIf { it.isNotBlank() }?.let {
                 append(" • ")
                 append(it)
             }
@@ -146,24 +184,24 @@ internal fun WatchProgressEntry.toContinueWatchingItem(): ContinueWatchingItem {
     }
 
     return ContinueWatchingItem(
-        parentMetaId = parentMetaId,
-        parentMetaType = parentMetaType,
-        videoId = videoId,
-        title = title,
+        parentMetaId = normalizedEntry.parentMetaId,
+        parentMetaType = normalizedEntry.parentMetaType,
+        videoId = normalizedEntry.videoId,
+        title = normalizedEntry.title,
         subtitle = subtitle,
-        imageUrl = episodeThumbnail ?: background ?: poster,
-        logo = logo,
-        poster = poster,
-        background = background,
-        seasonNumber = seasonNumber,
-        episodeNumber = episodeNumber,
-        episodeTitle = episodeTitle,
-        episodeThumbnail = episodeThumbnail,
-        pauseDescription = pauseDescription,
-        resumePositionMs = if (explicitResumeProgressFraction != null) 0L else lastPositionMs,
+        imageUrl = normalizedEntry.episodeThumbnail ?: normalizedEntry.background ?: normalizedEntry.poster,
+        logo = normalizedEntry.logo,
+        poster = normalizedEntry.poster,
+        background = normalizedEntry.background,
+        seasonNumber = normalizedEntry.seasonNumber,
+        episodeNumber = normalizedEntry.episodeNumber,
+        episodeTitle = normalizedEntry.episodeTitle,
+        episodeThumbnail = normalizedEntry.episodeThumbnail,
+        pauseDescription = normalizedEntry.pauseDescription,
+        resumePositionMs = if (explicitResumeProgressFraction != null) 0L else normalizedEntry.lastPositionMs,
         resumeProgressFraction = explicitResumeProgressFraction,
-        durationMs = durationMs,
-        progressFraction = progressFraction,
+        durationMs = normalizedEntry.durationMs,
+        progressFraction = normalizedEntry.progressFraction,
     )
 }
 

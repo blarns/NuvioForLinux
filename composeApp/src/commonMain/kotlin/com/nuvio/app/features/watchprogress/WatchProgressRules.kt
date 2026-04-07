@@ -28,6 +28,7 @@ internal object WatchProgressCodec {
     fun decodeEntries(payload: String): List<WatchProgressEntry> =
         runCatching {
             json.decodeFromString<StoredWatchProgressPayload>(payload).entries
+                .map(WatchProgressEntry::normalizedCompletion)
         }.getOrDefault(emptyList())
 
     fun encodeEntries(entries: Collection<WatchProgressEntry>): String =
@@ -76,17 +77,19 @@ internal fun List<WatchProgressEntry>.continueWatchingEntries(
 }
 
 private fun WatchProgressEntry.toDomainProgressRecord(): WatchingProgressRecord =
-    WatchingProgressRecord(
+    normalizedCompletion().let { entry ->
+        WatchingProgressRecord(
         content = WatchingContentRef(
-            type = parentMetaType,
-            id = parentMetaId,
+            type = entry.parentMetaType,
+            id = entry.parentMetaId,
         ),
-        videoId = videoId,
-        seasonNumber = seasonNumber,
-        episodeNumber = episodeNumber,
-        lastUpdatedEpochMs = lastUpdatedEpochMs,
-        lastPositionMs = lastPositionMs,
-        isCompleted = isCompleted,
-        episodeTitle = episodeTitle,
-        episodeThumbnail = episodeThumbnail,
+        videoId = entry.videoId,
+        seasonNumber = entry.seasonNumber,
+        episodeNumber = entry.episodeNumber,
+        lastUpdatedEpochMs = entry.lastUpdatedEpochMs,
+        lastPositionMs = entry.lastPositionMs,
+        isCompleted = entry.isCompleted,
+        episodeTitle = entry.episodeTitle,
+        episodeThumbnail = entry.episodeThumbnail,
     )
+    }
