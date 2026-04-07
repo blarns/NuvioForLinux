@@ -24,13 +24,9 @@ import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.reinterpret
 import platform.CoreGraphics.CGImageRef
 import platform.CoreFoundation.CFDataCreate
-import platform.ImageIO.CGImageSourceCopyPropertiesAtIndex
 import platform.ImageIO.CGImageSourceCreateImageAtIndex
 import platform.ImageIO.CGImageSourceCreateWithData
 import platform.ImageIO.CGImageSourceGetCount
-import platform.ImageIO.kCGImagePropertyGIFDelayTime
-import platform.ImageIO.kCGImagePropertyGIFDictionary
-import platform.ImageIO.kCGImagePropertyGIFUnclampedDelayTime
 import platform.UIKit.UIImage
 import platform.UIKit.UIImageView
 import platform.UIKit.UIViewContentMode
@@ -42,7 +38,8 @@ private val gifHttpClient = HttpClient(Darwin)
 private val gifDecodeScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 private const val MaxCachedGifImages = 12
 private const val DefaultGifFrameDurationSeconds = 0.1
-private const val MinimumGifFrameDurationSeconds = 0.02
+private const val MinimumDisplayedGifFrameDurationSeconds = 0.05
+private const val GifAnimationStepDurationSeconds = 0.02
 private val gifImageCache = mutableMapOf<String, UIImage>()
 private val gifImageCacheOrder = mutableListOf<String>()
 private val gifImageInFlight = mutableMapOf<String, Deferred<UIImage?>>()
@@ -124,8 +121,12 @@ private suspend fun loadGifImage(imageUrl: String): UIImage? {
             val bytes = gifHttpClient.get(imageUrl).body<ByteArray>()
             bytes
                 .takeIf { it.isNotEmpty() }
-                ?.toCFData()
-                ?.let { UIImage.gifImageWithData(it) }
+                ?.let { gifBytes ->
+                    UIImage.gifImageWithData(
+                        data = gifBytes.toCFData(),
+                        frameDurations = parseGifFrameDurations(gifBytes),
+                    )
+                }
         }.getOrNull()
     }.also { gifImageInFlight[imageUrl] = it }
 
@@ -155,7 +156,10 @@ private fun ByteArray.toCFData() =
     }
 
 @OptIn(ExperimentalForeignApi::class)
-private fun UIImage.Companion.gifImageWithData(data: kotlinx.cinterop.CPointer<cnames.structs.__CFData>?): UIImage? {
+private fun UIImage.Companion.gifImageWithData(
+    data: kotlinx.cinterop.CPointer<cnames.structs.__CFData>?,
+    frameDurations: List<Double>,
+): UIImage? {
     return runCatching {
         val source = data?.let { CGImageSourceCreateWithData(it, null) } ?: return null
         val count = CGImageSourceGetCount(source).toInt()
@@ -167,7 +171,9 @@ private fun UIImage.Companion.gifImageWithData(data: kotlinx.cinterop.CPointer<c
                 frames.add(
                     GifFrame(
                         image = UIImage.imageWithCGImage(imageRef),
-                        durationSeconds = gifFrameDurationSeconds(source, index),
+                        durationSeconds = frameDurations.getOrNull(index)
+                            ?.coerceAtLeast(MinimumDisplayedGifFrameDurationSeconds)
+                            ?: DefaultGifFrameDurationSeconds,
                     )
                 )
             } finally {
@@ -178,34 +184,15 @@ private fun UIImage.Companion.gifImageWithData(data: kotlinx.cinterop.CPointer<c
         if (frames.isEmpty()) return null
 
         val animatedFrames = expandedGifFrames(frames)
-        val durationSeconds = animatedFrames.size * MinimumGifFrameDurationSeconds
+        val durationSeconds = animatedFrames.size * GifAnimationStepDurationSeconds
         UIImage.animatedImageWithImages(animatedFrames, durationSeconds)
     }.getOrNull()
-}
-
-private fun gifFrameDurationSeconds(source: Any, index: Int): Double {
-    val properties = CGImageSourceCopyPropertiesAtIndex(source, index.toULong(), null) as? Map<Any?, *>
-        ?: return DefaultGifFrameDurationSeconds
-    val gifProperties = properties[kCGImagePropertyGIFDictionary] as? Map<Any?, *>
-        ?: return DefaultGifFrameDurationSeconds
-
-    val unclampedDelay = gifProperties.doubleValue(kCGImagePropertyGIFUnclampedDelayTime)
-    if (unclampedDelay != null && unclampedDelay >= MinimumGifFrameDurationSeconds) {
-        return unclampedDelay
-    }
-
-    val delay = gifProperties.doubleValue(kCGImagePropertyGIFDelayTime)
-    return when {
-        delay == null -> DefaultGifFrameDurationSeconds
-        delay < MinimumGifFrameDurationSeconds -> MinimumGifFrameDurationSeconds
-        else -> delay
-    }
 }
 
 private fun expandedGifFrames(frames: List<GifFrame>): List<UIImage> {
     val expandedFrames = ArrayList<UIImage>(frames.size)
     frames.forEach { frame ->
-        val repeatCount = (frame.durationSeconds / MinimumGifFrameDurationSeconds)
+        val repeatCount = (frame.durationSeconds / GifAnimationStepDurationSeconds)
             .roundToInt()
             .coerceAtLeast(1)
         repeat(repeatCount) {
@@ -215,5 +202,94 @@ private fun expandedGifFrames(frames: List<GifFrame>): List<UIImage> {
     return expandedFrames
 }
 
-private fun Map<Any?, *>.doubleValue(key: Any?): Double? =
-    (this[key] as? Number)?.toDouble()
+private fun parseGifFrameDurations(bytes: ByteArray): List<Double> {
+    if (bytes.size < 13 || !bytes.hasGifHeader()) return emptyList()
+
+    var index = 6
+    if (index + 7 > bytes.size) return emptyList()
+
+    val logicalScreenPacked = bytes[index + 4].unsignedInt()
+    index += 7
+
+    if (logicalScreenPacked and 0x80 != 0) {
+        val globalColorTableSize = 3 * (1 shl ((logicalScreenPacked and 0x07) + 1))
+        index += globalColorTableSize
+    }
+
+    val frameDurations = mutableListOf<Double>()
+    var pendingDelaySeconds: Double? = null
+
+    while (index < bytes.size) {
+        when (bytes[index].unsignedInt()) {
+            0x21 -> {
+                if (index + 1 >= bytes.size) break
+                val extensionLabel = bytes[index + 1].unsignedInt()
+                if (extensionLabel == 0xF9) {
+                    if (index + 7 >= bytes.size) break
+                    val delayHundredths = bytes.readUnsignedShort(index + 4)
+                    pendingDelaySeconds = if (delayHundredths <= 0) {
+                        DefaultGifFrameDurationSeconds
+                    } else {
+                        delayHundredths / 100.0
+                    }
+                    index += 8
+                } else {
+                    index += 2
+                    index = bytes.skipGifSubBlocks(index)
+                }
+            }
+
+            0x2C -> {
+                if (index + 9 >= bytes.size) break
+                val imageDescriptorPacked = bytes[index + 9].unsignedInt()
+                index += 10
+
+                if (imageDescriptorPacked and 0x80 != 0) {
+                    val localColorTableSize = 3 * (1 shl ((imageDescriptorPacked and 0x07) + 1))
+                    index += localColorTableSize
+                }
+
+                if (index >= bytes.size) break
+                index += 1
+                index = bytes.skipGifSubBlocks(index)
+
+                frameDurations += pendingDelaySeconds ?: DefaultGifFrameDurationSeconds
+                pendingDelaySeconds = null
+            }
+
+            0x3B -> break
+            else -> break
+        }
+    }
+
+    return frameDurations
+}
+
+private fun ByteArray.hasGifHeader(): Boolean =
+    size >= 6 &&
+        this[0] == 'G'.code.toByte() &&
+        this[1] == 'I'.code.toByte() &&
+        this[2] == 'F'.code.toByte() &&
+        this[3] == '8'.code.toByte() &&
+        (this[4] == '7'.code.toByte() || this[4] == '9'.code.toByte()) &&
+        this[5] == 'a'.code.toByte()
+
+private fun ByteArray.skipGifSubBlocks(startIndex: Int): Int {
+    var index = startIndex
+    while (index < size) {
+        val blockSize = this[index].unsignedInt()
+        index += 1
+        if (blockSize == 0) {
+            return index
+        }
+        index += blockSize
+    }
+    return index
+}
+
+private fun ByteArray.readUnsignedShort(startIndex: Int): Int {
+    if (startIndex + 1 >= size) return 0
+    return this[startIndex].unsignedInt() or (this[startIndex + 1].unsignedInt() shl 8)
+}
+
+private fun Byte.unsignedInt(): Int = toInt() and 0xFF
