@@ -238,11 +238,13 @@ object HomeCatalogSettingsRepository {
         val catalogEntries = definitions.map { UnifiedEntry(it.key, false) }
         val collectionEntries = collectionDefinitions.map { UnifiedEntry(it.key, true) }
         val allEntries = catalogEntries + collectionEntries
+        val knownKeys = allEntries.mapTo(linkedSetOf(), UnifiedEntry::key)
+        var nextOrder = (current.values.maxOfOrNull(StoredHomeCatalogPreference::order) ?: -1) + 1
 
         val orderedEntries = allEntries.mapIndexed { defaultIndex, entry ->
             Triple(
                 entry,
-                current[entry.key]?.order ?: (definitions.size + defaultIndex),
+                current[entry.key]?.order ?: (nextOrder + defaultIndex),
                 defaultIndex,
             )
         }.sortedWith(
@@ -252,9 +254,11 @@ object HomeCatalogSettingsRepository {
             ),
         ).map { it.first }
 
-        val normalized = mutableMapOf<String, StoredHomeCatalogPreference>()
+        val normalized = current
+            .filterKeys { it !in knownKeys }
+            .toMutableMap()
         var enabledHeroSourceCount = 0
-        orderedEntries.forEachIndexed { index, entry ->
+        orderedEntries.forEach { entry ->
             val stored = current[entry.key]
             val heroSourceEnabled = if (entry.isCollection) {
                 false
@@ -270,7 +274,7 @@ object HomeCatalogSettingsRepository {
                 customTitle = stored?.customTitle.orEmpty(),
                 enabled = stored?.enabled ?: true,
                 heroSourceEnabled = heroSourceEnabled,
-                order = index,
+                order = stored?.order ?: nextOrder++,
             )
         }
         preferences = normalized
