@@ -76,21 +76,20 @@ object CollectionRepository {
     }
 
     fun moveUp(index: Int) {
-        ensureLoaded()
-        val list = _collections.value.toMutableList()
-        if (index <= 0 || index >= list.size) return
-        val item = list.removeAt(index)
-        list.add(index - 1, item)
-        _collections.value = list
-        persist()
+        moveByIndex(index, index - 1)
     }
 
     fun moveDown(index: Int) {
+        moveByIndex(index, index + 1)
+    }
+
+    fun moveByIndex(fromIndex: Int, toIndex: Int) {
         ensureLoaded()
         val list = _collections.value.toMutableList()
-        if (index < 0 || index >= list.size - 1) return
-        val item = list.removeAt(index)
-        list.add(index + 1, item)
+        if (fromIndex == toIndex) return
+        if (fromIndex !in list.indices || toIndex !in list.indices) return
+        val item = list.removeAt(fromIndex)
+        list.add(toIndex, item)
         _collections.value = list
         persist()
     }

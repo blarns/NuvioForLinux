@@ -125,18 +125,19 @@ object CollectionEditorRepository {
     }
 
     fun moveFolderUp(index: Int) {
-        val list = _uiState.value.folders.toMutableList()
-        if (index <= 0 || index >= list.size) return
-        val item = list.removeAt(index)
-        list.add(index - 1, item)
-        _uiState.value = _uiState.value.copy(folders = list)
+        moveFolderByIndex(index, index - 1)
     }
 
     fun moveFolderDown(index: Int) {
+        moveFolderByIndex(index, index + 1)
+    }
+
+    fun moveFolderByIndex(fromIndex: Int, toIndex: Int) {
+        if (fromIndex == toIndex) return
         val list = _uiState.value.folders.toMutableList()
-        if (index < 0 || index >= list.size - 1) return
-        val item = list.removeAt(index)
-        list.add(index + 1, item)
+        if (fromIndex !in list.indices || toIndex !in list.indices) return
+        val item = list.removeAt(fromIndex)
+        list.add(toIndex, item)
         _uiState.value = _uiState.value.copy(folders = list)
     }
 

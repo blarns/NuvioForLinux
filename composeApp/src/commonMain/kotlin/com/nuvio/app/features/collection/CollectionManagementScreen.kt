@@ -7,22 +7,23 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowDownward
-import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,27 +32,32 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.animation.core.animateDpAsState
 import com.nuvio.app.core.ui.NuvioPrimaryButton
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioScreenHeader
 import com.nuvio.app.core.ui.NuvioSectionLabel
 import com.nuvio.app.core.ui.NuvioStatusModal
 import com.nuvio.app.core.ui.NuvioSurfaceCard
+import sh.calvin.reorderable.ReorderableCollectionItemScope
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,19 +119,14 @@ fun CollectionManagementScreen(
             item { NuvioSectionLabel(text = "YOUR COLLECTIONS") }
         }
 
-        itemsIndexed(
-            items = collections,
-            key = { _, collection -> collection.id },
-        ) { index, collection ->
-            CollectionListItem(
-                collection = collection,
-                index = index,
-                totalCount = collections.size,
-                onEdit = { onNavigateToEditor(collection.id) },
-                onDelete = { showDeleteConfirm = collection.id },
-                onMoveUp = { CollectionRepository.moveUp(index) },
-                onMoveDown = { CollectionRepository.moveDown(index) },
-            )
+        if (collections.isNotEmpty()) {
+            item {
+                CollectionReorderableList(
+                    collections = collections,
+                    onEdit = { onNavigateToEditor(it) },
+                    onDelete = { showDeleteConfirm = it },
+                )
+            }
         }
 
         if (collections.isEmpty()) {
@@ -202,15 +203,57 @@ fun CollectionManagementScreen(
 }
 
 @Composable
+private fun CollectionReorderableList(
+    collections: List<Collection>,
+    onEdit: (String) -> Unit,
+    onDelete: (String) -> Unit,
+) {
+    val hapticFeedback = LocalHapticFeedback.current
+    val lazyListState = rememberLazyListState()
+    val reorderableLazyListState = rememberReorderableLazyListState(
+        lazyListState = lazyListState,
+    ) { from, to ->
+        CollectionRepository.moveByIndex(from.index, to.index)
+        hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 720.dp),
+        state = lazyListState,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        itemsIndexed(collections, key = { _, collection -> collection.id }) { _, collection ->
+            ReorderableItem(reorderableLazyListState, key = collection.id) { isDragging ->
+                val elevation by animateDpAsState(if (isDragging) 4.dp else 0.dp)
+
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = MaterialTheme.shapes.extraLarge,
+                    shadowElevation = elevation,
+                ) {
+                    CollectionListItem(
+                        collection = collection,
+                        onEdit = { onEdit(collection.id) },
+                        onDelete = { onDelete(collection.id) },
+                        dragHandleScope = this@ReorderableItem,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun CollectionListItem(
     collection: Collection,
-    index: Int,
-    totalCount: Int,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
+    dragHandleScope: ReorderableCollectionItemScope,
 ) {
+    val hapticFeedback = LocalHapticFeedback.current
+
     NuvioSurfaceCard {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -238,27 +281,26 @@ private fun CollectionListItem(
         Spacer(modifier = Modifier.height(10.dp))
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(
-                onClick = onMoveUp,
-                enabled = index > 0,
-                modifier = Modifier.size(36.dp),
+                modifier = with(dragHandleScope) {
+                    Modifier.draggableHandle(
+                        onDragStarted = {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                        },
+                        onDragStopped = {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        },
+                    ).size(36.dp)
+                },
+                onClick = {},
             ) {
                 Icon(
-                    imageVector = Icons.Rounded.ArrowUpward,
-                    contentDescription = "Move up",
-                    modifier = Modifier.size(20.dp).alpha(if (index > 0) 1f else 0.3f),
-                )
-            }
-            IconButton(
-                onClick = onMoveDown,
-                enabled = index < totalCount - 1,
-                modifier = Modifier.size(36.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.ArrowDownward,
-                    contentDescription = "Move down",
-                    modifier = Modifier.size(20.dp).alpha(if (index < totalCount - 1) 1f else 0.3f),
+                    imageVector = Icons.Rounded.Menu,
+                    contentDescription = "Reorder",
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Spacer(modifier = Modifier.weight(1f))

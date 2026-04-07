@@ -24,21 +24,33 @@ import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.reinterpret
 import platform.CoreGraphics.CGImageRef
 import platform.CoreFoundation.CFDataCreate
+import platform.ImageIO.CGImageSourceCopyPropertiesAtIndex
 import platform.ImageIO.CGImageSourceCreateImageAtIndex
 import platform.ImageIO.CGImageSourceCreateWithData
 import platform.ImageIO.CGImageSourceGetCount
+import platform.ImageIO.kCGImagePropertyGIFDelayTime
+import platform.ImageIO.kCGImagePropertyGIFDictionary
+import platform.ImageIO.kCGImagePropertyGIFUnclampedDelayTime
 import platform.UIKit.UIImage
 import platform.UIKit.UIImageView
 import platform.UIKit.UIViewContentMode
 import platform.CoreGraphics.CGImageRelease
 import kotlinx.cinterop.usePinned
+import kotlin.math.roundToInt
 
 private val gifHttpClient = HttpClient(Darwin)
 private val gifDecodeScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 private const val MaxCachedGifImages = 12
+private const val DefaultGifFrameDurationSeconds = 0.1
+private const val MinimumGifFrameDurationSeconds = 0.02
 private val gifImageCache = mutableMapOf<String, UIImage>()
 private val gifImageCacheOrder = mutableListOf<String>()
 private val gifImageInFlight = mutableMapOf<String, Deferred<UIImage?>>()
+
+private data class GifFrame(
+    val image: UIImage,
+    val durationSeconds: Double,
+)
 
 @OptIn(ExperimentalForeignApi::class)
 @Composable
@@ -147,12 +159,17 @@ private fun UIImage.Companion.gifImageWithData(data: kotlinx.cinterop.CPointer<c
     return runCatching {
         val source = data?.let { CGImageSourceCreateWithData(it, null) } ?: return null
         val count = CGImageSourceGetCount(source).toInt()
-        val frames = mutableListOf<UIImage>()
+        val frames = mutableListOf<GifFrame>()
 
         for (index in 0 until count) {
             val imageRef: CGImageRef = CGImageSourceCreateImageAtIndex(source, index.toULong(), null) ?: continue
             try {
-                frames.add(UIImage.imageWithCGImage(imageRef))
+                frames.add(
+                    GifFrame(
+                        image = UIImage.imageWithCGImage(imageRef),
+                        durationSeconds = gifFrameDurationSeconds(source, index),
+                    )
+                )
             } finally {
                 CGImageRelease(imageRef)
             }
@@ -160,7 +177,43 @@ private fun UIImage.Companion.gifImageWithData(data: kotlinx.cinterop.CPointer<c
 
         if (frames.isEmpty()) return null
 
-        val durationSeconds = (count * 0.1).coerceAtLeast(0.1)
-        UIImage.animatedImageWithImages(frames, durationSeconds)
+        val animatedFrames = expandedGifFrames(frames)
+        val durationSeconds = animatedFrames.size * MinimumGifFrameDurationSeconds
+        UIImage.animatedImageWithImages(animatedFrames, durationSeconds)
     }.getOrNull()
 }
+
+private fun gifFrameDurationSeconds(source: Any, index: Int): Double {
+    val properties = CGImageSourceCopyPropertiesAtIndex(source, index.toULong(), null) as? Map<Any?, *>
+        ?: return DefaultGifFrameDurationSeconds
+    val gifProperties = properties[kCGImagePropertyGIFDictionary] as? Map<Any?, *>
+        ?: return DefaultGifFrameDurationSeconds
+
+    val unclampedDelay = gifProperties.doubleValue(kCGImagePropertyGIFUnclampedDelayTime)
+    if (unclampedDelay != null && unclampedDelay >= MinimumGifFrameDurationSeconds) {
+        return unclampedDelay
+    }
+
+    val delay = gifProperties.doubleValue(kCGImagePropertyGIFDelayTime)
+    return when {
+        delay == null -> DefaultGifFrameDurationSeconds
+        delay < MinimumGifFrameDurationSeconds -> MinimumGifFrameDurationSeconds
+        else -> delay
+    }
+}
+
+private fun expandedGifFrames(frames: List<GifFrame>): List<UIImage> {
+    val expandedFrames = ArrayList<UIImage>(frames.size)
+    frames.forEach { frame ->
+        val repeatCount = (frame.durationSeconds / MinimumGifFrameDurationSeconds)
+            .roundToInt()
+            .coerceAtLeast(1)
+        repeat(repeatCount) {
+            expandedFrames.add(frame.image)
+        }
+    }
+    return expandedFrames
+}
+
+private fun Map<Any?, *>.doubleValue(key: Any?): Double? =
+    (this[key] as? Number)?.toDouble()

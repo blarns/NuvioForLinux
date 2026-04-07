@@ -13,20 +13,21 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.ArrowDownward
-import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -46,11 +47,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.animation.core.animateDpAsState
 import com.nuvio.app.core.ui.NuvioInputField
 import com.nuvio.app.core.ui.NuvioPrimaryButton
 import com.nuvio.app.core.ui.NuvioScreen
@@ -58,6 +61,9 @@ import com.nuvio.app.core.ui.NuvioScreenHeader
 import com.nuvio.app.core.ui.NuvioSectionLabel
 import com.nuvio.app.core.ui.NuvioSurfaceCard
 import com.nuvio.app.features.home.PosterShape
+import sh.calvin.reorderable.ReorderableCollectionItemScope
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -289,19 +295,14 @@ fun CollectionEditorScreen(
             }
 
             // Folder Items
-        itemsIndexed(
-            items = state.folders,
-            key = { _, folder -> folder.id },
-        ) { index, folder ->
-            FolderListItem(
-                folder = folder,
-                index = index,
-                totalCount = state.folders.size,
-                onEdit = { CollectionEditorRepository.editFolder(folder.id) },
-                onDelete = { CollectionEditorRepository.removeFolder(folder.id) },
-                onMoveUp = { CollectionEditorRepository.moveFolderUp(index) },
-                onMoveDown = { CollectionEditorRepository.moveFolderDown(index) },
-            )
+        if (state.folders.isNotEmpty()) {
+            item {
+                FolderReorderableList(
+                    folders = state.folders,
+                    onEdit = { CollectionEditorRepository.editFolder(it) },
+                    onDelete = { CollectionEditorRepository.removeFolder(it) },
+                )
+            }
         }
 
         if (state.folders.isEmpty()) {
@@ -341,15 +342,57 @@ fun CollectionEditorScreen(
 }
 
 @Composable
+private fun FolderReorderableList(
+    folders: List<CollectionFolder>,
+    onEdit: (String) -> Unit,
+    onDelete: (String) -> Unit,
+) {
+    val hapticFeedback = LocalHapticFeedback.current
+    val lazyListState = rememberLazyListState()
+    val reorderableLazyListState = rememberReorderableLazyListState(
+        lazyListState = lazyListState,
+    ) { from, to ->
+        CollectionEditorRepository.moveFolderByIndex(from.index, to.index)
+        hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 720.dp),
+        state = lazyListState,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        itemsIndexed(folders, key = { _, folder -> folder.id }) { _, folder ->
+            ReorderableItem(reorderableLazyListState, key = folder.id) { isDragging ->
+                val elevation by animateDpAsState(if (isDragging) 4.dp else 0.dp)
+
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = MaterialTheme.shapes.extraLarge,
+                    shadowElevation = elevation,
+                ) {
+                    FolderListItem(
+                        folder = folder,
+                        onEdit = { onEdit(folder.id) },
+                        onDelete = { onDelete(folder.id) },
+                        dragHandleScope = this@ReorderableItem,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun FolderListItem(
     folder: CollectionFolder,
-    index: Int,
-    totalCount: Int,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
+    dragHandleScope: ReorderableCollectionItemScope,
 ) {
+    val hapticFeedback = LocalHapticFeedback.current
+
     NuvioSurfaceCard {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -385,27 +428,28 @@ private fun FolderListItem(
             }
         }
         Spacer(modifier = Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             IconButton(
-                onClick = onMoveUp,
-                enabled = index > 0,
-                modifier = Modifier.size(36.dp),
+                modifier = with(dragHandleScope) {
+                    Modifier.draggableHandle(
+                        onDragStarted = {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                        },
+                        onDragStopped = {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        },
+                    ).size(36.dp)
+                },
+                onClick = {},
             ) {
                 Icon(
-                    imageVector = Icons.Rounded.ArrowUpward,
-                    contentDescription = "Move up",
-                    modifier = Modifier.size(20.dp).alpha(if (index > 0) 1f else 0.3f),
-                )
-            }
-            IconButton(
-                onClick = onMoveDown,
-                enabled = index < totalCount - 1,
-                modifier = Modifier.size(36.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.ArrowDownward,
-                    contentDescription = "Move down",
-                    modifier = Modifier.size(20.dp).alpha(if (index < totalCount - 1) 1f else 0.3f),
+                    imageVector = Icons.Rounded.Menu,
+                    contentDescription = "Reorder",
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Spacer(modifier = Modifier.weight(1f))
