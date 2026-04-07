@@ -8,10 +8,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -60,6 +62,7 @@ import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioScreenHeader
 import com.nuvio.app.core.ui.NuvioSectionLabel
 import com.nuvio.app.core.ui.NuvioSurfaceCard
+import com.nuvio.app.core.ui.nuvioPlatformExtraBottomPadding
 import com.nuvio.app.features.home.PosterShape
 import sh.calvin.reorderable.ReorderableCollectionItemScope
 import sh.calvin.reorderable.ReorderableItem
@@ -72,6 +75,7 @@ fun CollectionEditorScreen(
     onBack: () -> Unit,
 ) {
     val state by CollectionEditorRepository.uiState.collectAsState()
+    val bottomInset = nuvioPlatformExtraBottomPadding
 
     LaunchedEffect(collectionId) {
         CollectionEditorRepository.initialize(collectionId)
@@ -93,16 +97,18 @@ fun CollectionEditorScreen(
         )
     }
 
-    NuvioScreen {
-        stickyHeader {
-            NuvioScreenHeader(
-                title = if (state.isNew) "New Collection" else "Edit Collection",
-                onBack = onBack,
-            )
-        }
+    Box(modifier = Modifier.fillMaxSize()) {
+        NuvioScreen(
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            stickyHeader {
+                NuvioScreenHeader(
+                    title = if (state.isNew) "New Collection" else "Edit Collection",
+                    onBack = onBack,
+                )
+            }
 
-            // Title
-        item {
+            item {
                 NuvioInputField(
                     value = state.title,
                     onValueChange = { CollectionEditorRepository.setTitle(it) },
@@ -110,8 +116,7 @@ fun CollectionEditorScreen(
                 )
             }
 
-            // Backdrop URL
-        item {
+            item {
                 NuvioInputField(
                     value = state.backdropImageUrl,
                     onValueChange = { CollectionEditorRepository.setBackdropImageUrl(it) },
@@ -119,8 +124,7 @@ fun CollectionEditorScreen(
                 )
             }
 
-            // Pin to Top
-        item {
+            item {
                 NuvioSurfaceCard {
                     Row(
                         modifier = Modifier
@@ -325,9 +329,25 @@ fun CollectionEditorScreen(
             }
         }
 
-            // Save button
-        item {
-                Spacer(modifier = Modifier.height(8.dp))
+            item {
+                Spacer(modifier = Modifier.height(96.dp + bottomInset))
+            }
+        }
+
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth(),
+            color = MaterialTheme.colorScheme.background.copy(alpha = 0.96f),
+            tonalElevation = 6.dp,
+            shadowElevation = 10.dp,
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .padding(bottom = bottomInset),
+            ) {
                 NuvioPrimaryButton(
                     text = if (state.isNew) "Create Collection" else "Save Changes",
                     enabled = state.title.isNotBlank(),
@@ -337,6 +357,7 @@ fun CollectionEditorScreen(
                         }
                     },
                 )
+            }
         }
     }
 }

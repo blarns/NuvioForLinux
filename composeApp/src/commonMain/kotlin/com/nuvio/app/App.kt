@@ -76,6 +76,7 @@ import com.nuvio.app.core.ui.NuvioContinueWatchingActionSheet
 import com.nuvio.app.core.ui.NuvioPosterActionSheet
 import com.nuvio.app.core.ui.PlatformBackHandler
 import com.nuvio.app.core.ui.configurePlatformImageLoader
+import com.nuvio.app.core.ui.NuvioToastHost
 import com.nuvio.app.core.ui.TraktListPickerDialog
 import com.nuvio.app.core.ui.NuvioTheme
 import com.nuvio.app.features.auth.AuthScreen
@@ -1375,6 +1376,12 @@ private fun MainAppContent(
                     profileSwitchLoading = false
                 }
             }
+
+            NuvioToastHost(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .zIndex(20f),
+            )
         }
 }
 

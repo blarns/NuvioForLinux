@@ -2,6 +2,7 @@ package com.nuvio.app.core.ui
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -46,6 +47,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,6 +65,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 @Composable
 fun NuvioScreen(
@@ -436,42 +445,94 @@ fun NuvioStatusModal(
 }
 
 @Composable
-fun NuvioPinnedCollectionToast(
-    visible: Boolean,
-    onDismiss: () -> Unit,
-    message: String = "Remove pin to top from collection to move",
+fun NuvioToastHost(
+    modifier: Modifier = Modifier,
 ) {
-    LaunchedEffect(visible) {
-        if (visible) {
-            kotlinx.coroutines.delay(2500L)
-            onDismiss()
+    val toast by NuvioToastController.currentToast.collectAsState()
+    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val visibilityState = remember { MutableTransitionState(false) }
+    var renderedToast by remember { mutableStateOf<NuvioToastMessage?>(null) }
+
+    LaunchedEffect(toast?.id) {
+        val currentToast = toast
+        if (currentToast != null) {
+            renderedToast = currentToast
+            visibilityState.targetState = true
+            delay(currentToast.durationMillis)
+            NuvioToastController.dismiss(currentToast.id)
+        } else {
+            visibilityState.targetState = false
+        }
+    }
+
+    LaunchedEffect(
+        visibilityState.currentState,
+        visibilityState.targetState,
+        visibilityState.isIdle,
+    ) {
+        if (visibilityState.isIdle && !visibilityState.currentState && !visibilityState.targetState) {
+            renderedToast = null
         }
     }
 
     AnimatedVisibility(
-        visible = visible,
+        visibleState = visibilityState,
+        modifier = modifier,
         enter = fadeIn() + slideInVertically { -it },
         exit = fadeOut() + slideOutVertically { -it },
     ) {
+        val currentToast = renderedToast ?: return@AnimatedVisibility
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            contentAlignment = Alignment.Center,
+                .padding(top = statusBarTop + 12.dp)
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.TopCenter,
         ) {
             Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.inverseSurface,
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 tonalElevation = 6.dp,
-                shadowElevation = 4.dp,
+                shadowElevation = 10.dp,
             ) {
                 Text(
-                    text = message,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    text = currentToast.message,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
+        }
+    }
+}
+
+data class NuvioToastMessage(
+    val id: Long,
+    val message: String,
+    val durationMillis: Long,
+)
+
+object NuvioToastController {
+    private val _currentToast = MutableStateFlow<NuvioToastMessage?>(null)
+    val currentToast = _currentToast.asStateFlow()
+    private var nextToastId = 0L
+
+    fun show(
+        message: String,
+        durationMillis: Long = 2500L,
+    ) {
+        nextToastId += 1L
+        _currentToast.value = NuvioToastMessage(
+            id = nextToastId,
+            message = message,
+            durationMillis = durationMillis,
+        )
+    }
+
+    fun dismiss(id: Long? = null) {
+        val activeToast = _currentToast.value ?: return
+        if (id == null || activeToast.id == id) {
+            _currentToast.value = null
         }
     }
 }

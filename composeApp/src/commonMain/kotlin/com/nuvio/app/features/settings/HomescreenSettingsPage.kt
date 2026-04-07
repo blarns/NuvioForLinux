@@ -32,7 +32,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.ui.NuvioActionLabel
-import com.nuvio.app.core.ui.NuvioPinnedCollectionToast
+import com.nuvio.app.core.ui.NuvioToastController
 import com.nuvio.app.features.home.HomeCatalogSettingsItem
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.components.HomeEmptyStateCard
@@ -114,20 +114,14 @@ internal fun LazyListScope.homescreenSettingsContent(
                     )
                 },
             ) {
-                var showPinnedToast by remember { mutableStateOf(false) }
                 val hapticFeedback = LocalHapticFeedback.current
-
-                NuvioPinnedCollectionToast(
-                    visible = showPinnedToast,
-                    onDismiss = { showPinnedToast = false },
-                )
 
                 HomescreenCatalogList(
                     isTablet = isTablet,
                     items = items,
                     onPinnedDragAttempt = {
                         hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                        showPinnedToast = true
+                        NuvioToastController.show("Remove pin to top from collection to move")
                     },
                 )
             }
