@@ -70,6 +70,8 @@ internal fun LazyListScope.playbackSettingsContent(
     decoderPriority: Int,
     mapDV7ToHevc: Boolean,
     tunnelingEnabled: Boolean,
+    useLibass: Boolean,
+    libassRenderType: String,
 ) {
     item {
         PlaybackSettingsSection(
@@ -84,6 +86,8 @@ internal fun LazyListScope.playbackSettingsContent(
             decoderPriority = decoderPriority,
             mapDV7ToHevc = mapDV7ToHevc,
             tunnelingEnabled = tunnelingEnabled,
+            useLibass = useLibass,
+            libassRenderType = libassRenderType,
         )
     }
 }
@@ -101,6 +105,8 @@ private fun PlaybackSettingsSection(
     decoderPriority: Int,
     mapDV7ToHevc: Boolean,
     tunnelingEnabled: Boolean,
+    useLibass: Boolean,
+    libassRenderType: String,
 ) {
     var showPreferredAudioDialog by remember { mutableStateOf(false) }
     var showSecondaryAudioDialog by remember { mutableStateOf(false) }
@@ -108,6 +114,7 @@ private fun PlaybackSettingsSection(
     var showSecondarySubtitleDialog by remember { mutableStateOf(false) }
     var showReuseCacheDurationDialog by remember { mutableStateOf(false) }
     var showDecoderPriorityDialog by remember { mutableStateOf(false) }
+    var showLibassRenderTypeDialog by remember { mutableStateOf(false) }
     var showAutoPlayModeDialog by remember { mutableStateOf(false) }
     var showAutoPlaySourceDialog by remember { mutableStateOf(false) }
     var showAutoPlayAddonSelectionDialog by remember { mutableStateOf(false) }
@@ -372,6 +379,39 @@ private fun PlaybackSettingsSection(
                         isTablet = isTablet,
                         onCheckedChange = PlayerSettingsRepository::setTunnelingEnabled,
                     )
+                }
+            }
+        }
+
+        if (!isIos) {
+            SettingsSection(
+                title = "SUBTITLE RENDERING",
+                isTablet = isTablet,
+            ) {
+                SettingsGroup(isTablet = isTablet) {
+                    SettingsSwitchRow(
+                        title = "Enable libass",
+                        description = "Use libass for ASS/SSA subtitle rendering instead of the default renderer.",
+                        checked = useLibass,
+                        isTablet = isTablet,
+                        onCheckedChange = PlayerSettingsRepository::setUseLibass,
+                    )
+                    if (useLibass) {
+                        SettingsGroupDivider(isTablet = isTablet)
+                        SettingsNavigationRow(
+                            title = "Render Type",
+                            description = when (libassRenderType) {
+                                "OVERLAY_OPEN_GL" -> "Overlay OpenGL"
+                                "OVERLAY_CANVAS" -> "Overlay Canvas"
+                                "EFFECTS_OPEN_GL" -> "Effects OpenGL"
+                                "EFFECTS_CANVAS" -> "Effects Canvas"
+                                "CUES" -> "Standard (Cues)"
+                                else -> "Standard (Cues)"
+                            },
+                            isTablet = isTablet,
+                            onClick = { showLibassRenderTypeDialog = true },
+                        )
+                    }
                 }
             }
         }
@@ -670,6 +710,17 @@ private fun PlaybackSettingsSection(
                 showDecoderPriorityDialog = false
             },
             onDismiss = { showDecoderPriorityDialog = false },
+        )
+    }
+
+    if (showLibassRenderTypeDialog) {
+        LibassRenderTypeDialog(
+            selectedRenderType = libassRenderType,
+            onRenderTypeSelected = { renderType ->
+                PlayerSettingsRepository.setLibassRenderType(renderType)
+                showLibassRenderTypeDialog = false
+            },
+            onDismiss = { showLibassRenderTypeDialog = false },
         )
     }
 
@@ -986,6 +1037,99 @@ private fun DecoderPriorityDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { onPrioritySelected(priority) },
+                            shape = RoundedCornerShape(12.dp),
+                            color = containerColor,
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Box(
+                                    modifier = Modifier.size(24.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Tap outside to close",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun LibassRenderTypeDialog(
+    selectedRenderType: String,
+    onRenderTypeSelected: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val options = listOf(
+        "OVERLAY_OPEN_GL" to "Overlay OpenGL",
+        "OVERLAY_CANVAS" to "Overlay Canvas",
+        "EFFECTS_OPEN_GL" to "Effects OpenGL",
+        "EFFECTS_CANVAS" to "Effects Canvas",
+        "CUES" to "Standard (Cues)",
+    )
+
+    BasicAlertDialog(
+        onDismissRequest = onDismiss,
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = "Render Type",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    options.forEach { (value, label) ->
+                        val isSelected = value == selectedRenderType
+                        val containerColor = if (isSelected) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onRenderTypeSelected(value) },
                             shape = RoundedCornerShape(12.dp),
                             color = containerColor,
                         ) {

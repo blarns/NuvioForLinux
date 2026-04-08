@@ -34,6 +34,8 @@ data class PlayerSettingsUiState(
     val nextEpisodeThresholdMode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
     val nextEpisodeThresholdPercent: Float = 99f,
     val nextEpisodeThresholdMinutesBeforeEnd: Float = 2f,
+    val useLibass: Boolean = false,
+    val libassRenderType: String = "CUES",
 )
 
 object PlayerSettingsRepository {
@@ -66,6 +68,8 @@ object PlayerSettingsRepository {
     private var nextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE
     private var nextEpisodeThresholdPercent = 99f
     private var nextEpisodeThresholdMinutesBeforeEnd = 2f
+    private var useLibass = false
+    private var libassRenderType = "CUES"
 
     fun ensureLoaded() {
         if (hasLoaded) return
@@ -103,6 +107,8 @@ object PlayerSettingsRepository {
         nextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE
         nextEpisodeThresholdPercent = 99f
         nextEpisodeThresholdMinutesBeforeEnd = 2f
+        useLibass = false
+        libassRenderType = "CUES"
         publish()
     }
 
@@ -165,6 +171,8 @@ object PlayerSettingsRepository {
             ?: NextEpisodeThresholdMode.PERCENTAGE
         nextEpisodeThresholdPercent = PlayerSettingsStorage.loadNextEpisodeThresholdPercent() ?: 99f
         nextEpisodeThresholdMinutesBeforeEnd = PlayerSettingsStorage.loadNextEpisodeThresholdMinutesBeforeEnd() ?: 2f
+        useLibass = PlayerSettingsStorage.loadUseLibass() ?: false
+        libassRenderType = PlayerSettingsStorage.loadLibassRenderType() ?: "CUES"
         publish()
     }
 
@@ -377,6 +385,22 @@ object PlayerSettingsRepository {
         PlayerSettingsStorage.saveNextEpisodeThresholdMinutesBeforeEnd(minutes)
     }
 
+    fun setUseLibass(enabled: Boolean) {
+        ensureLoaded()
+        if (useLibass == enabled) return
+        useLibass = enabled
+        publish()
+        PlayerSettingsStorage.saveUseLibass(enabled)
+    }
+
+    fun setLibassRenderType(renderType: String) {
+        ensureLoaded()
+        if (libassRenderType == renderType) return
+        libassRenderType = renderType
+        publish()
+        PlayerSettingsStorage.saveLibassRenderType(renderType)
+    }
+
     private fun publish() {
         _uiState.value = PlayerSettingsUiState(
             showLoadingOverlay = showLoadingOverlay,
@@ -404,6 +428,8 @@ object PlayerSettingsRepository {
             nextEpisodeThresholdMode = nextEpisodeThresholdMode,
             nextEpisodeThresholdPercent = nextEpisodeThresholdPercent,
             nextEpisodeThresholdMinutesBeforeEnd = nextEpisodeThresholdMinutesBeforeEnd,
+            useLibass = useLibass,
+            libassRenderType = libassRenderType,
         )
     }
 

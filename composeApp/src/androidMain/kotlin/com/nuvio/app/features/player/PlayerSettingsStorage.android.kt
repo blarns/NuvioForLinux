@@ -34,6 +34,8 @@ actual object PlayerSettingsStorage {
     private const val nextEpisodeThresholdModeKey = "next_episode_threshold_mode"
     private const val nextEpisodeThresholdPercentKey = "next_episode_threshold_percent_v2"
     private const val nextEpisodeThresholdMinutesBeforeEndKey = "next_episode_threshold_minutes_before_end_v2"
+    private const val useLibassKey = "use_libass"
+    private const val libassRenderTypeKey = "libass_render_type"
 
     private var preferences: SharedPreferences? = null
 
@@ -458,6 +460,33 @@ actual object PlayerSettingsStorage {
         preferences
             ?.edit()
             ?.putFloat(ProfileScopedKey.of(nextEpisodeThresholdMinutesBeforeEndKey), minutes)
+            ?.apply()
+    }
+
+    actual fun loadUseLibass(): Boolean? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(useLibassKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getBoolean(key, false)
+            } else {
+                null
+            }
+        }
+
+    actual fun saveUseLibass(enabled: Boolean) {
+        preferences
+            ?.edit()
+            ?.putBoolean(ProfileScopedKey.of(useLibassKey), enabled)
+            ?.apply()
+    }
+
+    actual fun loadLibassRenderType(): String? =
+        preferences?.getString(ProfileScopedKey.of(libassRenderTypeKey), null)
+
+    actual fun saveLibassRenderType(renderType: String) {
+        preferences
+            ?.edit()
+            ?.putString(ProfileScopedKey.of(libassRenderTypeKey), renderType)
             ?.apply()
     }
 }

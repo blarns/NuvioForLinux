@@ -120,24 +120,47 @@ actual fun PlatformPlayerSurface(
             .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS)
             .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
 
-        val mediaSourceFactory = DefaultMediaSourceFactory(
-            PlatformPlaybackDataSourceFactory.create(
+        val dataSourceFactory = PlatformPlaybackDataSourceFactory.create(
                 defaultRequestHeaders = sanitizedSourceHeaders,
                 defaultResponseHeaders = sanitizedSourceResponseHeaders,
                 useYoutubeChunkedPlayback = useYoutubeChunkedPlayback,
-            ),
-            extractorsFactory,
-        )
+            )
 
-        ExoPlayer.Builder(context)
-            .setRenderersFactory(renderersFactory)
-            .setTrackSelector(trackSelector)
-            .setLoadControl(loadControl)
-            .setMediaSourceFactory(mediaSourceFactory)
-            .build().apply {
+        val useLibass = playerSettings.useLibass
+        val libassRenderType = runCatching {
+            LibassRenderType.valueOf(playerSettings.libassRenderType)
+        }.getOrDefault(LibassRenderType.CUES)
+
+        val player = if (useLibass) {
+            ExoPlayer.Builder(context)
+                .setTrackSelector(trackSelector)
+                .setLoadControl(loadControl)
+                .buildWithAssSupportCompat(
+                    context = context,
+                    renderType = libassRenderType.toAssRenderType(),
+                    dataSourceFactory = dataSourceFactory,
+                    extractorsFactory = extractorsFactory,
+                    renderersFactory = renderersFactory
+                )
+        } else {
+            val mediaSourceFactory = DefaultMediaSourceFactory(
+                dataSourceFactory,
+                extractorsFactory,
+            )
+
+            ExoPlayer.Builder(context)
+                .setRenderersFactory(renderersFactory)
+                .setTrackSelector(trackSelector)
+                .setLoadControl(loadControl)
+                .setMediaSourceFactory(mediaSourceFactory)
+                .build()
+        }
+
+        player.apply {
                 if (!sourceAudioUrl.isNullOrBlank()) {
-                    val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(sourceUrl))
-                    val audioSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(sourceAudioUrl))
+                    val msf = DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory)
+                    val videoSource = msf.createMediaSource(MediaItem.fromUri(sourceUrl))
+                    val audioSource = msf.createMediaSource(MediaItem.fromUri(sourceAudioUrl))
                     setMediaSource(MergingMediaSource(videoSource, audioSource))
                 } else {
                     setMediaItem(MediaItem.fromUri(sourceUrl))

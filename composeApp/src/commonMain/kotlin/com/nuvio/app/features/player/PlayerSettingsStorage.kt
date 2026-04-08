@@ -57,4 +57,8 @@ internal expect object PlayerSettingsStorage {
     fun saveNextEpisodeThresholdPercent(percent: Float)
     fun loadNextEpisodeThresholdMinutesBeforeEnd(): Float?
     fun saveNextEpisodeThresholdMinutesBeforeEnd(minutes: Float)
+    fun loadUseLibass(): Boolean?
+    fun saveUseLibass(enabled: Boolean)
+    fun loadLibassRenderType(): String?
+    fun saveLibassRenderType(renderType: String)
 }

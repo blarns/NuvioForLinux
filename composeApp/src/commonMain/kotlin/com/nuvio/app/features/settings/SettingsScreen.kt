@@ -161,6 +161,8 @@ fun SettingsScreen(
                 decoderPriority = playerSettingsUiState.decoderPriority,
                 mapDV7ToHevc = playerSettingsUiState.mapDV7ToHevc,
                 tunnelingEnabled = playerSettingsUiState.tunnelingEnabled,
+                useLibass = playerSettingsUiState.useLibass,
+                libassRenderType = playerSettingsUiState.libassRenderType,
                 selectedTheme = selectedTheme,
                 onThemeSelected = ThemeSettingsRepository::setTheme,
                 amoledEnabled = amoledEnabled,
@@ -191,6 +193,8 @@ fun SettingsScreen(
                 decoderPriority = playerSettingsUiState.decoderPriority,
                 mapDV7ToHevc = playerSettingsUiState.mapDV7ToHevc,
                 tunnelingEnabled = playerSettingsUiState.tunnelingEnabled,
+                useLibass = playerSettingsUiState.useLibass,
+                libassRenderType = playerSettingsUiState.libassRenderType,
                 selectedTheme = selectedTheme,
                 onThemeSelected = ThemeSettingsRepository::setTheme,
                 amoledEnabled = amoledEnabled,
@@ -231,6 +235,8 @@ private fun MobileSettingsScreen(
     decoderPriority: Int,
     mapDV7ToHevc: Boolean,
     tunnelingEnabled: Boolean,
+    useLibass: Boolean,
+    libassRenderType: String,
     selectedTheme: AppTheme,
     onThemeSelected: (AppTheme) -> Unit,
     amoledEnabled: Boolean,
@@ -289,6 +295,8 @@ private fun MobileSettingsScreen(
                 decoderPriority = decoderPriority,
                 mapDV7ToHevc = mapDV7ToHevc,
                 tunnelingEnabled = tunnelingEnabled,
+                useLibass = useLibass,
+                libassRenderType = libassRenderType,
             )
             SettingsPage.Appearance -> appearanceSettingsContent(
                 isTablet = false,
@@ -365,6 +373,8 @@ private fun TabletSettingsScreen(
     decoderPriority: Int,
     mapDV7ToHevc: Boolean,
     tunnelingEnabled: Boolean,
+    useLibass: Boolean,
+    libassRenderType: String,
     selectedTheme: AppTheme,
     onThemeSelected: (AppTheme) -> Unit,
     amoledEnabled: Boolean,
@@ -486,6 +496,8 @@ private fun TabletSettingsScreen(
                     decoderPriority = decoderPriority,
                     mapDV7ToHevc = mapDV7ToHevc,
                     tunnelingEnabled = tunnelingEnabled,
+                    useLibass = useLibass,
+                    libassRenderType = libassRenderType,
                 )
                 SettingsPage.Appearance -> appearanceSettingsContent(
                     isTablet = true,

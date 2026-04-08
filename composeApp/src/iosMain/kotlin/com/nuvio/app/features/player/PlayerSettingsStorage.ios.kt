@@ -392,4 +392,12 @@ actual object PlayerSettingsStorage {
     actual fun saveNextEpisodeThresholdMinutesBeforeEnd(minutes: Float) {
         NSUserDefaults.standardUserDefaults.setFloat(minutes, forKey = ProfileScopedKey.of(nextEpisodeThresholdMinutesBeforeEndKey))
     }
+
+    actual fun loadUseLibass(): Boolean? = null
+
+    actual fun saveUseLibass(enabled: Boolean) {}
+
+    actual fun loadLibassRenderType(): String? = null
+
+    actual fun saveLibassRenderType(renderType: String) {}
 }
