@@ -1,6 +1,7 @@
 package com.nuvio.app.features.collection
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,6 +47,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.nuvio.app.core.ui.NuvioPosterCard
@@ -240,46 +242,46 @@ private fun TabbedGridContent(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Grid content for selected tab
         val selectedTab = uiState.tabs.getOrNull(uiState.selectedTabIndex)
         if (selectedTab == null) return
 
-        when {
-            selectedTab.isLoading && selectedTab.items.isEmpty() -> LoadingIndicator()
-            selectedTab.error != null && selectedTab.items.isEmpty() -> ErrorMessage(selectedTab.error)
-            selectedTab.items.isEmpty() -> EmptyMessage()
-            else -> {
-                val nuvioShape = NuvioPosterShape.Poster
-                val columns = 3
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val columns = remember(maxWidth) { folderDetailGridColumnsForWidth(maxWidth) }
 
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(columns),
-                    state = gridState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = 16.dp,
-                        end = 16.dp,
-                        bottom = 18.dp + nuvioPlatformExtraBottomPadding,
-                    ),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    items(
-                        items = selectedTab.items,
-                        key = { item -> item.stableKey() },
-                    ) { item ->
-                        NuvioPosterCard(
-                            title = item.name,
-                            imageUrl = item.poster,
-                            shape = nuvioShape,
-                            detailLine = item.releaseInfo,
-                            onClick = { onPosterClick(item) },
-                        )
-                    }
+            when {
+                selectedTab.isLoading && selectedTab.items.isEmpty() -> LoadingIndicator()
+                selectedTab.error != null && selectedTab.items.isEmpty() -> ErrorMessage(selectedTab.error)
+                selectedTab.items.isEmpty() -> EmptyMessage()
+                else -> {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(columns),
+                        state = gridState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            start = 16.dp,
+                            end = 16.dp,
+                            bottom = 18.dp + nuvioPlatformExtraBottomPadding,
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        items(
+                            items = selectedTab.items,
+                            key = { item -> item.stableKey() },
+                        ) { item ->
+                            NuvioPosterCard(
+                                title = item.name,
+                                imageUrl = item.poster,
+                                shape = NuvioPosterShape.Poster,
+                                detailLine = item.releaseInfo,
+                                onClick = { onPosterClick(item) },
+                            )
+                        }
 
-                    if (uiState.selectedTabIsLoadingMore) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            PaginationLoadingFooter()
+                        if (uiState.selectedTabIsLoadingMore) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                PaginationLoadingFooter()
+                            }
                         }
                     }
                 }
@@ -347,6 +349,15 @@ private fun PaginationLoadingFooter() {
         )
     }
 }
+
+private fun folderDetailGridColumnsForWidth(screenWidth: Dp): Int =
+    when {
+        screenWidth >= 1400.dp -> 7
+        screenWidth >= 1200.dp -> 6
+        screenWidth >= 1000.dp -> 5
+        screenWidth >= 840.dp -> 4
+        else -> 3
+    }
 
 @Composable
 private fun LoadingIndicator() {
