@@ -521,6 +521,7 @@ private fun PluginRuntimeResult.toStreamItem(
             StreamBehaviorHints()
         } else {
             StreamBehaviorHints(
+                notWebReady = true,
                 proxyHeaders = StreamProxyHeaders(request = requestHeaders),
             )
         },

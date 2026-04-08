@@ -45,7 +45,7 @@ object StreamParser {
                 addonId = addonId,
                 behaviorHints = StreamBehaviorHints(
                     bingeGroup = hintsObj?.string("bingeGroup"),
-                    notWebReady = hintsObj?.boolean("notWebReady") ?: false,
+                    notWebReady = (hintsObj?.boolean("notWebReady") ?: false) || proxyHeaders != null,
                     videoSize = hintsObj?.long("videoSize"),
                     filename = hintsObj?.string("filename"),
                     proxyHeaders = proxyHeaders,

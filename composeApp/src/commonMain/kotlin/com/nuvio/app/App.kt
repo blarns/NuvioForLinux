@@ -910,6 +910,7 @@ private fun MainAppContent(
                                     episodeThumbnail = route.episodeThumbnail,
                                     streamTitle = cached.streamName,
                                     streamSubtitle = null,
+                                    bingeGroup = cached.bingeGroup,
                                     pauseDescription = pauseDescription,
                                     providerName = cached.addonName,
                                     providerAddonId = cached.addonId,
@@ -948,6 +949,7 @@ private fun MainAppContent(
                                 addonId = stream.addonId,
                                 filename = stream.behaviorHints.filename,
                                 videoSize = stream.behaviorHints.videoSize,
+                                bingeGroup = stream.behaviorHints.bingeGroup,
                             )
                         }
                         val launchId = PlayerLaunchStore.put(
@@ -1024,6 +1026,7 @@ private fun MainAppContent(
                                         addonId = stream.addonId,
                                         filename = stream.behaviorHints.filename,
                                         videoSize = stream.behaviorHints.videoSize,
+                                        bingeGroup = stream.behaviorHints.bingeGroup,
                                     )
                                 }
                                 val launchId = PlayerLaunchStore.put(

@@ -524,6 +524,7 @@ fun PlayerScreen(
                     addonId = stream.addonId,
                     filename = stream.behaviorHints.filename,
                     videoSize = stream.behaviorHints.videoSize,
+                    bingeGroup = stream.behaviorHints.bingeGroup,
                 )
             }
             activeSourceUrl = url
@@ -578,6 +579,7 @@ fun PlayerScreen(
                     addonId = stream.addonId,
                     filename = stream.behaviorHints.filename,
                     videoSize = stream.behaviorHints.videoSize,
+                    bingeGroup = stream.behaviorHints.bingeGroup,
                 )
             }
             activeSourceUrl = url

@@ -319,6 +319,7 @@ private fun PluginRuntimeResult.toStreamItem(scraper: PluginScraper): StreamItem
             com.nuvio.app.features.streams.StreamBehaviorHints()
         } else {
             com.nuvio.app.features.streams.StreamBehaviorHints(
+                notWebReady = true,
                 proxyHeaders = com.nuvio.app.features.streams.StreamProxyHeaders(request = requestHeaders),
             )
         },
