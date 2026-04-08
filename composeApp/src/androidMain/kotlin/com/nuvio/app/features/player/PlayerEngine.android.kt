@@ -63,6 +63,7 @@ actual fun PlatformPlayerSurface(
     sourceUrl: String,
     sourceAudioUrl: String?,
     sourceHeaders: Map<String, String>,
+    sourceResponseHeaders: Map<String, String>,
     useYoutubeChunkedPlayback: Boolean,
     modifier: Modifier,
     playWhenReady: Boolean,
@@ -86,8 +87,11 @@ actual fun PlatformPlayerSurface(
     val sanitizedSourceHeaders = remember(sourceHeaders) {
         sanitizePlaybackHeaders(sourceHeaders)
     }
+    val sanitizedSourceResponseHeaders = remember(sourceResponseHeaders) {
+        sanitizePlaybackResponseHeaders(sourceResponseHeaders)
+    }
 
-    val exoPlayer = remember(sourceUrl, sourceAudioUrl, sanitizedSourceHeaders) {
+    val exoPlayer = remember(sourceUrl, sourceAudioUrl, sanitizedSourceHeaders, sanitizedSourceResponseHeaders) {
         val renderersFactory = DefaultRenderersFactory(context)
             .setExtensionRendererMode(playerSettings.decoderPriority)
             .setMapDV7ToHevc(playerSettings.mapDV7ToHevc)
@@ -119,6 +123,7 @@ actual fun PlatformPlayerSurface(
         val mediaSourceFactory = DefaultMediaSourceFactory(
             PlatformPlaybackDataSourceFactory.create(
                 defaultRequestHeaders = sanitizedSourceHeaders,
+                defaultResponseHeaders = sanitizedSourceResponseHeaders,
                 useYoutubeChunkedPlayback = useYoutubeChunkedPlayback,
             ),
             extractorsFactory,

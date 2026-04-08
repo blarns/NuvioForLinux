@@ -88,4 +88,35 @@ class StreamParserTest {
         val stream = streams.single()
         assertFalse(stream.behaviorHints.notWebReady)
     }
+
+    @Test
+    fun `parse keeps proxy response headers`() {
+        val streams = StreamParser.parse(
+            payload =
+                """
+                {
+                  "streams": [
+                    {
+                      "url": "https://example.com/video.mp4",
+                      "behaviorHints": {
+                        "proxyHeaders": {
+                          "response": {
+                            "content-type": "video/mp4",
+                            "x-test": "ok"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+                """.trimIndent(),
+            addonName = "Addon",
+            addonId = "addon.id",
+        )
+
+        val responseHeaders = streams.single().behaviorHints.proxyHeaders?.response
+        assertNotNull(responseHeaders)
+        assertEquals("video/mp4", responseHeaders["content-type"])
+        assertEquals("ok", responseHeaders["x-test"])
+    }
 }

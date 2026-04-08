@@ -7,11 +7,21 @@ import com.nuvio.app.features.trailer.YoutubeChunkedDataSourceFactory
 internal object PlatformPlaybackDataSourceFactory {
     fun create(
         defaultRequestHeaders: Map<String, String>,
+        defaultResponseHeaders: Map<String, String>,
         useYoutubeChunkedPlayback: Boolean,
-    ): DataSource.Factory =
-        if (useYoutubeChunkedPlayback) {
+    ): DataSource.Factory {
+        val baseFactory: DataSource.Factory = if (useYoutubeChunkedPlayback) {
             YoutubeChunkedDataSourceFactory(defaultRequestHeaders = defaultRequestHeaders)
         } else {
             DefaultHttpDataSource.Factory().setDefaultRequestProperties(defaultRequestHeaders)
         }
+        return if (defaultResponseHeaders.isEmpty()) {
+            baseFactory
+        } else {
+            ResponseHeaderOverridingDataSourceFactory(
+                upstreamFactory = baseFactory,
+                defaultResponseHeaders = defaultResponseHeaders,
+            )
+        }
+    }
 }

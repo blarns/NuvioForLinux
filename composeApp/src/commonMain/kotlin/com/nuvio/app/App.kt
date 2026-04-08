@@ -104,6 +104,7 @@ import com.nuvio.app.features.player.PlayerLaunchStore
 import com.nuvio.app.features.player.PlayerRoute
 import com.nuvio.app.features.player.PlayerScreen
 import com.nuvio.app.features.player.sanitizePlaybackHeaders
+import com.nuvio.app.features.player.sanitizePlaybackResponseHeaders
 import com.nuvio.app.features.profiles.NuvioProfile
 import com.nuvio.app.features.profiles.ProfileEditScreen
 import com.nuvio.app.features.profiles.ProfileRepository
@@ -901,6 +902,8 @@ private fun MainAppContent(
                                 PlayerLaunch(
                                     title = route.title,
                                     sourceUrl = cached.url,
+                                    sourceHeaders = sanitizePlaybackHeaders(cached.requestHeaders),
+                                    sourceResponseHeaders = sanitizePlaybackResponseHeaders(cached.responseHeaders),
                                     logo = route.logo,
                                     poster = route.poster,
                                     background = route.background,
@@ -947,6 +950,8 @@ private fun MainAppContent(
                                 streamName = stream.streamLabel,
                                 addonName = stream.addonName,
                                 addonId = stream.addonId,
+                                requestHeaders = sanitizePlaybackHeaders(stream.behaviorHints.proxyHeaders?.request),
+                                responseHeaders = sanitizePlaybackResponseHeaders(stream.behaviorHints.proxyHeaders?.response),
                                 filename = stream.behaviorHints.filename,
                                 videoSize = stream.behaviorHints.videoSize,
                                 bingeGroup = stream.behaviorHints.bingeGroup,
@@ -957,6 +962,7 @@ private fun MainAppContent(
                                 title = route.title,
                                 sourceUrl = sourceUrl,
                                 sourceHeaders = sanitizePlaybackHeaders(stream.behaviorHints.proxyHeaders?.request),
+                                sourceResponseHeaders = sanitizePlaybackResponseHeaders(stream.behaviorHints.proxyHeaders?.response),
                                 logo = route.logo,
                                 poster = route.poster,
                                 background = route.background,
@@ -1024,6 +1030,8 @@ private fun MainAppContent(
                                         streamName = stream.streamLabel,
                                         addonName = stream.addonName,
                                         addonId = stream.addonId,
+                                        requestHeaders = sanitizePlaybackHeaders(stream.behaviorHints.proxyHeaders?.request),
+                                        responseHeaders = sanitizePlaybackResponseHeaders(stream.behaviorHints.proxyHeaders?.response),
                                         filename = stream.behaviorHints.filename,
                                         videoSize = stream.behaviorHints.videoSize,
                                         bingeGroup = stream.behaviorHints.bingeGroup,
@@ -1034,6 +1042,7 @@ private fun MainAppContent(
                                         title = route.title,
                                         sourceUrl = sourceUrl,
                                         sourceHeaders = sanitizePlaybackHeaders(stream.behaviorHints.proxyHeaders?.request),
+                                        sourceResponseHeaders = sanitizePlaybackResponseHeaders(stream.behaviorHints.proxyHeaders?.response),
                                         logo = route.logo,
                                         poster = route.poster,
                                         background = route.background,
@@ -1097,6 +1106,7 @@ private fun MainAppContent(
                         sourceUrl = launch.sourceUrl,
                         sourceAudioUrl = launch.sourceAudioUrl,
                         sourceHeaders = launch.sourceHeaders,
+                        sourceResponseHeaders = launch.sourceResponseHeaders,
                         logo = launch.logo,
                         poster = launch.poster,
                         background = launch.background,

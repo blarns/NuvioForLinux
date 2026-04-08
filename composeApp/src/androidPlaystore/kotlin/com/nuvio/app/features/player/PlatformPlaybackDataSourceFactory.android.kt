@@ -6,7 +6,18 @@ import androidx.media3.datasource.DefaultHttpDataSource
 internal object PlatformPlaybackDataSourceFactory {
     fun create(
         defaultRequestHeaders: Map<String, String>,
+        defaultResponseHeaders: Map<String, String>,
         useYoutubeChunkedPlayback: Boolean,
-    ): DataSource.Factory =
-        DefaultHttpDataSource.Factory().setDefaultRequestProperties(defaultRequestHeaders)
+    ): DataSource.Factory {
+        val baseFactory = DefaultHttpDataSource.Factory()
+            .setDefaultRequestProperties(defaultRequestHeaders)
+        return if (defaultResponseHeaders.isEmpty()) {
+            baseFactory
+        } else {
+            ResponseHeaderOverridingDataSourceFactory(
+                upstreamFactory = baseFactory,
+                defaultResponseHeaders = defaultResponseHeaders,
+            )
+        }
+    }
 }

@@ -85,6 +85,7 @@ fun PlayerScreen(
     sourceUrl: String,
     sourceAudioUrl: String? = null,
     sourceHeaders: Map<String, String> = emptyMap(),
+    sourceResponseHeaders: Map<String, String> = emptyMap(),
     providerName: String,
     streamTitle: String,
     streamSubtitle: String?,
@@ -131,6 +132,9 @@ fun PlayerScreen(
         var activeSourceAudioUrl by rememberSaveable { mutableStateOf(sourceAudioUrl) }
         var activeSourceHeaders by remember(sourceUrl, sourceHeaders) {
             mutableStateOf(sanitizePlaybackHeaders(sourceHeaders))
+        }
+        var activeSourceResponseHeaders by remember(sourceUrl, sourceResponseHeaders) {
+            mutableStateOf(sanitizePlaybackResponseHeaders(sourceResponseHeaders))
         }
         var activeStreamTitle by rememberSaveable { mutableStateOf(streamTitle) }
         var activeStreamSubtitle by rememberSaveable { mutableStateOf(streamSubtitle) }
@@ -522,6 +526,8 @@ fun PlayerScreen(
                     streamName = stream.streamLabel,
                     addonName = stream.addonName,
                     addonId = stream.addonId,
+                    requestHeaders = sanitizePlaybackHeaders(stream.behaviorHints.proxyHeaders?.request),
+                    responseHeaders = sanitizePlaybackResponseHeaders(stream.behaviorHints.proxyHeaders?.response),
                     filename = stream.behaviorHints.filename,
                     videoSize = stream.behaviorHints.videoSize,
                     bingeGroup = stream.behaviorHints.bingeGroup,
@@ -530,6 +536,7 @@ fun PlayerScreen(
             activeSourceUrl = url
             activeSourceAudioUrl = null
             activeSourceHeaders = sanitizePlaybackHeaders(stream.behaviorHints.proxyHeaders?.request)
+            activeSourceResponseHeaders = sanitizePlaybackResponseHeaders(stream.behaviorHints.proxyHeaders?.response)
             activeStreamTitle = stream.streamLabel
             activeStreamSubtitle = stream.streamSubtitle
             activeProviderName = stream.addonName
@@ -577,6 +584,8 @@ fun PlayerScreen(
                     streamName = stream.streamLabel,
                     addonName = stream.addonName,
                     addonId = stream.addonId,
+                    requestHeaders = sanitizePlaybackHeaders(stream.behaviorHints.proxyHeaders?.request),
+                    responseHeaders = sanitizePlaybackResponseHeaders(stream.behaviorHints.proxyHeaders?.response),
                     filename = stream.behaviorHints.filename,
                     videoSize = stream.behaviorHints.videoSize,
                     bingeGroup = stream.behaviorHints.bingeGroup,
@@ -585,6 +594,7 @@ fun PlayerScreen(
             activeSourceUrl = url
             activeSourceAudioUrl = null
             activeSourceHeaders = sanitizePlaybackHeaders(stream.behaviorHints.proxyHeaders?.request)
+            activeSourceResponseHeaders = sanitizePlaybackResponseHeaders(stream.behaviorHints.proxyHeaders?.response)
             activeStreamTitle = stream.streamLabel
             activeStreamSubtitle = stream.streamSubtitle
             activeProviderName = stream.addonName
@@ -740,7 +750,7 @@ fun PlayerScreen(
             controlsVisible = false
         }
 
-        LaunchedEffect(activeSourceUrl, activeSourceAudioUrl, activeSourceHeaders) {
+        LaunchedEffect(activeSourceUrl, activeSourceAudioUrl, activeSourceHeaders, activeSourceResponseHeaders) {
             errorMessage = null
             playerController = null
             playerControllerSourceUrl = null
@@ -1103,6 +1113,7 @@ fun PlayerScreen(
                 sourceUrl = activeSourceUrl,
                 sourceAudioUrl = activeSourceAudioUrl,
                 sourceHeaders = activeSourceHeaders,
+                sourceResponseHeaders = activeSourceResponseHeaders,
                 modifier = Modifier.fillMaxSize(),
                 playWhenReady = shouldPlay,
                 resizeMode = resizeMode,
