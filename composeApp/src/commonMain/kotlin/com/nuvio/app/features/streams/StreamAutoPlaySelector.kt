@@ -10,6 +10,8 @@ object StreamAutoPlaySelector {
         installedAddonNames: Set<String>,
         selectedAddons: Set<String>,
         selectedPlugins: Set<String>,
+        preferredBingeGroup: String? = null,
+        preferBingeGroupInSelection: Boolean = false,
     ): StreamItem? {
         if (streams.isEmpty()) return null
 
@@ -28,6 +30,14 @@ object StreamAutoPlaySelector {
         }
         if (candidateStreams.isEmpty()) return null
         if (mode == StreamAutoPlayMode.MANUAL) return null
+
+        val targetBingeGroup = preferredBingeGroup?.trim().orEmpty()
+        if (preferBingeGroupInSelection && targetBingeGroup.isNotEmpty()) {
+            val bingeGroupMatch = candidateStreams.firstOrNull { stream ->
+                stream.behaviorHints.bingeGroup == targetBingeGroup && stream.directPlaybackUrl != null
+            }
+            if (bingeGroupMatch != null) return bingeGroupMatch
+        }
 
         return when (mode) {
             StreamAutoPlayMode.MANUAL -> null

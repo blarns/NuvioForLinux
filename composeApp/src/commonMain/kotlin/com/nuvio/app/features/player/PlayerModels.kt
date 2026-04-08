@@ -21,6 +21,7 @@ data class PlayerLaunch(
     val episodeThumbnail: String? = null,
     val streamTitle: String,
     val streamSubtitle: String? = null,
+    val bingeGroup: String? = null,
     val pauseDescription: String? = null,
     val providerName: String,
     val providerAddonId: String? = null,

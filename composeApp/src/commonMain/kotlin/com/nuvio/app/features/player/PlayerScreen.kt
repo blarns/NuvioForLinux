@@ -88,6 +88,7 @@ fun PlayerScreen(
     providerName: String,
     streamTitle: String,
     streamSubtitle: String?,
+    initialBingeGroup: String? = null,
     pauseDescription: String? = null,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -135,6 +136,7 @@ fun PlayerScreen(
         var activeStreamSubtitle by rememberSaveable { mutableStateOf(streamSubtitle) }
         var activeProviderName by rememberSaveable { mutableStateOf(providerName) }
         var activeProviderAddonId by rememberSaveable { mutableStateOf(providerAddonId) }
+        var currentStreamBingeGroup by rememberSaveable { mutableStateOf(initialBingeGroup) }
         var activeSeasonNumber by rememberSaveable { mutableStateOf(seasonNumber) }
         var activeEpisodeNumber by rememberSaveable { mutableStateOf(episodeNumber) }
         var activeEpisodeTitle by rememberSaveable { mutableStateOf(episodeTitle) }
@@ -531,6 +533,7 @@ fun PlayerScreen(
             activeStreamSubtitle = stream.streamSubtitle
             activeProviderName = stream.addonName
             activeProviderAddonId = stream.addonId
+            currentStreamBingeGroup = stream.behaviorHints.bingeGroup
             activeInitialPositionMs = currentPositionMs
             activeInitialProgressFraction = null
             showSourcesPanel = false
@@ -584,6 +587,7 @@ fun PlayerScreen(
             activeStreamSubtitle = stream.streamSubtitle
             activeProviderName = stream.addonName
             activeProviderAddonId = stream.addonId
+            currentStreamBingeGroup = stream.behaviorHints.bingeGroup
             activeSeasonNumber = episode.season
             activeEpisodeNumber = episode.episode
             activeEpisodeTitle = episode.title
@@ -606,19 +610,39 @@ fun PlayerScreen(
 
             val type = contentType ?: parentMetaType
             val settings = playerSettingsUiState
+            val shouldAutoSelectInManualMode =
+                settings.streamAutoPlayMode == StreamAutoPlayMode.MANUAL &&
+                    (
+                        settings.streamAutoPlayNextEpisodeEnabled ||
+                            settings.streamAutoPlayPreferBingeGroup
+                        )
 
             // Determine auto-play mode for next episode
-            val effectiveMode = if (settings.streamAutoPlayMode == StreamAutoPlayMode.MANUAL) {
-                if (settings.streamAutoPlayNextEpisodeEnabled) StreamAutoPlayMode.FIRST_STREAM
-                else StreamAutoPlayMode.MANUAL
+            val effectiveMode = if (shouldAutoSelectInManualMode) {
+                StreamAutoPlayMode.FIRST_STREAM
             } else {
                 settings.streamAutoPlayMode
             }
-
-            val currentBingeGroup = if (settings.streamAutoPlayPreferBingeGroup) {
-                // Try to find binge group of current stream (not directly available, pass empty)
+            val effectiveSource = if (shouldAutoSelectInManualMode) {
+                com.nuvio.app.features.streams.StreamAutoPlaySource.ALL_SOURCES
+            } else {
+                settings.streamAutoPlaySource
+            }
+            val effectiveSelectedAddons = if (shouldAutoSelectInManualMode) {
+                emptySet()
+            } else {
+                settings.streamAutoPlaySelectedAddons
+            }
+            val effectiveSelectedPlugins = if (shouldAutoSelectInManualMode) {
+                emptySet()
+            } else {
+                settings.streamAutoPlaySelectedPlugins
+            }
+            val effectiveRegex = if (shouldAutoSelectInManualMode) {
                 ""
-            } else ""
+            } else {
+                settings.streamAutoPlayRegex
+            }
 
             nextEpisodeAutoPlayJob = scope.launch {
                 PlayerStreamsRepository.loadEpisodeStreams(
@@ -646,11 +670,17 @@ fun PlayerScreen(
                         StreamAutoPlaySelector.selectAutoPlayStream(
                             streams = allStreams,
                             mode = effectiveMode,
-                            regexPattern = settings.streamAutoPlayRegex,
-                            source = settings.streamAutoPlaySource,
+                            regexPattern = effectiveRegex,
+                            source = effectiveSource,
                             installedAddonNames = installedAddonNames,
-                            selectedAddons = settings.streamAutoPlaySelectedAddons,
-                            selectedPlugins = settings.streamAutoPlaySelectedPlugins,
+                            selectedAddons = effectiveSelectedAddons,
+                            selectedPlugins = effectiveSelectedPlugins,
+                            preferredBingeGroup = if (settings.streamAutoPlayPreferBingeGroup) {
+                                currentStreamBingeGroup
+                            } else {
+                                null
+                            },
+                            preferBingeGroupInSelection = settings.streamAutoPlayPreferBingeGroup,
                         )
                     } else null
 
