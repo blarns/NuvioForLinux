@@ -114,6 +114,7 @@ object HomeCatalogSettingsRepository {
             return
         }
         normalizePreferences()
+        enforcePinnedCollectionsAtTop()
         publish()
         persist()
     }
@@ -122,6 +123,7 @@ object HomeCatalogSettingsRepository {
         ensureLoaded()
         collectionDefinitions = buildCollectionDefinitions(collections)
         normalizePreferences()
+        enforcePinnedCollectionsAtTop()
         publish()
         persist()
     }
@@ -381,6 +383,30 @@ object HomeCatalogSettingsRepository {
         val collectionKeys = collectionDefinitions.map { it.key }
         return (catalogKeys + collectionKeys)
             .sortedBy { key -> preferences[key]?.order ?: Int.MAX_VALUE }
+    }
+
+    private fun enforcePinnedCollectionsAtTop() {
+        val orderedKeys = allOrderedKeys()
+        if (orderedKeys.isEmpty()) return
+
+        val pinnedCollectionKeys = collectionDefinitions
+            .asSequence()
+            .filter { it.isPinnedToTop }
+            .map { it.key }
+            .toSet()
+        if (pinnedCollectionKeys.isEmpty()) return
+
+        val pinnedKeys = orderedKeys.filter { it in pinnedCollectionKeys }
+        if (pinnedKeys.isEmpty()) return
+
+        val nonPinnedKeys = orderedKeys.filterNot { it in pinnedCollectionKeys }
+        val reorderedKeys = pinnedKeys + nonPinnedKeys
+        if (reorderedKeys == orderedKeys) return
+
+        reorderedKeys.forEachIndexed { index, itemKey ->
+            val current = preferences[itemKey] ?: return@forEachIndexed
+            preferences[itemKey] = current.copy(order = index)
+        }
     }
 }
 
