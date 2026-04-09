@@ -119,6 +119,7 @@ fun ContinueWatchingSettingsScreen(
             isVisible = continueWatchingPreferencesUiState.isVisible,
             style = continueWatchingPreferencesUiState.style,
             upNextFromFurthestEpisode = continueWatchingPreferencesUiState.upNextFromFurthestEpisode,
+            showResumePromptOnLaunch = continueWatchingPreferencesUiState.showResumePromptOnLaunch,
         )
     }
 }

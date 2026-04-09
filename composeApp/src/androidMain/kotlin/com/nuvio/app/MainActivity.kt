@@ -32,6 +32,7 @@ import com.nuvio.app.features.watched.WatchedStorage
 import com.nuvio.app.features.streams.StreamLinkCacheStorage
 import com.nuvio.app.features.watchprogress.ContinueWatchingEnrichmentStorage
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesStorage
+import com.nuvio.app.features.watchprogress.ResumePromptStorage
 import com.nuvio.app.features.watchprogress.WatchProgressStorage
 
 class MainActivity : ComponentActivity() {
@@ -60,6 +61,7 @@ class MainActivity : ComponentActivity() {
         TraktAuthStorage.initialize(applicationContext)
         TraktCommentsStorage.initialize(applicationContext)
         ContinueWatchingPreferencesStorage.initialize(applicationContext)
+        ResumePromptStorage.initialize(applicationContext)
         ContinueWatchingEnrichmentStorage.initialize(applicationContext)
         EpisodeReleaseNotificationsStorage.initialize(applicationContext)
         WatchProgressStorage.initialize(applicationContext)

@@ -14,6 +14,7 @@ private data class StoredContinueWatchingPreferences(
     val style: ContinueWatchingSectionStyle = ContinueWatchingSectionStyle.Wide,
     val upNextFromFurthestEpisode: Boolean = true,
     val dismissedNextUpKeys: Set<String> = emptySet(),
+    val showResumePromptOnLaunch: Boolean = true,
 )
 
 object ContinueWatchingPreferencesRepository {
@@ -48,7 +49,7 @@ object ContinueWatchingPreferencesRepository {
         dismissedNextUpKeys: Set<String>,
     ) {
         ensureLoaded()
-        _uiState.value = ContinueWatchingPreferencesUiState(
+        _uiState.value = _uiState.value.copy(
             isVisible = isVisible,
             style = style,
             upNextFromFurthestEpisode = upNextFromFurthestEpisode,
@@ -79,6 +80,7 @@ object ContinueWatchingPreferencesRepository {
                 style = stored.style,
                 upNextFromFurthestEpisode = stored.upNextFromFurthestEpisode,
                 dismissedNextUpKeys = stored.dismissedNextUpKeys,
+                showResumePromptOnLaunch = stored.showResumePromptOnLaunch,
             )
         } else {
             ContinueWatchingPreferencesUiState()
@@ -113,6 +115,12 @@ object ContinueWatchingPreferencesRepository {
         persist()
     }
 
+    fun setShowResumePromptOnLaunch(enabled: Boolean) {
+        ensureLoaded()
+        _uiState.value = _uiState.value.copy(showResumePromptOnLaunch = enabled)
+        persist()
+    }
+
     fun removeDismissedNextUpKeysForContent(contentId: String) {
         ensureLoaded()
         val normalizedContentId = contentId.trim()
@@ -132,6 +140,7 @@ object ContinueWatchingPreferencesRepository {
                     style = _uiState.value.style,
                     upNextFromFurthestEpisode = _uiState.value.upNextFromFurthestEpisode,
                     dismissedNextUpKeys = _uiState.value.dismissedNextUpKeys,
+                    showResumePromptOnLaunch = _uiState.value.showResumePromptOnLaunch,
                 ),
             ),
         )

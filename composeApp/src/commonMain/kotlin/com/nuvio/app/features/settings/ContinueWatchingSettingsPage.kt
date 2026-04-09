@@ -31,6 +31,7 @@ internal fun LazyListScope.continueWatchingSettingsContent(
     isVisible: Boolean,
     style: ContinueWatchingSectionStyle,
     upNextFromFurthestEpisode: Boolean,
+    showResumePromptOnLaunch: Boolean,
 ) {
     item {
         SettingsSection(
@@ -72,6 +73,22 @@ internal fun LazyListScope.continueWatchingSettingsContent(
                     checked = upNextFromFurthestEpisode,
                     isTablet = isTablet,
                     onCheckedChange = ContinueWatchingPreferencesRepository::setUpNextFromFurthestEpisode,
+                )
+            }
+        }
+    }
+    item {
+        SettingsSection(
+            title = "ON LAUNCH",
+            isTablet = isTablet,
+        ) {
+            SettingsGroup(isTablet = isTablet) {
+                SettingsSwitchRow(
+                    title = "Resume prompt on launch",
+                    description = "Show a popup to continue where you left off when opening the app after leaving from the player.",
+                    checked = showResumePromptOnLaunch,
+                    isTablet = isTablet,
+                    onCheckedChange = ContinueWatchingPreferencesRepository::setShowResumePromptOnLaunch,
                 )
             }
         }

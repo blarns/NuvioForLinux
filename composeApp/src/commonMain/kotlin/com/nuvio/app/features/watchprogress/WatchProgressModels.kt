@@ -164,6 +164,7 @@ data class ContinueWatchingPreferencesUiState(
     val style: ContinueWatchingSectionStyle = ContinueWatchingSectionStyle.Wide,
     val upNextFromFurthestEpisode: Boolean = true,
     val dismissedNextUpKeys: Set<String> = emptySet(),
+    val showResumePromptOnLaunch: Boolean = true,
 )
 
 internal fun nextUpDismissKey(

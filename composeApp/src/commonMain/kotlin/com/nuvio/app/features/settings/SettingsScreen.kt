@@ -315,6 +315,7 @@ private fun MobileSettingsScreen(
                 isVisible = continueWatchingPreferencesUiState.isVisible,
                 style = continueWatchingPreferencesUiState.style,
                 upNextFromFurthestEpisode = continueWatchingPreferencesUiState.upNextFromFurthestEpisode,
+                showResumePromptOnLaunch = continueWatchingPreferencesUiState.showResumePromptOnLaunch,
             )
             SettingsPage.ContentDiscovery -> contentDiscoveryContent(
                 isTablet = false,
@@ -516,6 +517,7 @@ private fun TabletSettingsScreen(
                     isVisible = continueWatchingPreferencesUiState.isVisible,
                     style = continueWatchingPreferencesUiState.style,
                     upNextFromFurthestEpisode = continueWatchingPreferencesUiState.upNextFromFurthestEpisode,
+                    showResumePromptOnLaunch = continueWatchingPreferencesUiState.showResumePromptOnLaunch,
                 )
                 SettingsPage.ContentDiscovery -> contentDiscoveryContent(
                     isTablet = true,

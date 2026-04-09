@@ -79,6 +79,7 @@ import com.nuvio.app.core.ui.NuvioPosterActionSheet
 import com.nuvio.app.core.ui.PlatformBackHandler
 import com.nuvio.app.core.ui.configurePlatformImageLoader
 import com.nuvio.app.core.ui.NuvioToastHost
+import com.nuvio.app.core.ui.NuvioFloatingPrompt
 import com.nuvio.app.core.ui.TraktListPickerDialog
 import com.nuvio.app.core.ui.NuvioTheme
 import com.nuvio.app.features.auth.AuthScreen
@@ -142,6 +143,7 @@ import com.nuvio.app.features.trakt.TraktListTab
 import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watchprogress.ContinueWatchingItem
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepository
+import com.nuvio.app.features.watchprogress.ResumePromptRepository
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import com.nuvio.app.features.watchprogress.nextUpDismissKey
 import com.nuvio.app.features.watching.application.WatchingActions
@@ -450,6 +452,24 @@ private fun MainAppContent(
         }
     }
     var profileSwitchLoading by remember { mutableStateOf(false) }
+    var resumePromptItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }
+    val continueWatchingPreferencesUiState by remember {
+        ContinueWatchingPreferencesRepository.ensureLoaded()
+        ContinueWatchingPreferencesRepository.uiState
+    }.collectAsStateWithLifecycle()
+
+    LaunchedEffect(
+        initialHomeReady,
+        profileSwitchLoading,
+        profileState.activeProfile?.profileIndex,
+        continueWatchingPreferencesUiState.showResumePromptOnLaunch,
+    ) {
+        if (!initialHomeReady || profileSwitchLoading) return@LaunchedEffect
+        if (resumePromptItem != null) return@LaunchedEffect
+        if (continueWatchingPreferencesUiState.showResumePromptOnLaunch) {
+            resumePromptItem = ResumePromptRepository.consumeResumePrompt()
+        }
+    }
 
         LaunchedEffect(navController) {
             AppDeepLinkRepository.pendingDeepLink.collectLatest { deepLink ->
@@ -1120,6 +1140,9 @@ private fun MainAppContent(
                         Box(modifier = Modifier.fillMaxSize())
                         return@composable
                     }
+                    LaunchedEffect(launch.videoId) {
+                        launch.videoId?.let { ResumePromptRepository.markPlayerEntered(it) }
+                    }
                     PlayerScreen(
                         title = launch.title,
                         sourceUrl = launch.sourceUrl,
@@ -1146,6 +1169,7 @@ private fun MainAppContent(
                         initialPositionMs = launch.initialPositionMs,
                         initialProgressFraction = launch.initialProgressFraction,
                         onBack = {
+                            ResumePromptRepository.markPlayerExitedNormally()
                             PlayerLaunchStore.remove(route.launchId)
                             navController.popBackStack()
                         },
@@ -1411,6 +1435,39 @@ private fun MainAppContent(
                     profileSwitchLoading = false
                 }
             }
+
+            NuvioFloatingPrompt(
+                visible = resumePromptItem != null,
+                imageUrl = resumePromptItem?.poster ?: resumePromptItem?.imageUrl,
+                title = resumePromptItem?.title.orEmpty(),
+                subtitle = resumePromptItem?.subtitle.orEmpty(),
+                progressFraction = resumePromptItem?.progressFraction ?: 0f,
+                actionLabel = "Resume",
+                onAction = {
+                    val item = resumePromptItem ?: return@NuvioFloatingPrompt
+                    resumePromptItem = null
+                    onPlay(
+                        item.parentMetaType,
+                        item.videoId,
+                        item.parentMetaId,
+                        item.parentMetaType,
+                        item.title,
+                        item.logo,
+                        item.poster,
+                        item.background,
+                        item.seasonNumber,
+                        item.episodeNumber,
+                        item.episodeTitle,
+                        item.episodeThumbnail,
+                        item.pauseDescription,
+                        item.resumePositionMs,
+                    )
+                },
+                onDismiss = { resumePromptItem = null },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .zIndex(15f),
+            )
 
             NuvioToastHost(
                 modifier = Modifier
