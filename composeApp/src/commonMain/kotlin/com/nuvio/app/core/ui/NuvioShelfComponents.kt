@@ -211,6 +211,8 @@ private fun NuvioViewAllPill(
     onClick: (() -> Unit)?,
     size: NuvioViewAllPillSize,
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+    val isAmoled = colorScheme.background == androidx.compose.ui.graphics.Color.Black && colorScheme.surface == androidx.compose.ui.graphics.Color(0xFF050505)
     val horizontalPadding = if (size == NuvioViewAllPillSize.Compact) 12.dp else 18.dp
     val verticalPadding = if (size == NuvioViewAllPillSize.Compact) 9.dp else 14.dp
     val textStyle = if (size == NuvioViewAllPillSize.Compact) {
@@ -223,7 +225,7 @@ private fun NuvioViewAllPill(
     Row(
         modifier = Modifier
             .background(
-                color = MaterialTheme.colorScheme.surface,
+                color = if (isAmoled) androidx.compose.ui.graphics.Color(0xFF0D0D0D) else colorScheme.surface,
                 shape = RoundedCornerShape(20.dp),
             )
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)

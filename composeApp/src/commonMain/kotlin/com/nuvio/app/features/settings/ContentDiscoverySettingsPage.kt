@@ -4,6 +4,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CollectionsBookmark
 import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material.icons.rounded.Tune
 
@@ -50,7 +51,7 @@ internal fun LazyListScope.contentDiscoveryContent(
                 SettingsNavigationRow(
                     title = "Homescreen",
                     description = "Control which catalogs appear on Home and in what order.",
-                    icon = Icons.Rounded.Tune,
+                    icon = Icons.Rounded.Home,
                     isTablet = isTablet,
                     onClick = onHomescreenClick,
                 )

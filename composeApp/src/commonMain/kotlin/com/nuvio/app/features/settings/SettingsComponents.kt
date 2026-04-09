@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material3.Icon
@@ -44,6 +43,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.ui.NuvioActionLabel
 import com.nuvio.app.core.ui.NuvioBackButton
@@ -57,13 +57,15 @@ private fun SettingsCard(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+    val isAmoled = colorScheme.background == Color.Black && colorScheme.surface == Color(0xFF050505)
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
+        color = if (isAmoled) Color(0xFF0B0B0B) else colorScheme.surface,
         shape = RoundedCornerShape(if (isTablet) 20.dp else 16.dp),
         border = BorderStroke(
             0.5.dp,
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.16f),
+            colorScheme.outlineVariant.copy(alpha = if (isAmoled) 0.24f else 0.16f),
         ),
     ) {
         Column(content = content)
@@ -217,13 +219,14 @@ internal fun SettingsNavigationRow(
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(horizontal = horizontalPadding, vertical = verticalPadding),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
             modifier = Modifier
+                .weight(1f)
                 .padding(end = 12.dp)
-                .widthIn(max = if (isTablet) 560.dp else 320.dp),
+                .widthIn(max = if (isTablet) 560.dp else Dp.Unspecified),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (icon != null || iconPainter != null) {
@@ -271,11 +274,6 @@ internal fun SettingsNavigationRow(
                 )
             }
         }
-        Icon(
-            imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 
@@ -296,13 +294,14 @@ internal fun SettingsSwitchRow(
             .fillMaxWidth()
             .clickable(enabled = enabled) { onCheckedChange(!checked) }
             .padding(horizontal = horizontalPadding, vertical = verticalPadding),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(
             modifier = Modifier
+                .weight(1f)
                 .padding(end = 12.dp)
-                .widthIn(max = if (isTablet) 560.dp else 280.dp)
+                .widthIn(max = if (isTablet) 560.dp else Dp.Unspecified)
                 .alpha(if (enabled) 1f else 0.55f),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
@@ -324,6 +323,7 @@ internal fun SettingsSwitchRow(
             checked = checked,
             onCheckedChange = onCheckedChange,
             enabled = enabled,
+            modifier = Modifier.padding(start = 4.dp),
             colors = SwitchDefaults.colors(
                 checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                 checkedTrackColor = MaterialTheme.colorScheme.primary,

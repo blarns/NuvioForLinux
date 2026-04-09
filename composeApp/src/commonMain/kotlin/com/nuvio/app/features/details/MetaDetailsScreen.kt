@@ -185,7 +185,9 @@ fun MetaDetailsScreen(
     }
 
     Box(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
     ) {
         when {
             displayedMeta == null && uiState.isLoading -> {
