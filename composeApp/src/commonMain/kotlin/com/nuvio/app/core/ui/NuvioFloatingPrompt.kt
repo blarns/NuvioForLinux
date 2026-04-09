@@ -1,6 +1,7 @@
 package com.nuvio.app.core.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -22,21 +23,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +42,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private const val AutoDismissDelayMs = 15_000L
@@ -70,13 +71,11 @@ fun NuvioFloatingPrompt(
     autoDismissMs: Long = AutoDismissDelayMs,
 ) {
     val visibilityState = remember { MutableTransitionState(false) }
+    val coroutineScope = rememberCoroutineScope()
+    val density = LocalDensity.current
     val hapticFeedback = LocalHapticFeedback.current
-    val dismissWithHaptic = remember(hapticFeedback, onDismiss) {
-        {
-            hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-            onDismiss()
-        }
-    }
+    val dragOffsetY = remember { Animatable(0f) }
+    var promptHeightPx by remember { mutableIntStateOf(0) }
     val actionWithHaptic = remember(hapticFeedback, onAction) {
         {
             hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -87,6 +86,7 @@ fun NuvioFloatingPrompt(
     LaunchedEffect(visible) {
         visibilityState.targetState = visible
         if (visible) {
+            dragOffsetY.snapTo(0f)
             hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
     }
@@ -94,6 +94,14 @@ fun NuvioFloatingPrompt(
     if (visible) {
         LaunchedEffect(Unit) {
             delay(autoDismissMs)
+            val dismissDistance = maxOf(
+                promptHeightPx.toFloat() + with(density) { 24.dp.toPx() },
+                with(density) { 160.dp.toPx() },
+            )
+            dragOffsetY.animateTo(
+                targetValue = dismissDistance,
+                animationSpec = tween(durationMillis = 240),
+            )
             onDismiss()
         }
     }
@@ -108,30 +116,54 @@ fun NuvioFloatingPrompt(
         enter = fadeIn(tween(400)) + slideInVertically(tween(400)) { it },
         exit = fadeOut(tween(300)) + slideOutVertically(tween(300)) { it },
     ) {
-        var dragOffsetY by remember { mutableFloatStateOf(0f) }
-
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = navBarBottom + 72.dp)
                 .padding(horizontal = 16.dp)
-                .offset { IntOffset(0, dragOffsetY.roundToInt().coerceAtLeast(0)) }
+                .offset { IntOffset(0, dragOffsetY.value.roundToInt().coerceAtLeast(0)) }
                 .pointerInput(Unit) {
                     detectVerticalDragGestures(
                         onDragEnd = {
-                            if (dragOffsetY > SwipeDismissThreshold) {
-                                dismissWithHaptic()
+                            val shouldDismiss = dragOffsetY.value > SwipeDismissThreshold
+                            coroutineScope.launch {
+                                if (shouldDismiss) {
+                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    val dismissDistance = maxOf(
+                                        promptHeightPx.toFloat() + with(density) { 24.dp.toPx() },
+                                        with(density) { 160.dp.toPx() },
+                                    )
+                                    dragOffsetY.animateTo(
+                                        targetValue = dismissDistance,
+                                        animationSpec = tween(durationMillis = 220),
+                                    )
+                                    onDismiss()
+                                } else {
+                                    dragOffsetY.animateTo(
+                                        targetValue = 0f,
+                                        animationSpec = tween(durationMillis = 180),
+                                    )
+                                }
                             }
-                            dragOffsetY = 0f
                         },
-                        onDragCancel = { dragOffsetY = 0f },
+                        onDragCancel = {
+                            coroutineScope.launch {
+                                dragOffsetY.animateTo(
+                                    targetValue = 0f,
+                                    animationSpec = tween(durationMillis = 180),
+                                )
+                            }
+                        },
                     ) { _, dragAmount ->
-                        dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
+                        coroutineScope.launch {
+                            dragOffsetY.snapTo((dragOffsetY.value + dragAmount).coerceAtLeast(0f))
+                        }
                     }
                 },
             contentAlignment = Alignment.BottomCenter,
         ) {
             Surface(
+                modifier = Modifier.onSizeChanged { promptHeightPx = it.height },
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 tonalElevation = 4.dp,
@@ -190,24 +222,10 @@ fun NuvioFloatingPrompt(
                             )
                         }
 
-                        Column(
-                            horizontalAlignment = Alignment.End,
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        Box(
+                            modifier = Modifier.size(42.dp),
+                            contentAlignment = Alignment.Center,
                         ) {
-                            IconButton(
-                                onClick = dismissWithHaptic,
-                                modifier = Modifier.size(28.dp),
-                                colors = IconButtonDefaults.iconButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.68f),
-                                ),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Close,
-                                    contentDescription = "Dismiss",
-                                    modifier = Modifier.size(14.dp),
-                                )
-                            }
-
                             FilledIconButton(
                                 onClick = actionWithHaptic,
                                 modifier = Modifier.size(42.dp),
@@ -227,17 +245,21 @@ fun NuvioFloatingPrompt(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(999.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                            .height(8.dp)
                             .padding(1.dp),
                     ) {
-                        LinearProgressIndicator(
-                            progress = { progressFraction.coerceIn(0f, 1f) },
+                        Box(
                             modifier = Modifier
-                                .fillMaxWidth()
+                                .fillMaxWidth(progressFraction.coerceIn(0f, 1f))
                                 .height(6.dp)
                                 .clip(RoundedCornerShape(999.dp)),
-                            color = MaterialTheme.colorScheme.primary,
-                            trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                        )
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .background(MaterialTheme.colorScheme.primary),
+                            )
+                        }
                     }
                 }
             }

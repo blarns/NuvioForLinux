@@ -1,5 +1,8 @@
 package com.nuvio.app.features.watchprogress
 
+import com.nuvio.app.features.details.MetaDetailsRepository
+import com.nuvio.app.features.details.nextReleasedEpisodeAfter
+
 object ResumePromptRepository {
 
     fun markPlayerEntered(videoId: String) {
@@ -12,7 +15,7 @@ object ResumePromptRepository {
         ResumePromptStorage.saveLastPlayerVideoId(null)
     }
 
-    fun consumeResumePrompt(): ContinueWatchingItem? {
+    suspend fun consumeResumePrompt(): ContinueWatchingItem? {
         val wasInPlayer = ResumePromptStorage.loadWasInPlayer()
         if (!wasInPlayer) return null
 
@@ -24,8 +27,24 @@ object ResumePromptRepository {
 
         WatchProgressRepository.ensureLoaded()
         val entry = WatchProgressRepository.progressForVideo(videoId) ?: return null
-        if (!entry.isResumable) return null
 
-        return entry.toContinueWatchingItem()
+        if (entry.isResumable) {
+            return entry.toContinueWatchingItem()
+        }
+
+        if (!entry.isEpisode) return null
+
+        val meta = MetaDetailsRepository.fetch(
+            type = entry.parentMetaType,
+            id = entry.parentMetaId,
+        ) ?: return null
+
+        val nextEpisode = meta.nextReleasedEpisodeAfter(
+            seasonNumber = entry.seasonNumber,
+            episodeNumber = entry.episodeNumber,
+            todayIsoDate = CurrentDateProvider.todayIsoDate(),
+        ) ?: return null
+
+        return entry.toUpNextContinueWatchingItem(nextEpisode)
     }
 }
