@@ -1,6 +1,5 @@
 package com.nuvio.app.features.home.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import com.nuvio.app.core.ui.onRightClick
 import androidx.compose.foundation.background
@@ -315,27 +314,11 @@ fun ContinueWatchingStylePreview(
     } else {
         MaterialTheme.colorScheme.surface
     }
-    val previewBorder = if (style == ContinueWatchingSectionStyle.Wide) {
-        BorderStroke(
-            1.dp,
-            if (isSelected) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
-        )
-    } else {
-        null
-    }
 
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(backgroundColor)
-            .then(
-                if (previewBorder != null) {
-                    Modifier.border(previewBorder, RoundedCornerShape(12.dp))
-                } else {
-                    Modifier
-                },
-            )
             .padding(horizontal = 12.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
