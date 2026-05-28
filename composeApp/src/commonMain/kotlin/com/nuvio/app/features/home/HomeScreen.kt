@@ -20,6 +20,7 @@ import com.nuvio.app.core.ui.LocalNuvioBottomNavigationOverlayPadding
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioNetworkOfflineCard
 import com.nuvio.app.core.ui.nuvioSafeBottomPadding
+import com.nuvio.app.core.ui.rememberPosterCardStyleUiState
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.enabledAddons
 import com.nuvio.app.features.cloud.CloudLibraryContentType
@@ -82,6 +83,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import com.nuvio.app.features.trakt.TraktEpisodeMappingService
 import com.nuvio.app.features.home.components.ContinueWatchingLayout
+import com.nuvio.app.features.home.components.continueWatchingLandscapeCardHeight
 import com.nuvio.app.features.home.components.homeSectionHorizontalPaddingForWidth
 import com.nuvio.app.features.home.components.rememberContinueWatchingLayout
 import kotlinx.coroutines.CancellationException
@@ -605,6 +607,10 @@ fun HomeScreen(
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val homeSectionPadding = homeSectionHorizontalPaddingForWidth(maxWidth.value)
         val continueWatchingLayout = rememberContinueWatchingLayout(maxWidth.value)
+        val posterCardStyle = rememberPosterCardStyleUiState()
+        val continueWatchingCardHeight = remember(posterCardStyle.widthDp) {
+            continueWatchingLandscapeCardHeight(posterCardStyle.widthDp)
+        }
         val nativeBottomNavigationOverlayHeight =
             if (LocalNuvioBottomNavigationOverlayPadding.current > 0.dp) {
                 nuvioSafeBottomPadding()
@@ -617,6 +623,7 @@ fun HomeScreen(
             continueWatchingPreferences.style,
             continueWatchingItems.isNotEmpty(),
             continueWatchingLayout,
+            continueWatchingCardHeight,
             nativeBottomNavigationOverlayHeight,
         ) {
             heroMobileBelowSectionHeightHint(
@@ -625,6 +632,7 @@ fun HomeScreen(
                 hasContinueWatchingItems = continueWatchingItems.isNotEmpty(),
                 continueWatchingStyle = continueWatchingPreferences.style,
                 continueWatchingLayout = continueWatchingLayout,
+                continueWatchingCardHeight = continueWatchingCardHeight,
                 bottomNavigationOverlayHeight = nativeBottomNavigationOverlayHeight,
             )
         }
@@ -999,11 +1007,13 @@ private fun heroMobileBelowSectionHeightHint(
     hasContinueWatchingItems: Boolean,
     continueWatchingStyle: ContinueWatchingSectionStyle,
     continueWatchingLayout: ContinueWatchingLayout,
+    continueWatchingCardHeight: Dp,
     bottomNavigationOverlayHeight: Dp,
 ): Dp? {
     if (maxWidthDp >= 600f || !continueWatchingVisible || !hasContinueWatchingItems) return null
 
     val sectionHeight = when (continueWatchingStyle) {
+        ContinueWatchingSectionStyle.Card -> continueWatchingCardHeight + 56.dp
         ContinueWatchingSectionStyle.Wide -> continueWatchingLayout.wideCardHeight + 56.dp
         ContinueWatchingSectionStyle.Poster ->
             continueWatchingLayout.posterCardHeight + continueWatchingLayout.posterTitleBlockHeight + 70.dp
