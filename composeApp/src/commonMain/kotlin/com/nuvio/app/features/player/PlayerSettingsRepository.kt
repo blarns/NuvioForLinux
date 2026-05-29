@@ -37,6 +37,7 @@ data class PlayerSettingsUiState(
     val holdToSpeedEnabled: Boolean = true,
     val holdToSpeedValue: Float = 2f,
     val externalPlayerEnabled: Boolean = false,
+    val externalPlayerForwardSubtitles: Boolean = false,
     val externalPlayerId: String? = ExternalPlayerPlatform.defaultPlayerId(),
     val preferredAudioLanguage: String = AudioLanguageOption.DEVICE,
     val secondaryPreferredAudioLanguage: String? = null,
@@ -96,6 +97,7 @@ object PlayerSettingsRepository {
     private var holdToSpeedEnabled = true
     private var holdToSpeedValue = 2f
     private var externalPlayerEnabled = false
+    private var externalPlayerForwardSubtitles = false
     private var externalPlayerId: String? = ExternalPlayerPlatform.defaultPlayerId()
     private var preferredAudioLanguage = AudioLanguageOption.DEVICE
     private var secondaryPreferredAudioLanguage: String? = null
@@ -160,6 +162,7 @@ object PlayerSettingsRepository {
         holdToSpeedEnabled = true
         holdToSpeedValue = 2f
         externalPlayerEnabled = false
+        externalPlayerForwardSubtitles = false
         externalPlayerId = ExternalPlayerPlatform.defaultPlayerId()
         preferredAudioLanguage = AudioLanguageOption.DEVICE
         secondaryPreferredAudioLanguage = null
@@ -217,6 +220,7 @@ object PlayerSettingsRepository {
         holdToSpeedEnabled = PlayerSettingsStorage.loadHoldToSpeedEnabled() ?: true
         holdToSpeedValue = PlayerSettingsStorage.loadHoldToSpeedValue() ?: 2f
         externalPlayerEnabled = PlayerSettingsStorage.loadExternalPlayerEnabled() ?: false
+        externalPlayerForwardSubtitles = PlayerSettingsStorage.loadExternalPlayerForwardSubtitles() ?: false
         externalPlayerId = PlayerSettingsStorage.loadExternalPlayerId()
             ?: ExternalPlayerPlatform.defaultPlayerId()
         preferredAudioLanguage =
@@ -388,6 +392,14 @@ object PlayerSettingsRepository {
         externalPlayerId = normalized
         publish()
         PlayerSettingsStorage.saveExternalPlayerId(normalized)
+    }
+
+    fun setExternalPlayerForwardSubtitles(enabled: Boolean) {
+        ensureLoaded()
+        if (externalPlayerForwardSubtitles == enabled) return
+        externalPlayerForwardSubtitles = enabled
+        publish()
+        PlayerSettingsStorage.saveExternalPlayerForwardSubtitles(enabled)
     }
 
     fun setPreferredAudioLanguage(language: String) {
@@ -826,6 +838,7 @@ object PlayerSettingsRepository {
             holdToSpeedEnabled = holdToSpeedEnabled,
             holdToSpeedValue = holdToSpeedValue,
             externalPlayerEnabled = externalPlayerEnabled,
+            externalPlayerForwardSubtitles = externalPlayerForwardSubtitles,
             externalPlayerId = externalPlayerId,
             preferredAudioLanguage = preferredAudioLanguage,
             secondaryPreferredAudioLanguage = secondaryPreferredAudioLanguage,

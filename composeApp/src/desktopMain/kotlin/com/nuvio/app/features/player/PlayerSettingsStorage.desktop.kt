@@ -13,6 +13,8 @@ internal actual object PlayerSettingsStorage {
     actual fun saveHoldToSpeedValue(speed: Float) {}
     actual fun loadExternalPlayerEnabled(): Boolean? = null
     actual fun saveExternalPlayerEnabled(enabled: Boolean) {}
+    actual fun loadExternalPlayerForwardSubtitles(): Boolean? = null
+    actual fun saveExternalPlayerForwardSubtitles(enabled: Boolean) {}
     actual fun loadExternalPlayerId(): String? = null
     actual fun saveExternalPlayerId(playerId: String?) {}
     actual fun loadPreferredAudioLanguage(): String? = null
