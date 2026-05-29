@@ -94,6 +94,12 @@ import nuvio.composeapp.generated.resources.action_reset
 import nuvio.composeapp.generated.resources.action_save
 import nuvio.composeapp.generated.resources.action_saving
 import nuvio.composeapp.generated.resources.settings_debrid_add_key_first
+import nuvio.composeapp.generated.resources.settings_debrid_sort_original
+import nuvio.composeapp.generated.resources.settings_debrid_sort_best_quality
+import nuvio.composeapp.generated.resources.settings_debrid_sort_largest
+import nuvio.composeapp.generated.resources.settings_debrid_sort_smallest
+import nuvio.composeapp.generated.resources.settings_debrid_sort_best_audio
+import nuvio.composeapp.generated.resources.settings_debrid_sort_language
 import nuvio.composeapp.generated.resources.settings_debrid_cloud_library
 import nuvio.composeapp.generated.resources.settings_debrid_cloud_library_description
 import nuvio.composeapp.generated.resources.settings_debrid_connected
@@ -1134,7 +1140,8 @@ private fun DebridStreamPreferenceDialog(
             title = "Sort results",
             selectedValue = sortProfileFor(preferences.sortCriteria),
             options = listOf(
-                DebridSortProfile.DEFAULT,
+                DebridSortProfile.ORIGINAL,
+                DebridSortProfile.BEST_QUALITY,
                 DebridSortProfile.LARGEST,
                 DebridSortProfile.SMALLEST,
                 DebridSortProfile.AUDIO,
@@ -1577,13 +1584,15 @@ private fun DebridDialogOptionRow(
 private fun streamMaxResultsLabel(value: Int): String =
     if (value <= 0) "All results" else "$value results"
 
+@Composable
 private fun sortProfileLabel(value: DebridSortProfile): String =
     when (value) {
-        DebridSortProfile.DEFAULT -> "Default"
-        DebridSortProfile.LARGEST -> "Largest first"
-        DebridSortProfile.SMALLEST -> "Smallest first"
-        DebridSortProfile.AUDIO -> "Best audio first"
-        DebridSortProfile.LANGUAGE -> "Language first"
+        DebridSortProfile.ORIGINAL -> stringResource(Res.string.settings_debrid_sort_original)
+        DebridSortProfile.BEST_QUALITY -> stringResource(Res.string.settings_debrid_sort_best_quality)
+        DebridSortProfile.LARGEST -> stringResource(Res.string.settings_debrid_sort_largest)
+        DebridSortProfile.SMALLEST -> stringResource(Res.string.settings_debrid_sort_smallest)
+        DebridSortProfile.AUDIO -> stringResource(Res.string.settings_debrid_sort_best_audio)
+        DebridSortProfile.LANGUAGE -> stringResource(Res.string.settings_debrid_sort_language)
     }
 
 private fun debridRuleRows(preferences: DebridStreamPreferences): List<DebridRuleRow> =
@@ -1629,7 +1638,15 @@ private fun sizeRangeLabel(minGb: Int, maxGb: Int): String =
 
 private fun sortProfileFor(criteria: List<DebridStreamSortCriterion>): DebridSortProfile {
     val normalized = criteria.map { it.key to it.direction }
+    val bestQuality = DebridStreamSortCriterion.defaultOrder.map { it.key to it.direction }
+    val legacyQuality = listOf(
+        DebridStreamSortKey.RESOLUTION to DebridStreamSortDirection.DESC,
+        DebridStreamSortKey.QUALITY to DebridStreamSortDirection.DESC,
+        DebridStreamSortKey.SIZE to DebridStreamSortDirection.DESC,
+    )
     return when {
+        normalized.isEmpty() -> DebridSortProfile.ORIGINAL
+        normalized == bestQuality || normalized == legacyQuality -> DebridSortProfile.BEST_QUALITY
         normalized == listOf(DebridStreamSortKey.SIZE to DebridStreamSortDirection.DESC) -> DebridSortProfile.LARGEST
         normalized == listOf(DebridStreamSortKey.SIZE to DebridStreamSortDirection.ASC) -> DebridSortProfile.SMALLEST
         normalized.take(2) == listOf(
@@ -1637,16 +1654,18 @@ private fun sortProfileFor(criteria: List<DebridStreamSortCriterion>): DebridSor
             DebridStreamSortKey.AUDIO_CHANNEL to DebridStreamSortDirection.DESC,
         ) -> DebridSortProfile.AUDIO
         normalized.firstOrNull() == DebridStreamSortKey.LANGUAGE to DebridStreamSortDirection.DESC -> DebridSortProfile.LANGUAGE
-        else -> DebridSortProfile.DEFAULT
+        else -> DebridSortProfile.BEST_QUALITY
     }
 }
 
+@Composable
 private fun sortProfileLabel(criteria: List<DebridStreamSortCriterion>): String =
     sortProfileLabel(sortProfileFor(criteria))
 
 private fun sortCriteriaForProfile(profile: DebridSortProfile): List<DebridStreamSortCriterion> =
     when (profile) {
-        DebridSortProfile.DEFAULT -> DebridStreamSortCriterion.defaultOrder
+        DebridSortProfile.ORIGINAL -> DebridStreamSortCriterion.originalOrder
+        DebridSortProfile.BEST_QUALITY -> DebridStreamSortCriterion.defaultOrder
         DebridSortProfile.LARGEST -> listOf(DebridStreamSortCriterion(DebridStreamSortKey.SIZE, DebridStreamSortDirection.DESC))
         DebridSortProfile.SMALLEST -> listOf(DebridStreamSortCriterion(DebridStreamSortKey.SIZE, DebridStreamSortDirection.ASC))
         DebridSortProfile.AUDIO -> listOf(
@@ -1672,7 +1691,8 @@ private data class DebridRuleRow(
 )
 
 private enum class DebridSortProfile {
-    DEFAULT,
+    ORIGINAL,
+    BEST_QUALITY,
     LARGEST,
     SMALLEST,
     AUDIO,

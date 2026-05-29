@@ -1448,4 +1448,10 @@
     </plurals>
     <string name="cw_new_episode">New Episode</string>
     <string name="cw_new_season">New Season</string>
+    <string name="settings_debrid_sort_original">Original order</string>
+    <string name="settings_debrid_sort_best_quality">Best quality first</string>
+    <string name="settings_debrid_sort_largest">Largest first</string>
+    <string name="settings_debrid_sort_smallest">Smallest first</string>
+    <string name="settings_debrid_sort_best_audio">Best audio first</string>
+    <string name="settings_debrid_sort_language">Language first</string>
 </resources>
