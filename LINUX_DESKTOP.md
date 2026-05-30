@@ -1,5 +1,8 @@
 # Linux Desktop Build Target
 
+> [!NOTE]
+> **Status:** Early community implementation. The `run` task is confirmed working. Packaging tasks (`packageJvm`, `packageUberJarForCurrentOS`, `createDistributable`) are documented but not yet verified. Known issues: player controls unresponsive, volume slider mispositioned, home catalog images not loading.
+
 This document describes how to build and run Nuvio as a native Linux desktop application using Kotlin Multiplatform and Compose Multiplatform.
 
 ## Overview
@@ -54,7 +57,7 @@ The Linux desktop target uses:
 ### Development Build
 
 ```bash
-./gradlew composeApp:runJvm
+./gradlew composeApp:run
 ```
 
 This builds and runs the application in debug mode with hot-reloading.
@@ -98,7 +101,7 @@ On most systems, VLCJ will automatically locate the system libVLC. If you encoun
 
 ```bash
 export VLC_LIB_PATH=/usr/lib/x86_64-linux-gnu/libvlc.so
-./gradlew composeApp:runJvm
+./gradlew composeApp:run
 ```
 
 ## Running
@@ -106,7 +109,7 @@ export VLC_LIB_PATH=/usr/lib/x86_64-linux-gnu/libvlc.so
 ### From Gradle
 
 ```bash
-./gradlew composeApp:runJvm
+./gradlew composeApp:run
 ```
 
 ### From Distribution Package
@@ -195,7 +198,7 @@ To link your Trakt account:
 For lower-end hardware, set:
 ```bash
 export LIBGL_ALWAYS_INDIRECT=1
-./gradlew composeApp:runJvm
+./gradlew composeApp:run
 ```
 
 ### Audio
@@ -203,7 +206,7 @@ export LIBGL_ALWAYS_INDIRECT=1
 If audio issues occur:
 ```bash
 export VLC_PULSE_GAIN=1
-./gradlew composeApp:runJvm
+./gradlew composeApp:run
 ```
 
 ## Troubleshooting
@@ -228,7 +231,7 @@ export VLC_LIB_PATH=/usr/lib/x86_64-linux-gnu/libvlc.so
 3. Try software video output:
    ```bash
    export VLC_GL=dummy
-   ./gradlew composeApp:runJvm
+   ./gradlew composeApp:run
    ```
 
 ### Audio delay or stuttering
@@ -236,7 +239,7 @@ export VLC_LIB_PATH=/usr/lib/x86_64-linux-gnu/libvlc.so
 **Solution:** Reduce buffer size:
 ```bash
 export VLC_AUDIO_BUFFER=100
-./gradlew composeApp:runJvm
+./gradlew composeApp:run
 ```
 
 ### High CPU usage during playback
@@ -244,7 +247,7 @@ export VLC_AUDIO_BUFFER=100
 **Solution:** Enable hardware decoding if available:
 ```bash
 export VLC_HWDEC=vaapi
-./gradlew composeApp:runJvm
+./gradlew composeApp:run
 ```
 
 ## Development Notes
@@ -278,7 +281,7 @@ Use `expect`/`actual` declarations in common code to provide platform-specific i
 **JVM options for large projects:**
 ```bash
 export GRADLE_OPTS="-Xmx2g"
-./gradlew composeApp:runJvm
+./gradlew composeApp:run
 ```
 
 ## CI/CD Integration
