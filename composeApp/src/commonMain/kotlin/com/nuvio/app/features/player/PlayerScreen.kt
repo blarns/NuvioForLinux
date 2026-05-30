@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeContent
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -930,7 +931,10 @@ fun PlayerScreen(
         }
 
         fun seekBy(offsetMs: Long) {
-            playerController?.seekBy(offsetMs)
+            val current = playbackSnapshot.positionMs.coerceAtLeast(0L)
+            val target = (current + offsetMs).coerceAtLeast(0L)
+            println("DEBUG SEEK: offset=$offsetMs, current=$current, target=$target")
+            playerController?.seekTo(target)
             scheduleProgressSyncAfterSeek()
             controlsVisible = true
             when {
@@ -2233,6 +2237,7 @@ fun PlayerScreen(
                     episodeTitle = activeEpisodeTitle,
                     playbackSnapshot = playbackSnapshot,
                     displayedPositionMs = displayedPositionMs,
+                    currentVolumeFraction = playerController?.currentVolume()?.fraction.also { println("DEBUG VOLUME: $it") },
                     metrics = metrics,
                     resizeMode = resizeMode,
                     isLocked = playerControlsLocked,
@@ -2281,6 +2286,9 @@ fun PlayerScreen(
                         scrubbingPositionMs = null
                         playerController?.seekTo(positionMs)
                         scheduleProgressSyncAfterSeek()
+                    },
+                    onVolumeChange = { volumeFraction ->
+                        playerController?.setVolume(volumeFraction)
                     },
                     horizontalSafePadding = horizontalSafePadding,
                     modifier = Modifier.fillMaxSize(),
