@@ -1870,6 +1870,7 @@ fun PlayerScreen(
             WatchProgressRepository.upsertPlaybackProgress(
                 session = playbackSession,
                 snapshot = playbackSnapshot,
+                syncRemote = false,
             )
         }
 
