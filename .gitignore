@@ -27,3 +27,10 @@ asset
 scripts/scrape_android_compose_animation_docs.py
 tools
 AGENTS.md
+fix_*.py
+generate-*.py
+generate-*.sh
+files.zip
+files/
+nuvio-latest.zip
+IMPLEMENTATION_COMPLETE.md
