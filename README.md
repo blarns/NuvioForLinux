@@ -18,11 +18,36 @@
 
 </div>
 
+## ⚠️ Disclaimer: Vibecoded Project
+> [!WARNING]
+> This project was largely **vibecoded** (built rapidly with AI assistance/pair programming). While it is functional and packed with features, it may contain unconventional patterns, unoptimized code, or bugs. Pull requests, fixes, and improvements are extremely welcome!
+
 ## About
 
-Nuvio is the current Kotlin Multiplatform rewrite of the original React Native app. It delivers a shared Compose UI for Android and iOS while keeping the playback-focused experience, collection tools, watch progress flows, downloads, and Stremio addon ecosystem integration that shaped the earlier app.
+Nuvio is an unofficial Kotlin Multiplatform rewrite of the original React Native app. It delivers a shared Compose UI for Android and iOS while keeping the playback-focused experience, collection tools, watch progress flows, downloads, and Stremio addon ecosystem integration that shaped the earlier app.
 
-The mobile app is built from a single shared codebase in [composeApp](./composeApp), with native platform entry points for Android and iOS.
+The mobile app is built from a single shared codebase in [composeApp](./composeApp), with native platform entry points for Android, iOS, and Linux Desktop.
+
+### 📝 Original Project & License Compliance
+
+**Important Note:** This project is an independent, unofficial rewrite based on the incredible work of the original developers of [NuvioTV](https://github.com/NuvioMedia/NuvioTV). This repository is not the original React Native application, and we are incredibly grateful for the foundation they built.
+
+Because the original NuvioTV project was licensed under the **GNU General Public License v3.0 (GPL-3.0)**, and this rewrite inherits from its design, feature set, and potentially open-sourced assets, this repository is also strictly licensed under the **GPL-3.0**. 
+
+If you fork, modify, or distribute this code, you **must** also open-source your modifications under the GPL-3.0 in accordance with the original Nuvio developers' licensing terms.
+
+## Environment Setup
+
+Before building the app, you **must** configure your local environment variables. The project uses Supabase for authentication and database services.
+
+Create a file named `local.properties` in the root of the project (this file is git-ignored) and add your keys:
+
+```properties
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+If you try to build without these, the build scripts will either fail or default to placeholder values, causing authentication and networking to fail at runtime.
 
 ## Installation
 
@@ -33,6 +58,31 @@ Download the latest Android build from [GitHub Releases](https://github.com/Nuvi
 ### iOS
 
 - [TestFlight](https://testflight.apple.com/join/u4y7MHK9)
+
+### Linux Desktop (JVM)
+
+**Status:** Early-stage community support via Kotlin Multiplatform JVM target.
+
+Native Linux desktop build using VLCJ for video playback:
+
+```bash
+# Install dependencies (Ubuntu/Debian)
+sudo apt install openjdk-17-jdk libvlc-dev vlc
+
+# Build and run
+./gradlew composeApp:runJvm
+```
+
+See [LINUX_QUICKSTART.md](LINUX_QUICKSTART.md) for quick setup, or [LINUX_DESKTOP.md](LINUX_DESKTOP.md) for comprehensive documentation.
+
+**Features:**
+- ✅ HLS, DASH, RTSP, HTTP streaming
+- ✅ Subtitle support (SRT, VTT, ASS)
+- ✅ Audio track selection
+- ✅ OAuth authentication
+- ✅ Full addon ecosystem support
+
+This is a community-friendly implementation suitable for developers and Linux users; production stability may vary as the feature matures.
 
 ## Development
 

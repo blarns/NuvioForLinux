@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeContent
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -35,6 +36,8 @@ import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.VolumeOff
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -71,6 +74,7 @@ internal fun PlayerControlsShell(
     episodeTitle: String?,
     playbackSnapshot: PlayerPlaybackSnapshot,
     displayedPositionMs: Long,
+    currentVolumeFraction: Float?,
     metrics: PlayerLayoutMetrics,
     resizeMode: PlayerResizeMode,
     isLocked: Boolean,
@@ -93,6 +97,7 @@ internal fun PlayerControlsShell(
     onParentalGuideAnimationComplete: () -> Unit = {},
     onScrubChange: (Long) -> Unit,
     onScrubFinished: (Long) -> Unit,
+    onVolumeChange: ((Float) -> Unit)? = null,
     horizontalSafePadding: androidx.compose.ui.unit.Dp,
     modifier: Modifier = Modifier,
 ) {
@@ -161,16 +166,32 @@ internal fun PlayerControlsShell(
             )
 
             if (showPlaybackControls) {
-                CenterControls(
-                    snapshot = playbackSnapshot,
-                    metrics = metrics,
-                    onSeekBack = onSeekBack,
-                    onSeekForward = onSeekForward,
-                    onTogglePlayback = onTogglePlayback,
+                Row(
                     modifier = Modifier
                         .align(Alignment.Center)
+                        .fillMaxWidth()
+                        .padding(horizontal = metrics.horizontalPadding)
                         .padding(bottom = metrics.centerLift),
-                )
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CenterControls(
+                        snapshot = playbackSnapshot,
+                        metrics = metrics,
+                        onSeekBack = onSeekBack,
+                        onSeekForward = onSeekForward,
+                        onTogglePlayback = onTogglePlayback,
+                    )
+                    
+                    if (onVolumeChange != null) {
+                        Spacer(modifier = Modifier.width(32.dp))
+                        VolumeSlider(
+                            volumeFraction = currentVolumeFraction ?: 1.0f,
+                            onVolumeChange = onVolumeChange,
+                            metrics = metrics
+                        )
+                    }
+                }
             }
 
             if (showPlaybackControls) {
@@ -427,6 +448,43 @@ private fun SideControlButton(
             contentDescription = contentDescription,
             tint = Color.White,
             modifier = Modifier.size(metrics.playIconSize),
+        )
+    }
+}
+
+@Composable
+private fun VolumeSlider(
+    volumeFraction: Float,
+    onVolumeChange: (Float) -> Unit,
+    metrics: PlayerLayoutMetrics,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color.Black.copy(alpha = 0.5f))
+            .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(24.dp))
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .width(120.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(
+            imageVector = if (volumeFraction <= 0f) androidx.compose.material.icons.Icons.Rounded.VolumeOff else androidx.compose.material.icons.Icons.Rounded.VolumeUp,
+            contentDescription = "Volume",
+            tint = Color.White,
+            modifier = Modifier.size(20.dp)
+        )
+        androidx.compose.material3.Slider(
+            value = volumeFraction,
+            onValueChange = onVolumeChange,
+            valueRange = 0f..1f,
+            modifier = Modifier.height(24.dp),
+            colors = androidx.compose.material3.SliderDefaults.colors(
+                thumbColor = Color.White,
+                activeTrackColor = Color.White,
+                inactiveTrackColor = Color.White.copy(alpha = 0.3f)
+            )
         )
     }
 }

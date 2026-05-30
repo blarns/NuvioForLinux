@@ -240,10 +240,29 @@ kotlin {
             freeCompilerArgs += listOf("-Xbinary=bundleId=$iosFrameworkBundleId")
         }
     }
-    
+    jvm {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_11)
+        }
+    }
+
     sourceSets {
         val commonMain by getting {
             kotlin.srcDir(generatedRuntimeConfigDir)
+        }
+        val jvmMain by getting {
+            dependsOn(commonMain)
+            kotlin.srcDir("src/desktopMain/kotlin")
+            dependencies {
+                implementation(compose.desktop.currentOs)
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.8.1")
+                implementation(libs.ktor.client.java)
+                // VLCJ for cross-platform video playback on desktop
+                implementation("uk.co.caprica:vlcj:4.8.2")
+                // Ktor server for OAuth localhost redirect handler
+                implementation(libs.ktor.server.core)
+                implementation(libs.ktor.server.netty)
+            }
         }
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
@@ -257,6 +276,7 @@ kotlin {
             implementation("com.google.code.gson:gson:2.11.0")
             implementation("io.github.peerless2012:ass-media:0.4.0-beta01")
             implementation(libs.ktor.client.android)
+            // Android-only Media3/ExoPlayer player stack
             implementation(libs.androidx.media3.exoplayer.hls)
             implementation(libs.androidx.media3.exoplayer.dash)
             implementation(libs.androidx.media3.exoplayer.smoothstreaming)
@@ -268,6 +288,7 @@ kotlin {
             implementation(libs.androidx.media3.common)
             implementation(libs.androidx.media3.container)
             implementation(libs.androidx.media3.extractor)
+            // Android-only .aar library dependencies
             implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("lib-*.aar"))))
         }
         commonMain.dependencies {
@@ -298,6 +319,7 @@ kotlin {
     }
 }
 
+// Android full flavor only: add scripting engine and HTML parser
 afterEvaluate {
     dependencies {
         add("fullImplementation", files("libs/quickjs-kt-android-1.0.5-nuvio.aar"))
@@ -310,6 +332,7 @@ dependencies {
     debugImplementation(libs.compose.uiTooling)
 }
 
+// Exclude duplicated media3 artifacts that might come from transitive deps
 configurations.all {
     exclude(group = "androidx.media3", module = "media3-exoplayer")
     exclude(group = "androidx.media3", module = "media3-ui")
@@ -382,5 +405,20 @@ android {
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+    }
+}
+
+compose.desktop {
+    application {
+        mainClass = "com.nuvio.app.MainKt"
+        nativeDistributions {
+            targetFormats(TargetFormat.Deb, TargetFormat.AppImage)
+            packageName = "Nuvio"
+            packageVersion = "1.0.0"
+            modules("java.net.http", "jdk.crypto.ec", "java.naming")
+        }
+        buildTypes.release.proguard {
+            isEnabled.set(false)
+        }
     }
 }
