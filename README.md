@@ -11,30 +11,32 @@
   [![License][license-shield]][license-url]
 
   <p>
-    A modern media hub for Android and iOS built with Kotlin Multiplatform and Compose Multiplatform.
+    A modern media hub for Android, iOS, and Linux Desktop built with Kotlin Multiplatform and Compose Multiplatform.
     <br />
     Stremio addon ecosystem • Cross-platform
   </p>
 
 </div>
 
-## ⚠️ Disclaimer: Vibecoded Project
-> [!WARNING]
-> This project was largely **vibecoded** (built rapidly with AI assistance/pair programming). While it is functional and packed with features, it may contain unconventional patterns, unoptimized code, or bugs. Pull requests, fixes, and improvements are extremely welcome!
-
 ## About
 
-Nuvio is an unofficial Kotlin Multiplatform rewrite of the original React Native app. It delivers a shared Compose UI for Android and iOS while keeping the playback-focused experience, collection tools, watch progress flows, downloads, and Stremio addon ecosystem integration that shaped the earlier app.
+This is a fork of [NuvioMedia/NuvioMobile](https://github.com/NuvioMedia/NuvioMobile) with an added **Linux Desktop target** via Kotlin Multiplatform JVM + VLCJ.
 
-The mobile app is built from a single shared codebase in [composeApp](./composeApp), with native platform entry points for Android, iOS, and Linux Desktop.
+The upstream project is an unofficial Kotlin Multiplatform rewrite of the original React Native Nuvio app. It delivers a shared Compose UI for Android and iOS while keeping the playback-focused experience, collection tools, watch progress flows, downloads, and Stremio addon ecosystem integration.
+
+This fork adds a community-maintained Linux desktop build. Video playback, audio, authentication, and addon persistence are working. See known issues below.
 
 ### 📝 Original Project & License Compliance
 
-**Important Note:** This project is an independent, unofficial rewrite based on the incredible work of the original developers of [NuvioTV](https://github.com/NuvioMedia/NuvioTV). This repository is not the original React Native application, and we are incredibly grateful for the foundation they built.
+This project is an independent, unofficial rewrite based on the work of the original developers of [NuvioTV](https://github.com/NuvioMedia/NuvioTV). This repository is not the original React Native application.
 
-Because the original NuvioTV project was licensed under the **GNU General Public License v3.0 (GPL-3.0)**, and this rewrite inherits from its design, feature set, and potentially open-sourced assets, this repository is also strictly licensed under the **GPL-3.0**. 
+Because the original NuvioTV project was licensed under the **GNU General Public License v3.0 (GPL-3.0)**, this repository is also strictly licensed under the **GPL-3.0**.
 
-If you fork, modify, or distribute this code, you **must** also open-source your modifications under the GPL-3.0 in accordance with the original Nuvio developers' licensing terms.
+If you fork, modify, or distribute this code, you **must** also open-source your modifications under the GPL-3.0.
+
+## ⚠️ Disclaimer
+> [!WARNING]
+> This project was largely **vibecoded** (built rapidly with AI assistance/pair programming). While it is functional and packed with features, it may contain unconventional patterns, unoptimized code, or bugs. Pull requests, fixes, and improvements are extremely welcome!
 
 ## Environment Setup
 
@@ -47,13 +49,13 @@ SUPABASE_URL=your_supabase_project_url
 SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
-If you try to build without these, the build scripts will either fail or default to placeholder values, causing authentication and networking to fail at runtime.
+If you try to build without these, authentication and networking will fail at runtime.
 
 ## Installation
 
 ### Android
 
-Download the latest Android build from [GitHub Releases](https://github.com/NuvioMedia/NuvioMobile/releases/latest).
+Download the latest Android build from [NuvioMedia/NuvioMobile Releases](https://github.com/NuvioMedia/NuvioMobile/releases/latest).
 
 ### iOS
 
@@ -61,56 +63,58 @@ Download the latest Android build from [GitHub Releases](https://github.com/Nuvi
 
 ### Linux Desktop (JVM)
 
-**Status:** Early-stage community support via Kotlin Multiplatform JVM target.
-
-Native Linux desktop build using VLCJ for video playback:
+**Status:** Community-maintained. Video playback and audio working. See known issues.
 
 ```bash
-# Install dependencies (Ubuntu/Debian)
+# Install dependencies (Ubuntu/Debian/Mint)
 sudo apt install openjdk-17-jdk libvlc-dev vlc
 
+# Clone
+git clone https://github.com/blarns/NuvioForLinux.git
+cd NuvioForLinux
+
+# Add local.properties with your Supabase keys (see Environment Setup above)
+
 # Build and run
-./gradlew composeApp:runJvm
+./gradlew composeApp:run
 ```
 
 See [LINUX_QUICKSTART.md](LINUX_QUICKSTART.md) for quick setup, or [LINUX_DESKTOP.md](LINUX_DESKTOP.md) for comprehensive documentation.
 
-**Features:**
-- ✅ HLS, DASH, RTSP, HTTP streaming
+**Working:**
+- ✅ HLS, DASH, RTSP, HTTP streaming via VLCJ/libVLC
+- ✅ Audio playback
 - ✅ Subtitle support (SRT, VTT, ASS)
-- ✅ Audio track selection
-- ✅ OAuth authentication
-- ✅ Full addon ecosystem support
+- ✅ OAuth authentication with persistent session
+- ✅ Full addon ecosystem support with persistent storage
+- ✅ Continue Watching, Library, Search
 
-This is a community-friendly implementation suitable for developers and Linux users; production stability may vary as the feature matures.
+**Known Issues:**
+- ⚠️ Player controls unresponsive (pointer event handling needs desktop adaptation)
+- ⚠️ Volume slider mispositioned (mobile absolute positioning)
+- ⚠️ Home screen catalog images not loading
+- ⚠️ No hardware video acceleration yet (VA-API planned)
+
+**Tested on:** Linux Mint 22, kernel 6.8, X11, Intel Iris Xe, Bluetooth audio
 
 ## Development
 
 ```bash
-git clone https://github.com/NuvioMedia/NuvioMobile.git
-cd NuvioMobile
-./scripts/run-mobile.sh android
-# or
-./scripts/run-mobile.sh ios
+git clone https://github.com/blarns/NuvioForLinux.git
+cd NuvioForLinux
+./gradlew composeApp:run        # Linux desktop
+./gradlew composeApp:assembleDebug  # Android
 ```
 
 ### Project Structure
 
-- `composeApp/` contains the shared Kotlin Multiplatform and Compose Multiplatform app code.
-- `composeApp/src/commonMain/` contains shared UI, features, repositories, and platform-agnostic logic.
-- `composeApp/src/androidMain/` contains Android-specific integrations.
-- `composeApp/src/iosMain/` contains iOS-specific integrations.
-- `iosApp/` contains the native Xcode project and iOS entry point.
+- `composeApp/src/commonMain/` — shared UI, features, repositories
+- `composeApp/src/androidMain/` — Android-specific integrations
+- `composeApp/src/iosMain/` — iOS-specific integrations
+- `composeApp/src/desktopMain/` — Linux/JVM desktop implementations
+- `iosApp/` — native Xcode project
 
-Useful commands:
-
-```bash
-./gradlew :composeApp:assembleDebug
-./gradlew :composeApp:compileKotlinIosSimulatorArm64
-./scripts/build-distribution.sh
-```
-
-Versioning is driven from `iosApp/Configuration/Version.xcconfig`, which is used as the shared source of truth for both iOS and Android builds.
+Versioning is driven from `iosApp/Configuration/Version.xcconfig`.
 
 ## Legal & DMCA
 
@@ -118,34 +122,24 @@ Nuvio functions solely as a client-side interface for browsing metadata and play
 
 Nuvio is not affiliated with any third-party extensions, catalogs, sources, or content providers. It does not host, store, or distribute any media content.
 
-For comprehensive legal information, including our full disclaimer, third-party extension policy, and DMCA/Copyright information, please visit our [Legal & Disclaimer Page](https://nuvioapp.space/legal).
+For comprehensive legal information please visit the [Legal & Disclaimer Page](https://nuvioapp.space/legal).
 
 ## Built With
 
 - Kotlin Multiplatform
 - Compose Multiplatform
-- Kotlin
-- AndroidX Media3
-- AVFoundation and native iOS integrations
-
-## Star History
-
-<a href="https://www.star-history.com/#NuvioMedia/NuvioMobile&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=NuvioMedia/NuvioMobile&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=NuvioMedia/NuvioMobile&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=NuvioMedia/NuvioMobile&type=date&legend=top-left" />
- </picture>
-</a>
+- AndroidX Media3 (Android)
+- VLCJ / libVLC (Linux Desktop)
+- AVFoundation (iOS)
 
 <!-- MARKDOWN LINKS & IMAGES -->
-[contributors-shield]: https://img.shields.io/github/contributors/NuvioMedia/NuvioMobile.svg?style=for-the-badge
-[contributors-url]: https://github.com/NuvioMedia/NuvioMobile/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/NuvioMedia/NuvioMobile.svg?style=for-the-badge
-[forks-url]: https://github.com/NuvioMedia/NuvioMobile/network/members
-[stars-shield]: https://img.shields.io/github/stars/NuvioMedia/NuvioMobile.svg?style=for-the-badge
-[stars-url]: https://github.com/NuvioMedia/NuvioMobile/stargazers
-[issues-shield]: https://img.shields.io/github/issues/NuvioMedia/NuvioMobile.svg?style=for-the-badge
-[issues-url]: https://github.com/NuvioMedia/NuvioMobile/issues
-[license-shield]: https://img.shields.io/github/license/NuvioMedia/NuvioMobile.svg?style=for-the-badge
-[license-url]: https://github.com/NuvioMedia/NuvioMobile/blob/main/LICENSE
+[contributors-shield]: https://img.shields.io/github/contributors/blarns/NuvioForLinux.svg?style=for-the-badge
+[contributors-url]: https://github.com/blarns/NuvioForLinux/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/blarns/NuvioForLinux.svg?style=for-the-badge
+[forks-url]: https://github.com/blarns/NuvioForLinux/network/members
+[stars-shield]: https://img.shields.io/github/stars/blarns/NuvioForLinux.svg?style=for-the-badge
+[stars-url]: https://github.com/blarns/NuvioForLinux/stargazers
+[issues-shield]: https://img.shields.io/github/issues/blarns/NuvioForLinux.svg?style=for-the-badge
+[issues-url]: https://github.com/blarns/NuvioForLinux/issues
+[license-shield]: https://img.shields.io/github/license/blarns/NuvioForLinux.svg?style=for-the-badge
+[license-url]: https://github.com/blarns/NuvioForLinux/blob/main/LICENSE
