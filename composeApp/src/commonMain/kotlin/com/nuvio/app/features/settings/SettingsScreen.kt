@@ -507,6 +507,7 @@ private fun MobileSettingsScreen(
                         settingsRootContent(
                             isTablet = false,
                             onPlaybackClick = { onPageChange(SettingsPage.Playback) },
+                            onStreamsClick = { onPageChange(SettingsPage.Streams) },
                             onAppearanceClick = { onPageChange(SettingsPage.Appearance) },
                             onAdvancedClick = { onPageChange(SettingsPage.Advanced) },
                             onNotificationsClick = { onPageChange(SettingsPage.Notifications) },
@@ -549,6 +550,9 @@ private fun MobileSettingsScreen(
                     audioOutput = audioOutput,
                     useLibass = useLibass,
                     libassRenderType = libassRenderType,
+                )
+                SettingsPage.Streams -> streamsSettingsContent(
+                    isTablet = false,
                 )
                 SettingsPage.Appearance -> appearanceSettingsContent(
                     isTablet = false,
@@ -886,6 +890,7 @@ private fun TabletSettingsScreen(
                             settingsRootContent(
                                 isTablet = true,
                                 onPlaybackClick = { openInlinePage(SettingsPage.Playback) },
+                                onStreamsClick = { openInlinePage(SettingsPage.Streams) },
                                 onAppearanceClick = { openInlinePage(SettingsPage.Appearance) },
                                 onAdvancedClick = { openInlinePage(SettingsPage.Advanced) },
                                 onNotificationsClick = { openInlinePage(SettingsPage.Notifications) },
@@ -932,6 +937,9 @@ private fun TabletSettingsScreen(
                         audioOutput = audioOutput,
                         useLibass = useLibass,
                         libassRenderType = libassRenderType,
+                    )
+                    SettingsPage.Streams -> streamsSettingsContent(
+                        isTablet = true,
                     )
                     SettingsPage.Appearance -> appearanceSettingsContent(
                         isTablet = true,

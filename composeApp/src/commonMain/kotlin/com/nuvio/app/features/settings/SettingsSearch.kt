@@ -94,6 +94,7 @@ internal fun settingsSearchEntries(
     val contentDiscoveryPage = stringResource(Res.string.compose_settings_page_content_discovery)
     val downloadsPage = stringResource(Res.string.compose_settings_root_downloads_title)
     val playbackPage = stringResource(Res.string.compose_settings_page_playback)
+    val streamsPage = stringResource(Res.string.compose_settings_page_streams)
     val integrationsPage = stringResource(Res.string.compose_settings_page_integrations)
     val notificationsPage = stringResource(Res.string.compose_settings_page_notifications)
     val supportersPage = stringResource(Res.string.compose_settings_page_supporters_contributors)
@@ -237,6 +238,13 @@ internal fun settingsSearchEntries(
         title = playbackPage,
         description = stringResource(Res.string.settings_playback_subtitle),
         icon = Icons.Rounded.PlayArrow,
+    )
+    addPage(
+        page = SettingsPage.Streams,
+        key = "streams",
+        title = streamsPage,
+        description = stringResource(Res.string.compose_settings_root_streams_description),
+        icon = Icons.Rounded.Style,
     )
     addPage(
         page = SettingsPage.Integrations,
@@ -454,6 +462,15 @@ internal fun settingsSearchEntries(
     val playbackSubtitleRendering = stringResource(Res.string.settings_playback_section_subtitle_rendering)
     val playbackSkipSegments = stringResource(Res.string.settings_playback_section_skip_segments)
     val playbackNextEpisode = stringResource(Res.string.settings_playback_section_next_episode)
+    addRow(
+        page = SettingsPage.Streams,
+        key = "stream-badge-urls",
+        title = stringResource(Res.string.settings_stream_badge_urls_title),
+        description = stringResource(Res.string.settings_stream_badge_urls_search_description),
+        pageLabel = streamsPage,
+        section = stringResource(Res.string.settings_stream_badges_section),
+        icon = Icons.Rounded.Style,
+    )
     addPlaybackRows(
         addRow = ::addRow,
         pageLabel = playbackPage,
