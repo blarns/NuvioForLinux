@@ -1,14 +1,15 @@
 package com.nuvio.app.core.auth
 
-import com.nuvio.app.desktop.DesktopPrefs
-
+/**
+ * Desktop auth storage.
+ *
+ * Anonymous user IDs are intentionally NOT persisted on desktop — anonymous
+ * sessions are ephemeral. Real sessions are persisted via DesktopSessionManager.
+ * Persisting anonymous IDs causes them to shadow real Supabase sessions on
+ * restart, blocking addon sync (SyncManager skips pulls for anonymous users).
+ */
 internal actual object AuthStorage {
-    actual fun loadAnonymousUserId(): String? =
-        DesktopPrefs.getString("auth", "anonymousUserId")?.takeIf { it.isNotEmpty() }
-    
-    actual fun saveAnonymousUserId(userId: String) =
-        DesktopPrefs.putString("auth", "anonymousUserId", userId)
-        
-    actual fun clearAnonymousUserId() =
-        DesktopPrefs.putString("auth", "anonymousUserId", "")
+    actual fun loadAnonymousUserId(): String? = null
+    actual fun saveAnonymousUserId(userId: String) = Unit
+    actual fun clearAnonymousUserId() = Unit
 }
