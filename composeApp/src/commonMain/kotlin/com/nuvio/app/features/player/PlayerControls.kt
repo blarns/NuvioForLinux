@@ -566,26 +566,29 @@ private fun ProgressControls(
             TimePill(text = formatPlaybackTime(displayedPositionMs), fontSize = metrics.timeSize)
             TimePill(text = formatPlaybackTime(durationMs), fontSize = metrics.timeSize)
         }
-        if (onVolumeChange != null) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp)
-                    .padding(bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Start,
-            ) {
-                VolumeSlider(
-                    volumeFraction = currentVolumeFraction,
-                    onVolumeChange = onVolumeChange,
-                    metrics = metrics,
-                )
-            }
-        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (onVolumeChange != null) {
+                Surface(
+                    color = Color.Black.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(24.dp),
+                    modifier = Modifier.border(
+                        width = 1.dp,
+                        color = Color.White.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(24.dp),
+                    ),
+                ) {
+                    VolumeSlider(
+                        volumeFraction = currentVolumeFraction,
+                        onVolumeChange = onVolumeChange,
+                        metrics = metrics,
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+            }
             Surface(
                 color = Color.Black.copy(alpha = 0.5f),
                 shape = RoundedCornerShape(24.dp),
