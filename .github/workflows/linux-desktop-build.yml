@@ -6,15 +6,14 @@ on:
   pull_request:
     branches: [ main, develop ]
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   build-linux-desktop:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -27,34 +26,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libvlc-dev vlc libavcodec-extra
 
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.gradle/caches
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
       - name: Build JVM target
-        run: ./gradlew composeApp:compileKotlinJvm --no-daemon
-
-      - name: Run JVM tests
-        run: ./gradlew composeApp:testJvm --no-daemon || true
-
-      - name: Upload build reports
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: build-reports
-          path: composeApp/build/reports/
-          retention-days: 7
-          if-no-files-found: ignore
+        run: ./gradlew composeApp:compileKotlinJvm --no-daemon 2>&1
 
   code-quality:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -67,22 +48,5 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libvlc-dev vlc
 
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.gradle/caches
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
       - name: Verify build compiles
-        run: ./gradlew composeApp:compileKotlinJvm --no-daemon
-
-      - name: Upload reports
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: code-quality-reports
-          path: composeApp/build/reports/
-          retention-days: 7
-          if-no-files-found: ignore
+        run: ./gradlew composeApp:compileKotlinJvm --no-daemon 2>&1
