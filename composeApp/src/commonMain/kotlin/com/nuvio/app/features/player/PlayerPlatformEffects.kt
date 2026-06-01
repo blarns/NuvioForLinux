@@ -29,3 +29,5 @@ expect fun ManagePlayerPictureInPicture(
 
 @Composable
 expect fun rememberPlayerGestureController(): PlayerGestureController?
+
+expect val suppressSurfaceTapGestures: Boolean

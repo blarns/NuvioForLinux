@@ -182,15 +182,6 @@ internal fun PlayerControlsShell(
                         onSeekForward = onSeekForward,
                         onTogglePlayback = onTogglePlayback,
                     )
-                    
-                    if (onVolumeChange != null) {
-                        Spacer(modifier = Modifier.width(32.dp))
-                        VolumeSlider(
-                            volumeFraction = currentVolumeFraction ?: 1.0f,
-                            onVolumeChange = onVolumeChange,
-                            metrics = metrics
-                        )
-                    }
                 }
             }
 
@@ -208,6 +199,8 @@ internal fun PlayerControlsShell(
                     onAudioClick = onAudioClick,
                     onSourcesClick = onSourcesClick,
                     onEpisodesClick = onEpisodesClick,
+                    onVolumeChange = onVolumeChange,
+                    currentVolumeFraction = currentVolumeFraction ?: 1.0f,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
@@ -542,6 +535,8 @@ private fun ProgressControls(
     onAudioClick: () -> Unit,
     onSourcesClick: (() -> Unit)? = null,
     onEpisodesClick: (() -> Unit)? = null,
+    onVolumeChange: ((Float) -> Unit)? = null,
+    currentVolumeFraction: Float = 1.0f,
     modifier: Modifier = Modifier,
 ) {
     val durationMs = playbackSnapshot.durationMs.coerceAtLeast(1L)
@@ -570,6 +565,22 @@ private fun ProgressControls(
         ) {
             TimePill(text = formatPlaybackTime(displayedPositionMs), fontSize = metrics.timeSize)
             TimePill(text = formatPlaybackTime(durationMs), fontSize = metrics.timeSize)
+        }
+        if (onVolumeChange != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp)
+                    .padding(bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Start,
+            ) {
+                VolumeSlider(
+                    volumeFraction = currentVolumeFraction,
+                    onVolumeChange = onVolumeChange,
+                    metrics = metrics,
+                )
+            }
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
