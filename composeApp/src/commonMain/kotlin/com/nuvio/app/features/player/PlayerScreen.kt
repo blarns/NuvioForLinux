@@ -34,6 +34,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.areAnyPressed
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntSize
@@ -208,6 +210,8 @@ fun PlayerScreen(
         )
         val gestureController = rememberPlayerGestureController()
         var controlsVisible by rememberSaveable { mutableStateOf(true) }
+        val lastMouseMoveMs = remember { mutableStateOf(0L) }
+        val mouseHideDelayMs = 3000L
         var playerControlsLocked by rememberSaveable { mutableStateOf(false) }
         // Active playback state (mutable to support source/episode switching)
         var activeSourceUrl by rememberSaveable { mutableStateOf(sourceUrl) }
@@ -917,6 +921,7 @@ fun PlayerScreen(
         }
 
         fun togglePlayback() {
+            println("DEBUG TOGGLE: controller=$playerController, isPlaying=${playbackSnapshot.isPlaying}, shouldPlay=$shouldPlay")
             if (playbackSnapshot.isPlaying) {
                 shouldPlay = false
                 playerController?.pause()
@@ -1658,9 +1663,10 @@ fun PlayerScreen(
             setSubtitleDelay(newDelayMs)
         }
 
-        LaunchedEffect(activeSourceUrl, activeSourceAudioUrl, activeSourceHeaders, activeSourceResponseHeaders) {
+        LaunchedEffect(activeSourceUrl, activeSourceAudioUrl) {
+            println("DEBUG LAUNCHED_EFFECT: url=$activeSourceUrl audio=$activeSourceAudioUrl")
             errorMessage = null
-            playerController = null
+            // playerController = null -- let DisposableEffect handle cleanup
             playerControllerSourceUrl = null
             playbackSnapshot = PlayerPlaybackSnapshot()
             isScrubbingTimeline = false
@@ -2013,17 +2019,43 @@ fun PlayerScreen(
             }
         }
 
+        LaunchedEffect(controlsVisible) {
+            if (controlsVisible && suppressSurfaceTapGestures) {
+                while (true) {
+                    delay(500)
+                    val idleMs = System.currentTimeMillis() - lastMouseMoveMs.value
+                    if (idleMs >= mouseHideDelayMs) {
+                        controlsVisible = false
+                        break
+                    }
+                }
+            }
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .onSizeChanged { layoutSize = it }
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.type == PointerEventType.Move) {
+                                lastMouseMoveMs.value = System.currentTimeMillis()
+                                if (!playerControlsLocked) {
+                                    controlsVisible = true
+                                }
+                            }
+                        }
+                    }
+                }
                 .pointerInput(layoutSize) {
                     detectTapGestures(
                         onPress = {
                             tryAwaitRelease()
                             deactivateHoldToSpeedState.value()
                         },
-                        onTap = { offset -> onSurfaceTap.value(offset) },
+                        onTap = { offset -> if (!suppressSurfaceTapGestures) onSurfaceTap.value(offset) },
                         onDoubleTap = { offset -> onSurfaceDoubleTap.value(offset) },
                         onLongPress = {
                             if (playerControlsLockedState.value) {
@@ -2171,6 +2203,7 @@ fun PlayerScreen(
                 playWhenReady = shouldPlay,
                 resizeMode = resizeMode,
                 onControllerReady = { controller ->
+                    println("DEBUG CONTROLLER SET: $controller")
                     playerController = controller
                     playerControllerSourceUrl = activeSourceUrl
                 },
