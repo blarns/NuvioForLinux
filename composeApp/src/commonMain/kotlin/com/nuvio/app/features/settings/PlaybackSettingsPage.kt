@@ -96,6 +96,7 @@ internal fun LazyListScope.playbackSettingsContent(
     mapDV7ToHevc: Boolean,
     tunnelingEnabled: Boolean,
     hwAccelEnabled: Boolean,
+    audioOutput: String,
     useLibass: Boolean,
     libassRenderType: String,
 ) {
@@ -115,6 +116,7 @@ internal fun LazyListScope.playbackSettingsContent(
             mapDV7ToHevc = mapDV7ToHevc,
             tunnelingEnabled = tunnelingEnabled,
             hwAccelEnabled = hwAccelEnabled,
+            audioOutput = audioOutput,
             useLibass = useLibass,
             libassRenderType = libassRenderType,
         )
@@ -247,6 +249,7 @@ private fun PlaybackSettingsSection(
     mapDV7ToHevc: Boolean,
     tunnelingEnabled: Boolean,
     hwAccelEnabled: Boolean,
+    audioOutput: String,
     useLibass: Boolean,
     libassRenderType: String,
 ) {
@@ -707,6 +710,7 @@ private fun PlaybackSettingsSection(
         }
 
         if (isDesktop) {
+            var showAudioOutputDialog by remember { mutableStateOf(false) }
             SettingsSection(
                 title = "Linux desktop",
                 isTablet = isTablet,
@@ -719,7 +723,30 @@ private fun PlaybackSettingsSection(
                         isTablet = isTablet,
                         onCheckedChange = PlayerSettingsRepository::setHwAccelEnabled,
                     )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    val audioOutputLabel = when (audioOutput) {
+                        "pulse" -> "PulseAudio"
+                        "alsa" -> "ALSA"
+                        "jack" -> "JACK"
+                        else -> "Auto (default)"
+                    }
+                    SettingsNavigationRow(
+                        title = "Audio output",
+                        description = audioOutputLabel,
+                        isTablet = isTablet,
+                        onClick = { showAudioOutputDialog = true },
+                    )
                 }
+            }
+            if (showAudioOutputDialog) {
+                AudioOutputDialog(
+                    selectedModule = audioOutput,
+                    onSelect = { module ->
+                        PlayerSettingsRepository.setAudioOutput(module)
+                        showAudioOutputDialog = false
+                    },
+                    onDismiss = { showAudioOutputDialog = false },
+                )
             }
         }
 
@@ -2946,6 +2973,98 @@ private fun StreamAutoPlaySource.labelRes(pluginsEnabled: Boolean): StringResour
         else Res.string.settings_playback_source_scope_all_addons
     StreamAutoPlaySource.INSTALLED_ADDONS_ONLY -> Res.string.settings_playback_source_scope_installed_addons_only
     StreamAutoPlaySource.ENABLED_PLUGINS_ONLY -> Res.string.settings_playback_source_scope_enabled_plugins_only
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun AudioOutputDialog(
+    selectedModule: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val options = listOf(
+        "" to "Auto (default)",
+        "pulse" to "PulseAudio",
+        "alsa" to "ALSA",
+        "jack" to "JACK",
+    )
+
+    BasicAlertDialog(
+        onDismissRequest = onDismiss,
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = "Audio output",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    options.forEach { (module, label) ->
+                        val isSelected = module == selectedModule
+                        val containerColor = if (isSelected) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(module) },
+                            shape = RoundedCornerShape(12.dp),
+                            color = containerColor,
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Box(
+                                    modifier = Modifier.size(24.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = stringResource(Res.string.settings_playback_dialog_close),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
 }
 
 private val StreamAutoPlayMode.labelRes: StringResource
