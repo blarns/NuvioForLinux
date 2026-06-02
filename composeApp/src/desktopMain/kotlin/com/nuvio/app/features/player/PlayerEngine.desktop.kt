@@ -1,5 +1,6 @@
 package com.nuvio.app.features.player
 
+import com.nuvio.app.DesktopWindowState
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
@@ -209,10 +210,7 @@ actual fun PlatformPlayerSurface(
                         }
                         true
                     }
-                    Key.F -> {
-                        // Fullscreen — no-op for now (needs window state)
-                        true
-                    }
+                    Key.F -> { DesktopWindowState.toggleFullscreen?.invoke(); true }
                     else -> false
                 }
             }
@@ -284,6 +282,7 @@ actual fun PlatformPlayerSurface(
         )
         playerController = controller
         onControllerReady(controller)
+        PlayerControlBridge.controller = controller
 
         onDispose {
             println("$TAG: Disposing player for $sourceUrl")
@@ -291,6 +290,8 @@ actual fun PlatformPlayerSurface(
                 mediaPlayer.controls().stop()
             } catch (_: Exception) {}
             playerController = null
+            PlayerControlBridge.controller = null
+            PlayerControlBridge.isPlaying = false
         }
     }
 
@@ -372,7 +373,8 @@ private class VlcjPlayerController(
                     println("$TAG: Event -> playing")
                     currentState = currentState.copy(isLoading = false, isPlaying = true, isEnded = false)
                     onSnapshot(currentState)
-                    
+                    PlayerControlBridge.isPlaying = true
+
                     // Re-apply our cached volume when media actually starts
                     try {
                         val volInt = (currentAudioLevel.fraction * 100).toInt().coerceIn(0, 100)
@@ -384,11 +386,13 @@ private class VlcjPlayerController(
                 override fun paused(mediaPlayer: MediaPlayer?) {
                     currentState = currentState.copy(isPlaying = false)
                     onSnapshot(currentState)
+                    PlayerControlBridge.isPlaying = false
                 }
 
                 override fun stopped(mediaPlayer: MediaPlayer?) {
                     currentState = currentState.copy(isPlaying = false)
                     onSnapshot(currentState)
+                    PlayerControlBridge.isPlaying = false
                 }
 
                 override fun finished(mediaPlayer: MediaPlayer?) {
