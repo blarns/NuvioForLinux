@@ -73,6 +73,7 @@ import com.nuvio.app.features.plugins.PluginsUiState
 import com.nuvio.app.features.plugins.PluginRepository
 import com.nuvio.app.features.streams.StreamAutoPlayMode
 import com.nuvio.app.features.streams.StreamAutoPlaySource
+import com.nuvio.app.isDesktop
 import com.nuvio.app.isIos
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.*
@@ -94,6 +95,7 @@ internal fun LazyListScope.playbackSettingsContent(
     decoderPriority: Int,
     mapDV7ToHevc: Boolean,
     tunnelingEnabled: Boolean,
+    hwAccelEnabled: Boolean,
     useLibass: Boolean,
     libassRenderType: String,
 ) {
@@ -112,6 +114,7 @@ internal fun LazyListScope.playbackSettingsContent(
             decoderPriority = decoderPriority,
             mapDV7ToHevc = mapDV7ToHevc,
             tunnelingEnabled = tunnelingEnabled,
+            hwAccelEnabled = hwAccelEnabled,
             useLibass = useLibass,
             libassRenderType = libassRenderType,
         )
@@ -243,6 +246,7 @@ private fun PlaybackSettingsSection(
     decoderPriority: Int,
     mapDV7ToHevc: Boolean,
     tunnelingEnabled: Boolean,
+    hwAccelEnabled: Boolean,
     useLibass: Boolean,
     libassRenderType: String,
 ) {
@@ -697,6 +701,23 @@ private fun PlaybackSettingsSection(
                         checked = tunnelingEnabled,
                         isTablet = isTablet,
                         onCheckedChange = PlayerSettingsRepository::setTunnelingEnabled,
+                    )
+                }
+            }
+        }
+
+        if (isDesktop) {
+            SettingsSection(
+                title = "Linux desktop",
+                isTablet = isTablet,
+            ) {
+                SettingsGroup(isTablet = isTablet) {
+                    SettingsSwitchRow(
+                        title = "Hardware video acceleration (VA-API)",
+                        description = "Use GPU hardware decoding via VA-API. Reduces CPU usage for H.264/H.265 content. Requires app restart to take effect.",
+                        checked = hwAccelEnabled,
+                        isTablet = isTablet,
+                        onCheckedChange = PlayerSettingsRepository::setHwAccelEnabled,
                     )
                 }
             }

@@ -466,6 +466,9 @@ actual object PlayerSettingsStorage {
         NSUserDefaults.standardUserDefaults.setBool(enabled, forKey = ProfileScopedKey.of(tunnelingEnabledKey))
     }
 
+    actual fun loadHwAccelEnabled(): Boolean? = null
+    actual fun saveHwAccelEnabled(enabled: Boolean) {}
+
     actual fun loadStreamAutoPlayMode(): String? {
         val defaults = NSUserDefaults.standardUserDefaults
         val key = ProfileScopedKey.of(streamAutoPlayModeKey)
