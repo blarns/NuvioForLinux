@@ -94,6 +94,9 @@ See [LINUX_QUICKSTART.md](LINUX_QUICKSTART.md) for quick setup, or [LINUX_DESKTO
 - ✅ Full addon ecosystem support with persistent storage
 - ✅ Continue Watching, Library, Search
 - ✅ Hardware video acceleration via VA-API (Intel/AMD) or NVDEC (NVIDIA) — toggle in Settings → Playback
+- ✅ Keyboard shortcuts (Space, arrows, M, F for fullscreen, scroll wheel for volume)
+- ✅ Media key integration via MPRIS2 (works with system panel and playerctl)
+- ✅ Episode release notifications via notify-send
 
 **Tested on:** Linux Mint 22, kernel 6.8, X11, Intel Iris Xe, Bluetooth audio
 
@@ -115,6 +118,17 @@ cd NuvioForLinux
 - `iosApp/` — native Xcode project
 
 Versioning is driven from `iosApp/Configuration/Version.xcconfig`.
+
+### Keyboard shortcuts
+
+| Key | Action |
+|-----|--------|
+| Space | Play / Pause |
+| ← / → | Seek ±10 seconds |
+| ↑ / ↓ | Volume ±5% |
+| M | Toggle mute |
+| F | Toggle fullscreen |
+| Scroll wheel | Volume |
 
 ## Legal & DMCA
 

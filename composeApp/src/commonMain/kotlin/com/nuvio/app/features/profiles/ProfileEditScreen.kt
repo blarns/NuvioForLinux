@@ -276,8 +276,9 @@ fun ProfileEditScreen(
                                 usesPrimaryAddons = usesPrimaryAddons,
                             )
                         } else {
+                            val safeProfile = currentProfile ?: return@launch
                             ProfileRepository.updateProfile(
-                                profileIndex = currentProfile!!.profileIndex,
+                                profileIndex = safeProfile.profileIndex,
                                 name = name,
                                 avatarColorHex = avatarColorHex,
                                 avatarId = if (customAvatarUrl == null) selectedAvatarId else null,
