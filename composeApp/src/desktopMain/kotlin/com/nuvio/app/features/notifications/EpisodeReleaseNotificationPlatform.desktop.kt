@@ -1,7 +1,9 @@
 package com.nuvio.app.features.notifications
 
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
@@ -9,6 +11,7 @@ import java.time.temporal.ChronoUnit
 
 internal actual object EpisodeReleaseNotificationPlatform {
 
+    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val scheduledJobs = mutableMapOf<String, Job>()
 
     actual suspend fun notificationsAuthorized(): Boolean {
@@ -42,7 +45,7 @@ internal actual object EpisodeReleaseNotificationPlatform {
 
             if (delayMs <= 0) continue
 
-            val job = GlobalScope.launch {
+            val job = scope.launch {
                 delay(delayMs)
                 runCatching {
                     ProcessBuilder(
