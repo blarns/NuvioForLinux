@@ -600,8 +600,9 @@ object CollectionEditorRepository {
         }
         if (metadataSource != null) {
             scope.launch {
+                val tmdbId = metadataSource.tmdbId ?: return@launch
                 val sourceType = metadataSource.tmdbType()
-                val metadata = runCatching { TmdbCollectionSourceResolver.importMetadata(sourceType, metadataSource.tmdbId!!) }
+                val metadata = runCatching { TmdbCollectionSourceResolver.importMetadata(sourceType, tmdbId) }
                 addTmdbSources(sources, metadata.getOrNull()?.coverImageUrl)
             }
             return

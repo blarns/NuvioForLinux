@@ -1555,14 +1555,15 @@ fun PlayerScreen(
 
                 // Handle result
                 nextEpisodeAutoPlaySearching = false
-                if (selectedStream != null) {
-                    nextEpisodeAutoPlaySourceName = selectedStream!!.addonName
+                val resolvedStream = selectedStream
+                if (resolvedStream != null) {
+                    nextEpisodeAutoPlaySourceName = resolvedStream.addonName
                     // Countdown before playing
                     for (i in 3 downTo 1) {
                         nextEpisodeAutoPlayCountdown = i
                         delay(1000)
                     }
-                    switchToEpisodeStream(selectedStream!!, nextVideo)
+                    switchToEpisodeStream(resolvedStream, nextVideo)
                     showNextEpisodeCard = false
                     nextEpisodeAutoPlayCountdown = null
                     nextEpisodeAutoPlaySourceName = null
