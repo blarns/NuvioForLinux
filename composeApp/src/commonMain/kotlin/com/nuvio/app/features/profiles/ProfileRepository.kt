@@ -118,9 +118,7 @@ object ProfileRepository {
                 activeProfile = profiles.find { it.profileIndex == activeProfileIndex }
                     ?: profiles.firstOrNull(),
             )
-            if (_state.value.activeProfile != null) {
-                activeProfileIndex = _state.value.activeProfile!!.profileIndex
-            }
+            _state.value.activeProfile?.let { activeProfileIndex = it.profileIndex }
             persist()
         }.onFailure { e ->
             log.e(e) { "Failed to pull profiles" }
@@ -251,9 +249,7 @@ object ProfileRepository {
                 profiles = remaining,
                 activeProfile = if (_state.value.activeProfile?.profileIndex == profileIndex) remaining.firstOrNull() else _state.value.activeProfile,
             )
-            if (_state.value.activeProfile != null) {
-                activeProfileIndex = _state.value.activeProfile!!.profileIndex
-            }
+            _state.value.activeProfile?.let { activeProfileIndex = it.profileIndex }
             persist()
             return
         }
@@ -375,9 +371,7 @@ object ProfileRepository {
             isLoaded = true,
             activeProfile = profiles.find { it.profileIndex == activeProfileIndex } ?: profiles.firstOrNull(),
         )
-        if (_state.value.activeProfile != null) {
-            activeProfileIndex = _state.value.activeProfile!!.profileIndex
-        }
+        _state.value.activeProfile?.let { activeProfileIndex = it.profileIndex }
         syncPinCache(profiles)
         persist()
     }
