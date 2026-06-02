@@ -62,6 +62,8 @@ internal actual object PlayerSettingsStorage {
     actual fun saveHwAccelEnabled(enabled: Boolean) {
         desktopPrefs.put("hwAccelEnabled", enabled.toString())
     }
+    actual fun loadAudioOutput(): String? = desktopPrefs.get("audioOutput", null)
+    actual fun saveAudioOutput(module: String) { desktopPrefs.put("audioOutput", module) }
     actual fun loadStreamAutoPlayMode(): String? = null
     actual fun saveStreamAutoPlayMode(mode: String) {}
     actual fun loadStreamAutoPlaySource(): String? = null
