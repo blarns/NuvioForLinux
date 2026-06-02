@@ -1,5 +1,6 @@
 package com.nuvio.app
 
+import com.nuvio.app.features.player.PlayerControlBridge
 import org.freedesktop.dbus.annotations.DBusInterfaceName
 import org.freedesktop.dbus.connections.impl.DBusConnectionBuilder
 import org.freedesktop.dbus.interfaces.DBusInterface
@@ -33,7 +34,9 @@ class NuvioMpris2(
     override fun Quit() {}
     override fun Play() = onPlay()
     override fun Pause() = onPause()
-    override fun PlayPause() {}
+    override fun PlayPause() {
+        if (PlayerControlBridge.isPlaying) onPause() else onPlay()
+    }
     override fun Stop() = onStop()
     override fun Next() {}
     override fun Previous() {}
