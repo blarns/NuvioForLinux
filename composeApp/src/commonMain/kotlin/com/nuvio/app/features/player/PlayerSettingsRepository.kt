@@ -50,6 +50,7 @@ data class PlayerSettingsUiState(
     val mapDV7ToHevc: Boolean = false,
     val tunnelingEnabled: Boolean = false,
     val hwAccelEnabled: Boolean = true,
+    val audioOutput: String = "",
     val streamAutoPlayMode: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL,
     val streamAutoPlaySource: StreamAutoPlaySource = StreamAutoPlaySource.ALL_SOURCES,
     val streamAutoPlaySelectedAddons: Set<String> = emptySet(),
@@ -108,6 +109,7 @@ object PlayerSettingsRepository {
     private var mapDV7ToHevc = false
     private var tunnelingEnabled = false
     private var hwAccelEnabled = true
+    private var audioOutput = ""
     private var streamAutoPlayMode = StreamAutoPlayMode.MANUAL
     private var streamAutoPlaySource = StreamAutoPlaySource.ALL_SOURCES
     private var streamAutoPlaySelectedAddons: Set<String> = emptySet()
@@ -258,6 +260,7 @@ object PlayerSettingsRepository {
         mapDV7ToHevc = PlayerSettingsStorage.loadMapDV7ToHevc() ?: false
         tunnelingEnabled = PlayerSettingsStorage.loadTunnelingEnabled() ?: false
         hwAccelEnabled = PlayerSettingsStorage.loadHwAccelEnabled() ?: true
+        audioOutput = PlayerSettingsStorage.loadAudioOutput() ?: ""
         streamAutoPlayMode = PlayerSettingsStorage.loadStreamAutoPlayMode()
             ?.let { runCatching { StreamAutoPlayMode.valueOf(it) }.getOrNull() }
             ?: StreamAutoPlayMode.MANUAL
@@ -494,6 +497,14 @@ object PlayerSettingsRepository {
         hwAccelEnabled = enabled
         publish()
         PlayerSettingsStorage.saveHwAccelEnabled(enabled)
+    }
+
+    fun setAudioOutput(module: String) {
+        ensureLoaded()
+        if (audioOutput == module) return
+        audioOutput = module
+        publish()
+        PlayerSettingsStorage.saveAudioOutput(module)
     }
 
     fun setStreamAutoPlayMode(mode: StreamAutoPlayMode) {
@@ -828,6 +839,7 @@ object PlayerSettingsRepository {
             mapDV7ToHevc = mapDV7ToHevc,
             tunnelingEnabled = tunnelingEnabled,
             hwAccelEnabled = hwAccelEnabled,
+            audioOutput = audioOutput,
             streamAutoPlayMode = streamAutoPlayMode,
             streamAutoPlaySource = streamAutoPlaySource,
             streamAutoPlaySelectedAddons = streamAutoPlaySelectedAddons,

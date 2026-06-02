@@ -468,6 +468,8 @@ actual object PlayerSettingsStorage {
 
     actual fun loadHwAccelEnabled(): Boolean? = null
     actual fun saveHwAccelEnabled(enabled: Boolean) {}
+    actual fun loadAudioOutput(): String? = null
+    actual fun saveAudioOutput(module: String) {}
 
     actual fun loadStreamAutoPlayMode(): String? {
         val defaults = NSUserDefaults.standardUserDefaults
