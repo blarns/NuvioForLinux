@@ -388,6 +388,23 @@ For bugs, feature requests, or improvements specific to the Linux desktop target
 3. Provide reproduction steps
 4. File issue with label `platform:linux-desktop`
 
+## App Menu Integration
+
+A `nuvio.desktop` file is included at the project root. It registers Nuvio with the XDG application menu, associates it with common video MIME types, and launches the app via Gradle.
+
+To install it for the current user, run the provided helper script from the project root:
+
+```bash
+bash scripts/install-desktop.sh
+```
+
+The script:
+1. Copies `nuvio.desktop` to `~/.local/share/applications/nuvio.desktop`
+2. Refreshes the desktop database (`update-desktop-database`) so the entry appears immediately in your application launcher
+3. Prints a confirmation message
+
+After running it, Nuvio should appear in your desktop environment's application menu under the **AudioVideo** / **Video** categories, and double-clicking a supported video file (MKV, MP4, AVI, WebM, etc.) should offer Nuvio as an option.
+
 ## See Also
 
 - [VLCJ Documentation](https://www.caprica.be/vlcj/)
