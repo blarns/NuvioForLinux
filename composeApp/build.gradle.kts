@@ -262,6 +262,9 @@ kotlin {
                 // Ktor server for OAuth localhost redirect handler
                 implementation(libs.ktor.server.core)
                 implementation(libs.ktor.server.netty)
+                // MPRIS2 / D-Bus media key integration
+                implementation("com.github.hypfvieh:dbus-java-core:4.3.1")
+                implementation("com.github.hypfvieh:dbus-java-transport-native-unixsocket:4.3.1")
             }
         }
         androidMain.dependencies {

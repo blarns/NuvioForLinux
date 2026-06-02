@@ -1,5 +1,8 @@
 package com.nuvio.app.features.player
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -38,9 +41,13 @@ object PlayerLaunchStore {
     private var nextLaunchId = 1L
     private val launches = mutableMapOf<Long, PlayerLaunch>()
 
+    private val _currentTitle = MutableStateFlow<String?>(null)
+    val currentTitle: StateFlow<String?> = _currentTitle.asStateFlow()
+
     fun put(launch: PlayerLaunch): Long {
         val launchId = nextLaunchId++
         launches[launchId] = launch
+        _currentTitle.value = launch.title
         return launchId
     }
 
@@ -48,11 +55,15 @@ object PlayerLaunchStore {
 
     fun remove(launchId: Long) {
         launches.remove(launchId)
+        if (launches.isEmpty()) {
+            _currentTitle.value = null
+        }
     }
 
     fun clear() {
         nextLaunchId = 1L
         launches.clear()
+        _currentTitle.value = null
     }
 }
 
