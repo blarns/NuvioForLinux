@@ -90,9 +90,6 @@ See [LINUX_QUICKSTART.md](LINUX_QUICKSTART.md) for quick setup, or [LINUX_DESKTO
 - ✅ Continue Watching, Library, Search
 
 **Known Issues:**
-- ⚠️ Player controls unresponsive (pointer event handling needs desktop adaptation)
-- ⚠️ Volume slider mispositioned (mobile absolute positioning)
-- ⚠️ Home screen catalog images not loading
 - ⚠️ No hardware video acceleration yet (VA-API planned)
 
 **Tested on:** Linux Mint 22, kernel 6.8, X11, Intel Iris Xe, Bluetooth audio
@@ -103,7 +100,7 @@ See [LINUX_QUICKSTART.md](LINUX_QUICKSTART.md) for quick setup, or [LINUX_DESKTO
 git clone https://github.com/blarns/NuvioForLinux.git
 cd NuvioForLinux
 ./gradlew composeApp:run        # Linux desktop
-./gradlew composeApp:assembleDebug  # Android
+./gradlew composeApp:assembleFullDebug  # Android
 ```
 
 ### Project Structure
