@@ -43,7 +43,9 @@ private var vlcjFactory: MediaPlayerFactory? = null
 
 private fun getVlcjFactory(): MediaPlayerFactory {
     return vlcjFactory ?: run {
-        val factory = MediaPlayerFactory()
+        val hwAccel = PlayerSettingsStorage.loadHwAccelEnabled() ?: true
+        val args = if (hwAccel) arrayOf("--avcodec-hw=any") else emptyArray()
+        val factory = MediaPlayerFactory(*args)
         vlcjFactory = factory
         factory
     }

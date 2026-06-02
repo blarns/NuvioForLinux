@@ -55,6 +55,13 @@ internal actual object PlayerSettingsStorage {
     actual fun saveMapDV7ToHevc(enabled: Boolean) {}
     actual fun loadTunnelingEnabled(): Boolean? = null
     actual fun saveTunnelingEnabled(enabled: Boolean) {}
+
+    private val desktopPrefs = java.util.prefs.Preferences.userRoot().node("nuvio/player")
+    actual fun loadHwAccelEnabled(): Boolean? =
+        desktopPrefs.get("hwAccelEnabled", null)?.toBooleanStrictOrNull()
+    actual fun saveHwAccelEnabled(enabled: Boolean) {
+        desktopPrefs.put("hwAccelEnabled", enabled.toString())
+    }
     actual fun loadStreamAutoPlayMode(): String? = null
     actual fun saveStreamAutoPlayMode(mode: String) {}
     actual fun loadStreamAutoPlaySource(): String? = null
