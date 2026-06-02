@@ -74,6 +74,9 @@ sudo apt install openjdk-17-jdk libvlc-dev vlc
 # AMD:    sudo apt install mesa-va-drivers
 # NVIDIA: sudo apt install nvidia-vaapi-driver
 
+# Optional: desktop notifications
+sudo apt install libnotify-bin
+
 # Clone
 git clone https://github.com/blarns/NuvioForLinux.git
 cd NuvioForLinux
@@ -94,9 +97,12 @@ See [LINUX_QUICKSTART.md](LINUX_QUICKSTART.md) for quick setup, or [LINUX_DESKTO
 - ✅ Full addon ecosystem support with persistent storage
 - ✅ Continue Watching, Library, Search
 - ✅ Hardware video acceleration via VA-API (Intel/AMD) or NVDEC (NVIDIA) — toggle in Settings → Playback
+- ✅ Audio output selection (Auto / PulseAudio / ALSA / JACK) — Settings → Playback
 - ✅ Keyboard shortcuts (Space, arrows, M, F for fullscreen, scroll wheel for volume)
-- ✅ Media key integration via MPRIS2 (works with system panel and playerctl)
-- ✅ Episode release notifications via notify-send
+- ✅ Media key integration via MPRIS2 (works with system panel and `playerctl`)
+- ✅ Episode release notifications via `notify-send`
+- ✅ App menu integration — run `scripts/install-desktop.sh` to add Nuvio to your application launcher
+- ✅ Window size persists between sessions
 
 **Tested on:** Linux Mint 22, kernel 6.8, X11, Intel Iris Xe, Bluetooth audio
 
