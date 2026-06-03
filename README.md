@@ -40,16 +40,18 @@ If you fork, modify, or distribute this code, you **must** also open-source your
 
 ## Environment Setup
 
-Before building the app, you **must** configure your local environment variables. The project uses Supabase for authentication and database services.
+**Without Supabase keys:** addon browsing and video playback via Stremio addons work fine — you just won't have a user account, profiles, or cross-device sync.
 
-Create a file named `local.properties` in the root of the project (this file is git-ignored) and add your keys:
+**With Supabase keys:** full account support, watch history sync, and profile features are enabled. To set up your own free Supabase project, go to [supabase.com](https://supabase.com), create a project, then copy the **Project URL** and **anon/public key** from Project Settings → API.
+
+Create a file named `local.properties` in the root of the project (this file is git-ignored):
 
 ```properties
-SUPABASE_URL=your_supabase_project_url
-SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_URL=https://your-project-id.supabase.co
+SUPABASE_ANON_KEY=your-anon-public-key
 ```
 
-If you try to build without these, authentication and networking will fail at runtime.
+Leave the values blank (`SUPABASE_URL=`) to build without account features.
 
 ## Installation
 
