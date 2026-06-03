@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvlc-dev vlc libavcodec-extra fakeroot
+
+      - name: Create local.properties
+        run: |
+          echo "SUPABASE_URL=" >> local.properties
+          echo "SUPABASE_ANON_KEY=" >> local.properties
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Build .deb package
+        run: >
+          ./gradlew composeApp:packageReleaseDeb
+          -PpackageVersion=${{ steps.version.outputs.version }}
+          --no-daemon
+
+      - name: Locate .deb
+        id: deb
+        run: echo "path=$(find composeApp/build/compose/binaries -name '*.deb' | head -1)" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "NuvioForLinux ${{ github.ref_name }}"
+          files: ${{ steps.deb.outputs.path }}
+          body: |
+            ## NuvioForLinux ${{ github.ref_name }}
+
+            Linux desktop port of NuvioMobile — Stremio addon ecosystem media hub.
+
+            ### Installation
+
+            **Requirements (install before the .deb):**
+            ```bash
+            sudo apt install libvlc-dev vlc libavcodec-extra
+            ```
+
+            **Install:**
+            ```bash
+            sudo apt install ./nuvio_${{ steps.version.outputs.version }}_amd64.deb
+            ```
+
+            The JVM is bundled — no separate Java installation needed.
+
+            ### Optional extras
+            ```bash
+            # Hardware video acceleration (pick your GPU)
+            sudo apt install intel-media-va-driver   # Intel
+            sudo apt install mesa-va-drivers         # AMD
+            sudo apt install nvidia-vaapi-driver     # NVIDIA
+
+            # Desktop notifications
+            sudo apt install libnotify-bin
+            ```
+
+            ### What's included
+            - Hardware video acceleration (VA-API / NVDEC)
+            - MPRIS2 media key integration
+            - Keyboard shortcuts (Space, arrows, M, F, scroll wheel)
+            - Episode release notifications
+            - Audio output selection
+            - App launcher integration
+          draft: false
+          prerelease: false
