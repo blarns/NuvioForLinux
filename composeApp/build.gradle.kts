@@ -415,10 +415,21 @@ compose.desktop {
     application {
         mainClass = "com.nuvio.app.MainKt"
         nativeDistributions {
-            targetFormats(TargetFormat.Deb, TargetFormat.AppImage)
-            packageName = "Nuvio"
-            packageVersion = "1.0.0"
-            modules("java.net.http", "jdk.crypto.ec", "java.naming")
+            targetFormats(TargetFormat.Deb)
+            packageName = "nuvio"
+            packageVersion = project.findProperty("packageVersion") as String? ?: "0.1.0"
+            description = "Modern media hub with Stremio addon ecosystem support"
+            copyright = "GPL-3.0"
+            vendor = "NuvioForLinux"
+            modules("java.net.http", "jdk.crypto.ec", "java.naming", "java.prefs")
+            linux {
+                iconFile.set(rootProject.file("nuvio-icon.png"))
+                packageName = "nuvio"
+                debMaintainer = "blarns"
+                menuGroup = "AudioVideo"
+                appCategory = "AudioVideo"
+                shortcut = true
+            }
         }
         buildTypes.release.proguard {
             isEnabled.set(false)
