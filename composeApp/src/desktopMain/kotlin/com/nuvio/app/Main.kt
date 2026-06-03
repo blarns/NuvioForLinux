@@ -18,7 +18,7 @@ fun main() = application {
     System.setProperty("compose.interop.blending", "true")
     val mediaTitle by PlayerLaunchStore.currentTitle.collectAsState()
     val windowTitle = if (mediaTitle != null) "Nuvio — $mediaTitle" else "Nuvio"
-    val appIcon = BitmapPainter(useResource("nuvio-icon.png", ::loadImageBitmap))
+    val appIcon = runCatching { BitmapPainter(useResource("nuvio-icon.png", ::loadImageBitmap)) }.getOrNull()
     val windowState = rememberWindowState(
         width = (DesktopPrefs.getFloat("window", "width") ?: 1280f).dp,
         height = (DesktopPrefs.getFloat("window", "height") ?: 720f).dp,
