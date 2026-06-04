@@ -406,6 +406,7 @@ private class VlcjPlayerController(
 
                 override fun timeChanged(mediaPlayer: MediaPlayer?, newTime: Long) {
                     currentState = currentState.copy(positionMs = newTime)
+                    onSnapshot(currentState)
                 }
 
                 override fun lengthChanged(mediaPlayer: MediaPlayer?, newLength: Long) {

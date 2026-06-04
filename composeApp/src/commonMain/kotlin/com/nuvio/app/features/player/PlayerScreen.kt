@@ -41,6 +41,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nuvio.app.registerPlaybackFlushCallback
+import com.nuvio.app.unregisterPlaybackFlushCallback
 import com.nuvio.app.core.ui.NuvioToastController
 import com.nuvio.app.features.debrid.DebridSettingsRepository
 import com.nuvio.app.features.debrid.DirectDebridPlayableResult
@@ -2015,7 +2017,9 @@ fun PlayerScreen(
         }
 
         DisposableEffect(Unit) {
+            registerPlaybackFlushCallback { flushWatchProgress() }
             onDispose {
+                unregisterPlaybackFlushCallback()
                 PlayerStreamsRepository.clearAll()
             }
         }

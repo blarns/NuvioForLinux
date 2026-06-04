@@ -36,6 +36,7 @@ fun main() = application {
     }.getOrNull()
     Window(
         onCloseRequest = {
+            PlayerControlBridge.flushProgress?.invoke()
             mpris?.close()
             DesktopPrefs.putFloat("window", "width", windowState.size.width.value)
             DesktopPrefs.putFloat("window", "height", windowState.size.height.value)

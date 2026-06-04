@@ -10,3 +10,6 @@ actual fun getPlatform(): Platform = AndroidPlatform()
 
 internal actual val isIos: Boolean = false
 internal actual val isDesktop: Boolean = false
+
+internal actual fun registerPlaybackFlushCallback(fn: () -> Unit) {}
+internal actual fun unregisterPlaybackFlushCallback() {}
