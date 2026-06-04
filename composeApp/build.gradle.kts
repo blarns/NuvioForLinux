@@ -414,8 +414,9 @@ android {
 compose.desktop {
     application {
         mainClass = "com.nuvio.app.MainKt"
-        // VLCJ's ByteBufferFactory requires sun.misc.Unsafe for native buffer allocation.
-        // The jpackage JVM blocks internal JDK classes by default; this opens the package.
+        // VLCJ's ByteBufferFactory uses sun.misc.Unsafe for native video buffer allocation.
+        // --add-opens alone isn't enough; jdk.unsupported must be included so the module
+        // system exports sun.misc (including Unsafe) to unnamed modules.
         jvmArgs("--add-opens=java.base/sun.misc=ALL-UNNAMED")
         nativeDistributions {
             targetFormats(TargetFormat.Deb)
@@ -424,7 +425,7 @@ compose.desktop {
             description = "Modern media hub with Stremio addon ecosystem support"
             copyright = "GPL-3.0"
             vendor = "NuvioForLinux"
-            modules("java.net.http", "jdk.crypto.ec", "java.naming", "java.prefs")
+            modules("java.net.http", "jdk.crypto.ec", "java.naming", "java.prefs", "jdk.unsupported")
             linux {
                 iconFile.set(rootProject.file("nuvio-icon.png"))
                 packageName = "nuvio"
