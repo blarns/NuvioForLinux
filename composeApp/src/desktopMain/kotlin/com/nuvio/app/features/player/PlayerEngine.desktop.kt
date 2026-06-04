@@ -312,6 +312,12 @@ private class VlcjPlayerController(
         playbackSpeed = 1.0f,
     )
 
+    // Last position/duration confirmed > 0 during active playback, updated by the
+    // polling loop via currentSnapshot(). Used in pause/stop/error handlers instead
+    // of querying the player at event-fire time, which can return 0 on some streams.
+    private val lastGoodPositionMs = java.util.concurrent.atomic.AtomicLong(0L)
+    private val lastGoodDurationMs = java.util.concurrent.atomic.AtomicLong(0L)
+
     private var externalSubtitleUri: String? = null
     private var subtitleDelayMs: Int = 0
     private var currentAudioLevel = PlayerAudioLevel(1.0f, false)
@@ -352,22 +358,19 @@ private class VlcjPlayerController(
                 }
 
                 override fun paused(mediaPlayer: MediaPlayer?) {
-                    val livePos = try { mediaPlayer?.status()?.time()?.coerceAtLeast(0L) } catch (_: Exception) { null }
-                    currentState = currentState.copy(isPlaying = false, positionMs = livePos ?: currentState.positionMs)
+                    currentState = currentState.copy(isPlaying = false, positionMs = bestPositionMs(), durationMs = bestDurationMs())
                     onSnapshot(currentState)
                     PlayerControlBridge.isPlaying = false
                 }
 
                 override fun stopped(mediaPlayer: MediaPlayer?) {
-                    val livePos = try { mediaPlayer?.status()?.time()?.coerceAtLeast(0L) } catch (_: Exception) { null }
-                    currentState = currentState.copy(isPlaying = false, positionMs = livePos ?: currentState.positionMs)
+                    currentState = currentState.copy(isPlaying = false, positionMs = bestPositionMs(), durationMs = bestDurationMs())
                     onSnapshot(currentState)
                     PlayerControlBridge.isPlaying = false
                 }
 
                 override fun finished(mediaPlayer: MediaPlayer?) {
-                    val livePos = try { mediaPlayer?.status()?.time()?.coerceAtLeast(0L) } catch (_: Exception) { null }
-                    currentState = currentState.copy(isEnded = true, isPlaying = false, positionMs = livePos ?: currentState.positionMs)
+                    currentState = currentState.copy(isEnded = true, isPlaying = false, positionMs = bestPositionMs(), durationMs = bestDurationMs())
                     onSnapshot(currentState)
                 }
 
@@ -382,8 +385,7 @@ private class VlcjPlayerController(
 
                 override fun error(mediaPlayer: MediaPlayer?) {
                     println("$TAG: Event -> ERROR triggered by VLCJ!")
-                    val livePos = try { mediaPlayer?.status()?.time()?.coerceAtLeast(0L) } catch (_: Exception) { null }
-                    currentState = currentState.copy(isLoading = false, isPlaying = false, positionMs = livePos ?: currentState.positionMs)
+                    currentState = currentState.copy(isLoading = false, isPlaying = false, positionMs = bestPositionMs(), durationMs = bestDurationMs())
                     onSnapshot(currentState)
                     onError(Exception("VLCJ playback error"))
                 }
@@ -394,14 +396,21 @@ private class VlcjPlayerController(
     fun currentSnapshot(): PlayerPlaybackSnapshot {
         if (!currentState.isPlaying) return currentState
         return try {
-            currentState.copy(
-                positionMs = mediaPlayer.status().time().coerceAtLeast(0L),
-                durationMs = mediaPlayer.status().length().coerceAtLeast(0L),
-            )
+            val pos = mediaPlayer.status().time().coerceAtLeast(0L)
+            val dur = mediaPlayer.status().length().coerceAtLeast(0L)
+            if (pos > 0L) lastGoodPositionMs.set(pos)
+            if (dur > 0L) lastGoodDurationMs.set(dur)
+            currentState.copy(positionMs = pos, durationMs = dur)
         } catch (_: Exception) {
             currentState
         }
     }
+
+    private fun bestPositionMs() =
+        lastGoodPositionMs.get().takeIf { it > 0L } ?: currentState.positionMs
+
+    private fun bestDurationMs() =
+        lastGoodDurationMs.get().takeIf { it > 0L } ?: currentState.durationMs
 
     override fun play() { mediaPlayer.controls().play() }
 
