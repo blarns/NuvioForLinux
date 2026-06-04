@@ -416,6 +416,8 @@ private class VlcjPlayerController(
 
                 override fun error(mediaPlayer: MediaPlayer?) {
                     println("$TAG: Event -> ERROR triggered by VLCJ!")
+                    currentState = currentState.copy(isLoading = false, isPlaying = false)
+                    onSnapshot(currentState)
                     onError(Exception("VLCJ playback error"))
                 }
             },
