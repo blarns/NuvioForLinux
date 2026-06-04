@@ -3,6 +3,10 @@ package com.nuvio.app
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.loadImageBitmap
 import androidx.compose.ui.res.useResource
 import androidx.compose.ui.unit.dp
@@ -41,6 +45,20 @@ fun main() = application {
             DesktopPrefs.putFloat("window", "width", windowState.size.width.value)
             DesktopPrefs.putFloat("window", "height", windowState.size.height.value)
             exitApplication()
+        },
+        onKeyEvent = { keyEvent ->
+            if (keyEvent.type != KeyEventType.KeyDown) return@Window false
+            val ctrl = PlayerControlBridge.controller ?: return@Window false
+            when (keyEvent.key) {
+                Key.Spacebar -> { if (PlayerControlBridge.isPlaying) ctrl.pause() else ctrl.play(); true }
+                Key.DirectionLeft  -> { ctrl.seekBy(-10_000L); true }
+                Key.DirectionRight -> { ctrl.seekBy(+10_000L); true }
+                Key.DirectionUp    -> { ctrl.currentVolume()?.let { ctrl.setVolume((it.fraction + 0.05f).coerceAtMost(1f)) }; true }
+                Key.DirectionDown  -> { ctrl.currentVolume()?.let { ctrl.setVolume((it.fraction - 0.05f).coerceAtLeast(0f)) }; true }
+                Key.M -> { ctrl.currentVolume()?.let { ctrl.setVolume(if (it.isMuted) 0.5f else 0f) }; true }
+                Key.F -> { DesktopWindowState.toggleFullscreen?.invoke(); true }
+                else -> false
+            }
         },
         title = windowTitle,
         icon = appIcon,

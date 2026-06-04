@@ -1,9 +1,7 @@
 package com.nuvio.app.features.player
 
-import com.nuvio.app.DesktopWindowState
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -16,17 +14,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.Dispatchers
@@ -179,56 +170,15 @@ actual fun PlatformPlayerSurface(
 
     var playerController by remember { mutableStateOf<VlcjPlayerController?>(null) }
     var snapshotUpdateJob: Job? = remember { null }
-    val focusRequester = remember { FocusRequester() }
 
     // Render the current video frame into a Compose Canvas.
     // Because this is plain Compose (no AWT), the controls Popup renders above it normally
     // and all pointerInput handlers on the parent Box fire correctly.
+    // Keyboard shortcuts are handled at Window level in Main.kt so the player
+    // Box never needs to grab focus, keeping navigation to other screens smooth.
     Box(
         modifier = modifier
             .background(Color.Black)
-            .focusRequester(focusRequester)
-            .focusable()
-            .onKeyEvent { keyEvent ->
-                if (keyEvent.type != KeyEventType.KeyDown) return@onKeyEvent false
-                val ctrl = playerController ?: return@onKeyEvent false
-                when (keyEvent.key) {
-                    Key.Spacebar -> {
-                        val snap = ctrl.currentSnapshot()
-                        if (snap.isPlaying) ctrl.pause() else ctrl.play()
-                        true
-                    }
-                    Key.DirectionLeft -> {
-                        ctrl.seekBy(-10_000L)
-                        true
-                    }
-                    Key.DirectionRight -> {
-                        ctrl.seekBy(+10_000L)
-                        true
-                    }
-                    Key.DirectionUp -> {
-                        val current = ctrl.currentVolume()?.fraction ?: 1f
-                        ctrl.setVolume((current + 0.05f).coerceAtMost(1f))
-                        true
-                    }
-                    Key.DirectionDown -> {
-                        val current = ctrl.currentVolume()?.fraction ?: 1f
-                        ctrl.setVolume((current - 0.05f).coerceAtLeast(0f))
-                        true
-                    }
-                    Key.M -> {
-                        val level = ctrl.currentVolume()
-                        if (level != null && level.isMuted) {
-                            ctrl.setVolume(0.5f)
-                        } else {
-                            ctrl.setVolume(0f)
-                        }
-                        true
-                    }
-                    Key.F -> { DesktopWindowState.toggleFullscreen?.invoke(); true }
-                    else -> false
-                }
-            }
             .pointerInput(Unit) {
                 awaitPointerEventScope {
                     while (true) {
@@ -278,10 +228,6 @@ actual fun PlatformPlayerSurface(
             }
     )
 
-    // Request focus so keyboard events land on the player surface
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-    }
 
     // Wire up the player controller
     DisposableEffect(sourceUrl, sourceAudioUrl, sourceHeaders) {
