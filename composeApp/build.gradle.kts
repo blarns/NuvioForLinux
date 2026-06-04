@@ -414,6 +414,9 @@ android {
 compose.desktop {
     application {
         mainClass = "com.nuvio.app.MainKt"
+        // VLCJ's ByteBufferFactory requires sun.misc.Unsafe for native buffer allocation.
+        // The jpackage JVM blocks internal JDK classes by default; this opens the package.
+        jvmArgs("--add-opens=java.base/sun.misc=ALL-UNNAMED")
         nativeDistributions {
             targetFormats(TargetFormat.Deb)
             packageName = "nuvio"
