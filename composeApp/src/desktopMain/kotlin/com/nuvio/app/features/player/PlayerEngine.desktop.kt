@@ -117,6 +117,13 @@ actual fun PlatformPlayerSurface(
         }
     }
 
+    // Throttle frame delivery to ~30 fps. display() fires on the VLCJ render thread at the
+    // native frame rate (up to 60+ fps); each call launches a Dispatchers.Main coroutine that
+    // updates Compose state and triggers a recomposition. Without throttling, 60+ coroutines/s
+    // compete with the Compose resource loader for the compose-resources ZipFile, producing
+    // "invalid LOC header" crashes on pause.
+    var lastFrameMs by remember { mutableStateOf(0L) }
+
     val renderCallback = remember {
         object : RenderCallback {
             override fun display(
@@ -124,6 +131,10 @@ actual fun PlatformPlayerSurface(
                 nativeBuffers: Array<out ByteBuffer>,
                 bufferFormat: BufferFormat,
             ) {
+                val now = System.currentTimeMillis()
+                if (now - lastFrameMs < 33L) return   // cap at ~30 fps
+                lastFrameMs = now
+
                 val buffer = nativeBuffers[0]
                 val w = videoWidth.value
                 val h = videoHeight.value
@@ -406,7 +417,6 @@ private class VlcjPlayerController(
 
                 override fun timeChanged(mediaPlayer: MediaPlayer?, newTime: Long) {
                     currentState = currentState.copy(positionMs = newTime)
-                    onSnapshot(currentState)
                 }
 
                 override fun lengthChanged(mediaPlayer: MediaPlayer?, newLength: Long) {
