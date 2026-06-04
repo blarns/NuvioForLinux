@@ -916,7 +916,13 @@ private fun MainAppContent(
             manualSelection: Boolean,
             startFromBeginning: Boolean,
         ) {
-            val targetResumePositionMs = if (startFromBeginning) 0L else (resumePositionMs ?: 0L)
+            val savedPositionMs = if (!startFromBeginning && resumePositionMs == null) {
+                WatchProgressRepository.progressForVideo(videoId)
+                    ?.takeIf { !it.isCompleted }
+                    ?.lastPositionMs
+                    ?.takeIf { it > 0L }
+            } else null
+            val targetResumePositionMs = if (startFromBeginning) 0L else (resumePositionMs ?: savedPositionMs ?: 0L)
             val targetResumeProgressFraction = if (startFromBeginning) null else resumeProgressFraction
 
             if (!manualSelection) {
