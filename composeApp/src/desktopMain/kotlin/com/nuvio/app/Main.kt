@@ -41,7 +41,13 @@ fun main() = application {
     Window(
         onCloseRequest = {
             PlayerControlBridge.flushProgress?.invoke()
-            mpris?.close()
+            // D-Bus teardown can block for seconds; run it on a daemon thread so the
+            // AWT EDT (and thus the window close) is never blocked by MPRIS cleanup.
+            val m = mpris
+            if (m != null) Thread(null, { try { m.close() } catch (_: Exception) {} }, "mpris-close", 0).also {
+                it.isDaemon = true
+                it.start()
+            }
             DesktopPrefs.putFloat("window", "width", windowState.size.width.value)
             DesktopPrefs.putFloat("window", "height", windowState.size.height.value)
             exitApplication()

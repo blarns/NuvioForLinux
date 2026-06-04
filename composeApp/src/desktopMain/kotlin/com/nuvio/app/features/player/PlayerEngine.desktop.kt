@@ -113,7 +113,9 @@ actual fun PlatformPlayerSurface(
     // updates Compose state and triggers a recomposition. Without throttling, 60+ coroutines/s
     // compete with the Compose resource loader for the compose-resources ZipFile, producing
     // "invalid LOC header" crashes on pause.
-    var lastFrameMs by remember { mutableStateOf(0L) }
+    // Plain AtomicLong — not Compose state. display() fires on the VLCJ render thread;
+    // writing mutableStateOf from a non-Compose thread triggers spurious recompositions.
+    val lastFrameMs = remember { java.util.concurrent.atomic.AtomicLong(0L) }
 
     val renderCallback = remember {
         object : RenderCallback {
@@ -123,8 +125,8 @@ actual fun PlatformPlayerSurface(
                 bufferFormat: BufferFormat,
             ) {
                 val now = System.currentTimeMillis()
-                if (now - lastFrameMs < 33L) return   // cap at ~30 fps
-                lastFrameMs = now
+                if (now - lastFrameMs.get() < 33L) return   // cap at ~30 fps
+                lastFrameMs.set(now)
 
                 val buffer = nativeBuffers[0]
                 val w = videoWidth.value
@@ -247,12 +249,17 @@ actual fun PlatformPlayerSurface(
 
         onDispose {
             println("$TAG: Disposing player for $sourceUrl")
-            try {
-                mediaPlayer.controls().stop()
-            } catch (_: Exception) {}
             playerController = null
             PlayerControlBridge.controller = null
             PlayerControlBridge.isPlaying = false
+            // stop() can block for 500ms–2s while VLC flushes buffers and closes the
+            // network connection. Running it on a daemon thread keeps the Compose render
+            // thread free so the next screen's buttons remain responsive immediately.
+            val mp = mediaPlayer
+            Thread(null, { try { mp.controls().stop() } catch (_: Exception) {} }, "vlc-stop", 0).also {
+                it.isDaemon = true
+                it.start()
+            }
         }
     }
 
