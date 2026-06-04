@@ -399,19 +399,22 @@ private class VlcjPlayerController(
                 }
 
                 override fun paused(mediaPlayer: MediaPlayer?) {
-                    currentState = currentState.copy(isPlaying = false)
+                    val livePos = try { mediaPlayer?.status()?.time()?.coerceAtLeast(0L) } catch (_: Exception) { null }
+                    currentState = currentState.copy(isPlaying = false, positionMs = livePos ?: currentState.positionMs)
                     onSnapshot(currentState)
                     PlayerControlBridge.isPlaying = false
                 }
 
                 override fun stopped(mediaPlayer: MediaPlayer?) {
-                    currentState = currentState.copy(isPlaying = false)
+                    val livePos = try { mediaPlayer?.status()?.time()?.coerceAtLeast(0L) } catch (_: Exception) { null }
+                    currentState = currentState.copy(isPlaying = false, positionMs = livePos ?: currentState.positionMs)
                     onSnapshot(currentState)
                     PlayerControlBridge.isPlaying = false
                 }
 
                 override fun finished(mediaPlayer: MediaPlayer?) {
-                    currentState = currentState.copy(isEnded = true, isPlaying = false)
+                    val livePos = try { mediaPlayer?.status()?.time()?.coerceAtLeast(0L) } catch (_: Exception) { null }
+                    currentState = currentState.copy(isEnded = true, isPlaying = false, positionMs = livePos ?: currentState.positionMs)
                     onSnapshot(currentState)
                 }
 
@@ -426,7 +429,8 @@ private class VlcjPlayerController(
 
                 override fun error(mediaPlayer: MediaPlayer?) {
                     println("$TAG: Event -> ERROR triggered by VLCJ!")
-                    currentState = currentState.copy(isLoading = false, isPlaying = false)
+                    val livePos = try { mediaPlayer?.status()?.time()?.coerceAtLeast(0L) } catch (_: Exception) { null }
+                    currentState = currentState.copy(isLoading = false, isPlaying = false, positionMs = livePos ?: currentState.positionMs)
                     onSnapshot(currentState)
                     onError(Exception("VLCJ playback error"))
                 }
