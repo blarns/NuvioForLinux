@@ -424,7 +424,17 @@ private class VlcjPlayerController(
         )
     }
 
-    fun currentSnapshot(): PlayerPlaybackSnapshot = currentState
+    fun currentSnapshot(): PlayerPlaybackSnapshot {
+        if (!currentState.isPlaying) return currentState
+        return try {
+            currentState.copy(
+                positionMs = mediaPlayer.status().time().coerceAtLeast(0L),
+                durationMs = mediaPlayer.status().length().coerceAtLeast(0L),
+            )
+        } catch (_: Exception) {
+            currentState
+        }
+    }
 
     override fun play() { mediaPlayer.controls().play() }
 
