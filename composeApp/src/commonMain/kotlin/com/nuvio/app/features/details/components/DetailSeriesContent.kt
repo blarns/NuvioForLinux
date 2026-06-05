@@ -10,6 +10,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
+import com.nuvio.app.core.ui.onRightClick
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -421,6 +422,10 @@ private fun SeasonTextChipScrollRow(
                         onClick = { onSelect(season) },
                         onLongClick = onLongPress?.let { handler -> { handler(season) } },
                     )
+                    .let { mod ->
+                        val handler = onLongPress?.let { h -> { h(season) } }
+                        if (handler != null) mod.onRightClick(handler) else mod
+                    }
                     .padding(
                         horizontal = sizing.seasonChipHorizontalPadding,
                         vertical = sizing.seasonChipVerticalPadding,
@@ -507,7 +512,8 @@ private fun SeasonPosterButton(
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick,
-            ),
+            )
+            .let { if (onLongClick != null) it.onRightClick(onLongClick) else it },
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(
@@ -676,7 +682,8 @@ private fun EpisodeHorizontalCard(
                 enabled = onClick != null || onLongPress != null,
                 onClick = { onClick?.invoke() },
                 onLongClick = onLongPress,
-            ),
+            )
+            .let { if (onLongPress != null) it.onRightClick(onLongPress) else it },
     ) {
         val imageUrl = video.thumbnail ?: fallbackImage
         val shouldBlurArtwork = blurUnwatchedEpisodes && !isWatched
@@ -1031,7 +1038,8 @@ private fun EpisodeListCard(
                 enabled = onClick != null || onLongPress != null,
                 onClick = { onClick?.invoke() },
                 onLongClick = onLongPress,
-            ),
+            )
+            .let { if (onLongPress != null) it.onRightClick(onLongPress) else it },
     ) {
         Row(
             modifier = Modifier.fillMaxSize(),

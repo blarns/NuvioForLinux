@@ -1,6 +1,7 @@
 package com.nuvio.app.features.home.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import com.nuvio.app.core.ui.onRightClick
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -410,7 +411,8 @@ private fun ContinueWatchingWideCard(
                 enabled = onClick != null || onLongClick != null,
                 onClick = { onClick?.invoke() },
                 onLongClick = onLongClick,
-            ),
+            )
+            .let { if (onLongClick != null) it.onRightClick(onLongClick) else it },
     ) {
         val shouldBlurArtwork = blurNextUp && useEpisodeThumbnails && item.isNextUp
         val artworkUrl = item.continueWatchingArtworkUrl(useEpisodeThumbnails)

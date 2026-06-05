@@ -341,7 +341,7 @@ internal fun Modifier.posterCardClickable(
         combinedClickable(
             onClick = { onClick?.invoke() },
             onLongClick = onLongClick,
-        )
+        ).let { if (onLongClick != null) it.onRightClick(onLongClick) else it }
     } else {
         this
     }
