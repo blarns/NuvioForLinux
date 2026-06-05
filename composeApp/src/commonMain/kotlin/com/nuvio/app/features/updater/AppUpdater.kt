@@ -53,8 +53,8 @@ import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 
-private const val gitHubOwner = "NuvioMedia"
-private const val gitHubRepo = "NuvioMobile"
+private const val gitHubOwner = "blarns"
+private const val gitHubRepo = "NuvioForLinux"
 private const val gitHubApiBase = "https://api.github.com"
 private const val releaseChannelBranch = "cmp-rewrite"
 
@@ -195,25 +195,27 @@ private object AppUpdaterRepository {
     }
 
     private fun chooseBestApkAsset(assets: List<GitHubAssetDto>): GitHubAssetDto? {
-        val apkAssets = assets.filter { asset ->
+        val installableAssets = assets.filter { asset ->
             asset.name.endsWith(".apk", ignoreCase = true) ||
-                asset.contentType == "application/vnd.android.package-archive"
+                asset.name.endsWith(".deb", ignoreCase = true) ||
+                asset.contentType == "application/vnd.android.package-archive" ||
+                asset.contentType == "application/vnd.debian.binary-package"
         }
-        if (apkAssets.isEmpty()) return null
-        if (apkAssets.size == 1) return apkAssets.first()
+        if (installableAssets.isEmpty()) return null
+        if (installableAssets.size == 1) return installableAssets.first()
 
         val supportedAbis = AppUpdaterPlatform.getSupportedAbis()
         for (abi in supportedAbis) {
-            val candidate = apkAssets.firstOrNull { asset ->
+            val candidate = installableAssets.firstOrNull { asset ->
                 asset.name.contains(abi, ignoreCase = true)
             }
             if (candidate != null) return candidate
         }
 
-        return apkAssets.firstOrNull { asset ->
+        return installableAssets.firstOrNull { asset ->
             val name = asset.name.lowercase()
             name.contains("universal") || name.contains("all")
-        } ?: apkAssets.first()
+        } ?: installableAssets.first()
     }
 }
 

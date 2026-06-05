@@ -1,24 +1,73 @@
 package com.nuvio.app.features.updater
 
+import com.nuvio.app.desktop.DesktopPrefs
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.net.URI
+
 actual object AppUpdaterPlatform {
-    actual val isSupported: Boolean = false
+    actual val isSupported: Boolean = true
 
-    actual fun getSupportedAbis(): List<String> = emptyList()
+    actual fun getSupportedAbis(): List<String> {
+        val arch = System.getProperty("os.arch") ?: ""
+        return when {
+            arch.contains("aarch64") || arch.contains("arm64") -> listOf("arm64", "aarch64")
+            else -> listOf("amd64", "x86_64")
+        }
+    }
 
-    actual fun getIgnoredTag(): String? = null
+    actual fun getIgnoredTag(): String? =
+        DesktopPrefs.getString("updater", "ignored_tag")
 
-    actual fun setIgnoredTag(tag: String?) = Unit
+    actual fun setIgnoredTag(tag: String?) {
+        if (tag != null) {
+            DesktopPrefs.putString("updater", "ignored_tag", tag)
+        } else {
+            DesktopPrefs.node("updater").remove("ignored_tag")
+        }
+    }
 
     actual suspend fun downloadApk(
         assetUrl: String,
         assetName: String,
         onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
-    ): Result<String> = Result.failure(IllegalStateException("In-app updates are unavailable on this build."))
+    ): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val downloadsDir = File(System.getProperty("user.home"), "Downloads").also { it.mkdirs() }
+            val destFile = File(downloadsDir, assetName)
 
-    actual fun canRequestPackageInstalls(): Boolean = false
+            val connection = URI(assetUrl).toURL().openConnection()
+            connection.connect()
+            val totalBytes = connection.contentLengthLong.takeIf { it > 0 }
+
+            connection.getInputStream().use { input ->
+                destFile.outputStream().use { output ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    var downloaded = 0L
+                    var read: Int
+                    while (input.read(buffer).also { read = it } != -1) {
+                        output.write(buffer, 0, read)
+                        downloaded += read
+                        onProgress(downloaded, totalBytes)
+                    }
+                }
+            }
+
+            destFile.absolutePath
+        }
+    }
+
+    // On Linux we can always attempt to open the package — no "unknown sources" gate.
+    actual fun canRequestPackageInstalls(): Boolean = true
 
     actual fun openUnknownSourcesSettings() = Unit
 
-    actual fun installDownloadedApk(path: String): Result<Unit> =
-        Result.failure(IllegalStateException("In-app updates are unavailable on this build."))
+    // Open the downloaded .deb with xdg-open so the system package manager (GDebi,
+    // Ubuntu Software Centre, etc.) handles installation.
+    actual fun installDownloadedApk(path: String): Result<Unit> = runCatching {
+        ProcessBuilder("xdg-open", path)
+            .inheritIO()
+            .start()
+    }
 }
