@@ -421,7 +421,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Deb)
             packageName = "nuvio"
-            packageVersion = project.findProperty("packageVersion") as String? ?: "0.1.0"
+            packageVersion = project.findProperty("packageVersion") as String? ?: releaseAppVersionName
             description = "Modern media hub with Stremio addon ecosystem support"
             copyright = "GPL-3.0"
             vendor = "NuvioForLinux"
