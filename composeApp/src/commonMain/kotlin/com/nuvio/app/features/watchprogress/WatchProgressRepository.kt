@@ -512,6 +512,14 @@ object WatchProgressRepository {
         if (!isCompleted && !shouldStoreWatchProgress(positionMs = positionMs, durationMs = durationMs)) {
             return
         }
+        // Never overwrite a known-good position with a smaller one. This protects against brief
+        // near-zero positions reported by VLC while it seeks to the :start-time offset on a new session.
+        if (!isCompleted) {
+            val existing = entriesByVideoId[session.videoId]
+            if (existing != null && !existing.isCompleted && positionMs < existing.lastPositionMs) {
+                return
+            }
+        }
 
         val entry = WatchProgressEntry(
             contentType = session.contentType,

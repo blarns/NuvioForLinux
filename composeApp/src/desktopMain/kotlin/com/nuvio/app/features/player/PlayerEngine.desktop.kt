@@ -76,6 +76,7 @@ actual fun PlatformPlayerSurface(
     playWhenReady: Boolean,
     resizeMode: PlayerResizeMode,
     useNativeController: Boolean,
+    startPositionMs: Long,
     onControllerReady: (PlayerEngineController) -> Unit,
     onSnapshot: (PlayerPlaybackSnapshot) -> Unit,
     onError: (String?) -> Unit,
@@ -268,7 +269,7 @@ actual fun PlatformPlayerSurface(
         val controller = playerController ?: return@LaunchedEffect
         try {
             println("$TAG: Calling loadMedia on controller")
-            controller.loadMedia(sourceUrl, sourceHeaders, playWhenReady)
+            controller.loadMedia(sourceUrl, sourceHeaders, playWhenReady, startPositionMs)
         } catch (e: Exception) {
             println("$TAG: loadMedia exception: ${e.message}")
             latestOnError.value(e.message ?: "Failed to load media")
@@ -317,6 +318,10 @@ private class VlcjPlayerController(
     // of querying the player at event-fire time, which can return 0 on some streams.
     private val lastGoodPositionMs = java.util.concurrent.atomic.AtomicLong(0L)
     private val lastGoodDurationMs = java.util.concurrent.atomic.AtomicLong(0L)
+
+    // Guard against duplicate loadMedia calls (LaunchedEffect can fire twice when
+    // sourceHeaders updates after onControllerReady triggers a PlayerScreen recomposition).
+    private var lastLoadedUrl: String? = null
 
     private var externalSubtitleUri: String? = null
     private var subtitleDelayMs: Int = 0
@@ -538,10 +543,20 @@ private class VlcjPlayerController(
         sourceUrl: String,
         sourceHeaders: Map<String, String>,
         playWhenReady: Boolean,
+        startPositionMs: Long = 0L,
     ) {
+        val cacheKey = "$sourceUrl@$startPositionMs"
+        if (cacheKey == lastLoadedUrl) {
+            println("$TAG: loadMedia skipped (duplicate call) url=$sourceUrl startPositionMs=$startPositionMs")
+            return
+        }
+        lastLoadedUrl = cacheKey
         try {
-            println("$TAG: loadMedia url=$sourceUrl playWhenReady=$playWhenReady")
+            println("$TAG: loadMedia url=$sourceUrl playWhenReady=$playWhenReady startPositionMs=$startPositionMs")
             val options = mutableListOf(":http-user-agent=NuvioMobile/1.0")
+            if (startPositionMs > 0L) {
+                options += ":start-time=${startPositionMs / 1000}"
+            }
             val optsArray = options.toTypedArray()
 
             if (playWhenReady) {

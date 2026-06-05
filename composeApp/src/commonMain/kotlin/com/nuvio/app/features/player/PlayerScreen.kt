@@ -2207,6 +2207,7 @@ fun PlayerScreen(
                 modifier = Modifier.fillMaxSize(),
                 playWhenReady = shouldPlay,
                 resizeMode = resizeMode,
+                startPositionMs = activeInitialPositionMs,
                 onControllerReady = { controller ->
                     println("DEBUG CONTROLLER SET: $controller")
                     playerController = controller
