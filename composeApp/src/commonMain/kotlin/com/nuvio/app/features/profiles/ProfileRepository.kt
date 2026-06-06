@@ -51,6 +51,8 @@ import org.jetbrains.compose.resources.getString
 private data class StoredProfilePayload(
     val userId: String,
     val activeProfileIndex: Int = 1,
+    val hasEverSelectedProfile: Boolean = false,
+    val rememberLastProfileEnabled: Boolean = false,
     val profiles: List<NuvioProfile> = emptyList(),
 )
 
@@ -67,6 +69,13 @@ object ProfileRepository {
     private var loadedCacheForUserId: String? = null
 
     val activeProfileId: Int get() = activeProfileIndex
+
+    fun setRememberLastProfileEnabled(enabled: Boolean) {
+        if (_state.value.rememberLastProfileEnabled == enabled) return
+
+        _state.value = _state.value.copy(rememberLastProfileEnabled = enabled)
+        persist()
+    }
 
     fun loadCachedProfiles(): Boolean {
         val stored = decodeStoredPayload() ?: return false
@@ -130,8 +139,10 @@ object ProfileRepository {
 
     fun selectProfile(profileIndex: Int) {
         activeProfileIndex = profileIndex
+        val selectedProfile = _state.value.profiles.find { it.profileIndex == profileIndex }
         _state.value = _state.value.copy(
-            activeProfile = _state.value.profiles.find { it.profileIndex == profileIndex },
+            activeProfile = selectedProfile,
+            hasEverSelectedProfile = selectedProfile != null || _state.value.hasEverSelectedProfile,
         )
         persist()
         WatchedRepository.onProfileChanged(profileIndex)
@@ -392,6 +403,8 @@ object ProfileRepository {
             profiles = profiles,
             activeProfile = profiles.find { it.profileIndex == activeProfileIndex } ?: profiles.firstOrNull(),
             isLoaded = profiles.isNotEmpty(),
+            hasEverSelectedProfile = stored.hasEverSelectedProfile,
+            rememberLastProfileEnabled = stored.rememberLastProfileEnabled,
         )
         _state.value.activeProfile?.let { activeProfileIndex = it.profileIndex }
         syncPinCache(profiles)
@@ -480,12 +493,15 @@ object ProfileRepository {
 
     private fun persist() {
         val authState = AuthRepository.state.value as? AuthState.Authenticated ?: return
+        val state = _state.value
         ProfileStorage.savePayload(
             json.encodeToString(
                 StoredProfilePayload(
                     userId = authState.userId,
                     activeProfileIndex = activeProfileIndex,
-                    profiles = _state.value.profiles,
+                    hasEverSelectedProfile = state.hasEverSelectedProfile,
+                    rememberLastProfileEnabled = state.rememberLastProfileEnabled,
+                    profiles = state.profiles,
                 ),
             ),
         )

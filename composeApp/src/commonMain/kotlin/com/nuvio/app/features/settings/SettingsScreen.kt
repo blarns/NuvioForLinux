@@ -69,6 +69,7 @@ import com.nuvio.app.features.mdblist.MdbListSettingsRepository
 import com.nuvio.app.features.notifications.EpisodeReleaseNotificationsRepository
 import com.nuvio.app.features.notifications.EpisodeReleaseNotificationsUiState
 import com.nuvio.app.features.player.PlayerSettingsRepository
+import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.trakt.TraktAuthUiState
 import com.nuvio.app.features.trakt.TraktAuthRepository
 import com.nuvio.app.features.trakt.TraktCommentsSettings
@@ -194,6 +195,9 @@ fun SettingsScreen(
             EpisodeReleaseNotificationsRepository.ensureLoaded()
             EpisodeReleaseNotificationsRepository.uiState
         }.collectAsStateWithLifecycle()
+        val profileSettingsState by remember {
+            ProfileRepository.state
+        }.collectAsStateWithLifecycle()
 
         LaunchedEffect(homescreenCatalogRefreshKey) {
             if (homescreenCatalogRefreshKey.isEmpty()) return@LaunchedEffect
@@ -260,6 +264,7 @@ fun SettingsScreen(
                 audioOutput = playerSettingsUiState.audioOutput,
                 useLibass = playerSettingsUiState.useLibass,
                 libassRenderType = playerSettingsUiState.libassRenderType,
+                rememberLastProfileEnabled = profileSettingsState.rememberLastProfileEnabled,
                 selectedTheme = selectedTheme,
                 onThemeSelected = ThemeSettingsRepository::setTheme,
                 amoledEnabled = amoledEnabled,
@@ -311,6 +316,7 @@ fun SettingsScreen(
                 audioOutput = playerSettingsUiState.audioOutput,
                 useLibass = playerSettingsUiState.useLibass,
                 libassRenderType = playerSettingsUiState.libassRenderType,
+                rememberLastProfileEnabled = profileSettingsState.rememberLastProfileEnabled,
                 selectedTheme = selectedTheme,
                 onThemeSelected = ThemeSettingsRepository::setTheme,
                 amoledEnabled = amoledEnabled,
@@ -372,6 +378,7 @@ private fun MobileSettingsScreen(
     audioOutput: String,
     useLibass: Boolean,
     libassRenderType: String,
+    rememberLastProfileEnabled: Boolean,
     selectedTheme: AppTheme,
     onThemeSelected: (AppTheme) -> Unit,
     amoledEnabled: Boolean,
@@ -501,6 +508,7 @@ private fun MobileSettingsScreen(
                             isTablet = false,
                             onPlaybackClick = { onPageChange(SettingsPage.Playback) },
                             onAppearanceClick = { onPageChange(SettingsPage.Appearance) },
+                            onAdvancedClick = { onPageChange(SettingsPage.Advanced) },
                             onNotificationsClick = { onPageChange(SettingsPage.Notifications) },
                             onContentDiscoveryClick = { onPageChange(SettingsPage.ContentDiscovery) },
                             onIntegrationsClick = { onPageChange(SettingsPage.Integrations) },
@@ -555,6 +563,10 @@ private fun MobileSettingsScreen(
                     onAppLanguageSelected = onAppLanguageSelected,
                     onContinueWatchingClick = onContinueWatchingClick,
                     onPosterCustomizationClick = { onPageChange(SettingsPage.PosterCustomization) },
+                )
+                SettingsPage.Advanced -> advancedSettingsContent(
+                    isTablet = false,
+                    rememberLastProfileEnabled = rememberLastProfileEnabled,
                 )
                 SettingsPage.Notifications -> notificationsSettingsContent(
                     isTablet = false,
@@ -690,6 +702,7 @@ private fun TabletSettingsScreen(
     audioOutput: String,
     useLibass: Boolean,
     libassRenderType: String,
+    rememberLastProfileEnabled: Boolean,
     selectedTheme: AppTheme,
     onThemeSelected: (AppTheme) -> Unit,
     amoledEnabled: Boolean,
@@ -874,6 +887,7 @@ private fun TabletSettingsScreen(
                                 isTablet = true,
                                 onPlaybackClick = { openInlinePage(SettingsPage.Playback) },
                                 onAppearanceClick = { openInlinePage(SettingsPage.Appearance) },
+                                onAdvancedClick = { openInlinePage(SettingsPage.Advanced) },
                                 onNotificationsClick = { openInlinePage(SettingsPage.Notifications) },
                                 onContentDiscoveryClick = { openInlinePage(SettingsPage.ContentDiscovery) },
                                 onIntegrationsClick = { openInlinePage(SettingsPage.Integrations) },
@@ -931,6 +945,10 @@ private fun TabletSettingsScreen(
                         onAppLanguageSelected = onAppLanguageSelected,
                         onContinueWatchingClick = { openInlinePage(SettingsPage.ContinueWatching) },
                         onPosterCustomizationClick = { openInlinePage(SettingsPage.PosterCustomization) },
+                    )
+                    SettingsPage.Advanced -> advancedSettingsContent(
+                        isTablet = true,
+                        rememberLastProfileEnabled = rememberLastProfileEnabled,
                     )
                     SettingsPage.Notifications -> notificationsSettingsContent(
                         isTablet = true,
