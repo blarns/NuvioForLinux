@@ -35,6 +35,8 @@ internal actual object DebridSettingsStorage {
     actual fun saveStreamNameTemplate(template: String) {}
     actual fun loadStreamDescriptionTemplate(): String? = null
     actual fun saveStreamDescriptionTemplate(template: String) {}
+    actual fun loadStreamBadgeRules(): String? = null
+    actual fun saveStreamBadgeRules(rules: String) {}
     actual fun exportToSyncPayload(): JsonObject = kotlinx.serialization.json.JsonObject(emptyMap<String, kotlinx.serialization.json.JsonElement>())
     actual fun replaceFromSyncPayload(payload: JsonObject) {}
 }
