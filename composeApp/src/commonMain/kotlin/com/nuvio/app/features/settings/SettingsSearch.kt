@@ -85,6 +85,7 @@ internal fun settingsSearchEntries(
     val accountCategory = stringResource(SettingsCategory.Account.labelRes)
     val generalCategory = stringResource(SettingsCategory.General.labelRes)
     val aboutCategory = stringResource(SettingsCategory.About.labelRes)
+    val advancedCategory = stringResource(SettingsCategory.Advanced.labelRes)
 
     val accountPage = stringResource(Res.string.compose_settings_page_account)
     val traktPage = stringResource(Res.string.compose_settings_page_trakt)
@@ -212,6 +213,7 @@ internal fun settingsSearchEntries(
         key = "advanced",
         title = advancedPage,
         description = stringResource(Res.string.compose_settings_root_advanced_description),
+        category = advancedCategory,
         icon = Icons.Rounded.Tune,
     )
     addPage(
@@ -375,6 +377,7 @@ internal fun settingsSearchEntries(
         description = stringResource(Res.string.settings_advanced_remember_last_profile_description),
         pageLabel = advancedPage,
         section = stringResource(Res.string.settings_advanced_section_startup),
+        category = advancedCategory,
         icon = Icons.Rounded.Tune,
     )
     addPage(
