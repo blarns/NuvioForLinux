@@ -98,6 +98,10 @@ See [LINUX_QUICKSTART.md](LINUX_QUICKSTART.md) for quick setup, or [LINUX_DESKTO
 - ✅ OAuth authentication with persistent session
 - ✅ Full addon ecosystem support with persistent storage
 - ✅ Continue Watching, Library, Search
+- ✅ Resume playback from where you left off (persists across restarts)
+- ✅ Right-click context menus (mark watched, mark previous/season watched, play manually, remove from Continue Watching)
+- ✅ In-app update notifications — checks for new releases on startup and downloads the `.deb`
+- ✅ TMDB enrichment, MDBList ratings, and Debrid (Torbox/Real-Debrid) settings — configurable and persistent (Settings → Integrations)
 - ✅ Hardware video acceleration via VA-API (Intel/AMD) or NVDEC (NVIDIA) — toggle in Settings → Playback
 - ✅ Audio output selection (Auto / PulseAudio / ALSA / JACK) — Settings → Playback
 - ✅ Keyboard shortcuts (Space, arrows, M, F for fullscreen, scroll wheel for volume)
@@ -105,6 +109,8 @@ See [LINUX_QUICKSTART.md](LINUX_QUICKSTART.md) for quick setup, or [LINUX_DESKTO
 - ✅ Episode release notifications via `notify-send`
 - ✅ App menu integration — run `scripts/install-desktop.sh` to add Nuvio to your application launcher
 - ✅ Window size persists between sessions
+
+See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
 **Tested on:** Linux Mint 22, kernel 6.8, X11, Intel Iris Xe, Bluetooth audio
 
@@ -137,6 +143,8 @@ Versioning is driven from `iosApp/Configuration/Version.xcconfig`.
 | M | Toggle mute |
 | F | Toggle fullscreen |
 | Scroll wheel | Volume |
+
+**Mouse:** right-click a poster, episode, season, or Continue Watching card to open its context menu (mark watched, play manually, remove, etc.) — the desktop equivalent of long-press on mobile.
 
 ## Legal & DMCA
 
