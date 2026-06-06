@@ -3,7 +3,9 @@ package com.nuvio.app.features.streams
 import android.content.Context
 import android.content.SharedPreferences
 import com.nuvio.app.core.storage.ProfileScopedKey
+import com.nuvio.app.core.sync.decodeSyncBoolean
 import com.nuvio.app.core.sync.decodeSyncString
+import com.nuvio.app.core.sync.encodeSyncBoolean
 import com.nuvio.app.core.sync.encodeSyncString
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -13,9 +15,11 @@ actual object StreamBadgeSettingsStorage {
     private const val preferencesName = "nuvio_stream_badge_settings"
     private const val legacyDebridPreferencesName = "nuvio_debrid_settings"
     private const val streamBadgeRulesKey = "stream_badge_rules"
+    private const val showFileSizeBadgesKey = "show_file_size_badges"
+    private const val streamBadgePlacementKey = "stream_badge_placement"
     private const val legacyDebridStreamBadgeRulesKey = "debrid_stream_badge_rules"
 
-    private val syncKeys = listOf(streamBadgeRulesKey)
+    private val syncKeys = listOf(streamBadgeRulesKey, showFileSizeBadgesKey, streamBadgePlacementKey)
 
     private var preferences: SharedPreferences? = null
     private var legacyDebridPreferences: SharedPreferences? = null
@@ -29,6 +33,18 @@ actual object StreamBadgeSettingsStorage {
 
     actual fun saveStreamBadgeRules(rules: String) {
         saveString(streamBadgeRulesKey, rules)
+    }
+
+    actual fun loadShowFileSizeBadges(): Boolean? = loadBoolean(showFileSizeBadgesKey)
+
+    actual fun saveShowFileSizeBadges(enabled: Boolean) {
+        saveBoolean(showFileSizeBadgesKey, enabled)
+    }
+
+    actual fun loadStreamBadgePlacement(): String? = loadString(streamBadgePlacementKey)
+
+    actual fun saveStreamBadgePlacement(placement: String) {
+        saveString(streamBadgePlacementKey, placement)
     }
 
     actual fun loadLegacyDebridStreamBadgeRules(): String? =
@@ -51,8 +67,27 @@ actual object StreamBadgeSettingsStorage {
             ?.apply()
     }
 
+    private fun loadBoolean(key: String): Boolean? =
+        preferences?.let { sharedPreferences ->
+            val scopedKey = ProfileScopedKey.of(key)
+            if (sharedPreferences.contains(scopedKey)) {
+                sharedPreferences.getBoolean(scopedKey, false)
+            } else {
+                null
+            }
+        }
+
+    private fun saveBoolean(key: String, enabled: Boolean) {
+        preferences
+            ?.edit()
+            ?.putBoolean(ProfileScopedKey.of(key), enabled)
+            ?.apply()
+    }
+
     actual fun exportToSyncPayload(): JsonObject = buildJsonObject {
         loadStreamBadgeRules()?.let { put(streamBadgeRulesKey, encodeSyncString(it)) }
+        loadShowFileSizeBadges()?.let { put(showFileSizeBadgesKey, encodeSyncBoolean(it)) }
+        loadStreamBadgePlacement()?.let { put(streamBadgePlacementKey, encodeSyncString(it)) }
     }
 
     actual fun replaceFromSyncPayload(payload: JsonObject) {
@@ -61,5 +96,7 @@ actual object StreamBadgeSettingsStorage {
         }?.apply()
 
         payload.decodeSyncString(streamBadgeRulesKey)?.let(::saveStreamBadgeRules)
+        payload.decodeSyncBoolean(showFileSizeBadgesKey)?.let(::saveShowFileSizeBadges)
+        payload.decodeSyncString(streamBadgePlacementKey)?.let(::saveStreamBadgePlacement)
     }
 }

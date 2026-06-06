@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -49,12 +50,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.nuvio.app.core.i18n.localizedByteUnit
 import com.nuvio.app.features.debrid.DebridSettingsRepository
+import com.nuvio.app.features.streams.StreamBadge
+import com.nuvio.app.features.streams.StreamBadgeImage
+import com.nuvio.app.features.streams.StreamBadgePlacement
+import com.nuvio.app.features.streams.StreamBadgeSettingsRepository
+import com.nuvio.app.features.streams.StreamFileSizeBadge
 import com.nuvio.app.features.streams.StreamItem
 import com.nuvio.app.features.streams.StreamsUiState
 import com.nuvio.app.features.streams.isSelectableForPlayback
-import kotlin.math.round
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 
@@ -74,6 +78,10 @@ fun PlayerSourcesPanel(
     val debridSettings by remember {
         DebridSettingsRepository.ensureLoaded()
         DebridSettingsRepository.uiState
+    }.collectAsStateWithLifecycle()
+    val streamBadgeSettings by remember {
+        StreamBadgeSettingsRepository.ensureLoaded()
+        StreamBadgeSettingsRepository.uiState
     }.collectAsStateWithLifecycle()
 
     AnimatedVisibility(
@@ -222,6 +230,8 @@ fun PlayerSourcesPanel(
                                             stream = stream,
                                             isCurrent = isCurrent,
                                             enabled = stream.isSelectableForPlayback(debridSettings.canResolvePlayableLinks),
+                                            showFileSizeBadges = streamBadgeSettings.showFileSizeBadges,
+                                            badgePlacement = streamBadgeSettings.badgePlacement,
                                             onClick = { onStreamSelected(stream) },
                                         )
                                     }
@@ -240,10 +250,14 @@ private fun SourceStreamRow(
     stream: StreamItem,
     isCurrent: Boolean,
     enabled: Boolean,
+    showFileSizeBadges: Boolean,
+    badgePlacement: StreamBadgePlacement,
     onClick: () -> Unit,
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val cardShape = RoundedCornerShape(12.dp)
+    val badgeImages = stream.badges.filter { it.imageURL.isNotBlank() }
+    val hasBadgeMetadata = badgeImages.isNotEmpty() || (showFileSizeBadges && stream.behaviorHints.videoSize != null)
 
     Row(
         modifier = Modifier
@@ -272,6 +286,15 @@ private fun SourceStreamRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Column(modifier = Modifier.weight(1f)) {
+            if (hasBadgeMetadata && badgePlacement == StreamBadgePlacement.TOP) {
+                SourceStreamBadgeRow(
+                    badgeImages = badgeImages,
+                    stream = stream,
+                    showFileSizeBadges = showFileSizeBadges,
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -318,11 +341,23 @@ private fun SourceStreamRow(
             }
 
             Spacer(modifier = Modifier.height(6.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                PlayerStreamFileSizeBadge(stream = stream)
+            if (badgePlacement == StreamBadgePlacement.BOTTOM) {
+                SourceStreamBadgeRow(
+                    badgeImages = badgeImages,
+                    stream = stream,
+                    showFileSizeBadges = showFileSizeBadges,
+                ) {
+                    Text(
+                        text = stream.addonName,
+                        modifier = if (hasBadgeMetadata) Modifier.padding(start = 4.dp) else Modifier,
+                        color = colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp,
+                        fontStyle = FontStyle.Italic,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            } else {
                 Text(
                     text = stream.addonName,
                     color = colorScheme.onSurfaceVariant,
@@ -337,32 +372,25 @@ private fun SourceStreamRow(
 }
 
 @Composable
-private fun PlayerStreamFileSizeBadge(stream: StreamItem) {
-    val bytes = stream.behaviorHints.videoSize ?: return
-    val gib = bytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
-    val sizeLabel = if (gib >= 1.0) {
-        val roundedGiB = round(gib * 10.0) / 10.0
-        "$roundedGiB ${localizedByteUnit("GB")}"
-    } else {
-        val mib = bytes.toDouble() / (1024.0 * 1024.0)
-        "${round(mib).toInt()} ${localizedByteUnit("MB")}"
-    }
-
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF0A0C0C))
-            .padding(horizontal = 8.dp, vertical = 3.dp),
+private fun SourceStreamBadgeRow(
+    badgeImages: List<StreamBadge>,
+    stream: StreamItem,
+    showFileSizeBadges: Boolean,
+    modifier: Modifier = Modifier,
+    trailingContent: @Composable RowScope.() -> Unit = {},
+) {
+    Row(
+        modifier = modifier.horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(
-            text = stringResource(Res.string.streams_size, sizeLabel),
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.2.sp,
-            ),
-            color = Color.White,
-        )
+        badgeImages.forEach { badge ->
+            StreamBadgeImage(badge = badge)
+        }
+        if (showFileSizeBadges) {
+            StreamFileSizeBadge(stream = stream)
+        }
+        trailingContent()
     }
 }
 
