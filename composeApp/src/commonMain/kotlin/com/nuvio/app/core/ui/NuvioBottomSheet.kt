@@ -36,9 +36,9 @@ fun NuvioModalBottomSheet(
     onDismissRequest: () -> Unit,
     sheetState: SheetState,
     modifier: Modifier = Modifier,
-    containerColor: Color = MaterialTheme.colorScheme.surface,
-    contentColor: Color = MaterialTheme.colorScheme.onSurface,
-    shape: Shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    containerColor: Color = MaterialTheme.nuvio.colors.surfaceSheet,
+    contentColor: Color = MaterialTheme.nuvio.colors.textPrimary,
+    shape: Shape = RoundedCornerShape(topStart = NuvioTokens.Space.s28, topEnd = NuvioTokens.Space.s28),
     showDragHandle: Boolean = true,
     sheetMaxWidth: Dp = BottomSheetDefaults.SheetMaxWidth,
     content: @Composable ColumnScope.() -> Unit,
@@ -66,7 +66,7 @@ fun NuvioBottomSheetDivider(
 ) {
     HorizontalDivider(
         modifier = modifier,
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+        color = MaterialTheme.nuvio.colors.borderSubtle,
     )
 }
 
@@ -78,27 +78,28 @@ fun NuvioBottomSheetActionRow(
     icon: ImageVector? = null,
     trailingContent: (@Composable RowScope.() -> Unit)? = null,
 ) {
+    val tokens = MaterialTheme.nuvio
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+            .padding(horizontal = tokens.spacing.screenHorizontal, vertical = tokens.spacing.screenHorizontal),
+        horizontalArrangement = Arrangement.spacedBy(NuvioTokens.Space.s14),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(22.dp),
+                tint = tokens.colors.accent,
+                modifier = Modifier.size(NuvioTokens.Icon.md),
             )
         }
         Text(
             text = title,
             modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = tokens.colors.textPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -119,11 +120,12 @@ suspend fun dismissNuvioBottomSheet(
 
 @Composable
 private fun NuvioBottomSheetDragHandle() {
+    val tokens = MaterialTheme.nuvio
     Box(
         modifier = Modifier
-            .padding(top = 10.dp, bottom = 6.dp)
-            .size(width = 54.dp, height = 5.dp)
-            .clip(RoundedCornerShape(999.dp))
-            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)),
+            .padding(top = NuvioTokens.Space.s10, bottom = NuvioTokens.Space.s6)
+            .size(width = NuvioTokens.Space.s56 - NuvioTokens.Space.s2, height = NuvioTokens.Space.s5)
+            .clip(tokens.shapes.chip)
+            .background(tokens.colors.borderDefault),
     )
 }
