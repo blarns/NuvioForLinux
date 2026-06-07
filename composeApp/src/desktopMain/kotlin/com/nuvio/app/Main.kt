@@ -17,8 +17,16 @@ import androidx.compose.ui.window.rememberWindowState
 import com.nuvio.app.desktop.DesktopPrefs
 import com.nuvio.app.features.player.PlayerControlBridge
 import com.nuvio.app.features.player.PlayerLaunchStore
+import com.nuvio.app.features.settings.AppLanguage
+import com.nuvio.app.features.settings.ThemeSettingsStorage
 
-fun main() = application {
+fun main() {
+    // Apply the saved app language before any Compose UI composes so bundled string
+    // resources resolve to the selected locale. Global (not profile-scoped), so safe this early.
+    ThemeSettingsStorage.applySelectedAppLanguage(
+        ThemeSettingsStorage.loadSelectedAppLanguage() ?: AppLanguage.ENGLISH.code,
+    )
+    application {
     System.setProperty("compose.interop.blending", "true")
     val mediaTitle by PlayerLaunchStore.currentTitle.collectAsState()
     val windowTitle = if (mediaTitle != null) "Nuvio — $mediaTitle" else "Nuvio"
@@ -71,5 +79,6 @@ fun main() = application {
         state = windowState,
     ) {
         App()
+    }
     }
 }
