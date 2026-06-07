@@ -6,6 +6,31 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.10] — 2026-06-07
+
+### Added — desktop settings now persist
+Many settings were no-op stubs on Linux (they reset on restart). They now persist via
+local storage with profile-scoped keys, mirroring Android (and syncing with mobile):
+
+- **Player settings** — resize mode, preferred audio/subtitle languages, stream auto-play
+  (mode, source, selected addons, regex, timeout), skip-intro, anime-skip, next-episode
+  thresholds, hold-to-speed, subtitle delay, reuse-last-link, and more.
+- **Theme settings** — selected theme, AMOLED, and app language (the saved language is applied
+  at startup).
+- **Per-content track preferences** — the audio/subtitle track you picked for a title is
+  remembered next time.
+- **Trakt comments** toggle.
+
+`hwAccelEnabled` and `audioOutput` stay machine-local and out of cloud sync on purpose (a synced
+audio-output value would break playback on a different machine).
+
+### Notes — persisted vs applied on desktop
+A few settings now **persist and sync to mobile but do not change desktop playback**, because the
+desktop (VLCJ) player doesn't consume them: **subtitle styling** (text/outline color, size, bold),
+the **iOS video-output** block, and **decoder priority / tunneling / DV7→HEVC** (ExoPlayer concepts).
+Everything else — resize mode, preferred languages, auto-play, skip-intro, thresholds, theme,
+AMOLED, app language — takes effect on desktop.
+
 ## [0.1.9] — 2026-06-06
 
 ### Added
@@ -91,6 +116,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   - Hardware video acceleration via VA-API (Intel / AMD) and NVDEC (NVIDIA).
   - MPRIS2 media-key integration, episode release notifications, and app-launcher integration.
 
+[0.1.10]: https://github.com/blarns/NuvioForLinux/releases/tag/v0.1.10
 [0.1.9]: https://github.com/blarns/NuvioForLinux/releases/tag/v0.1.9
 [0.1.8.1]: https://github.com/blarns/NuvioForLinux/releases/tag/v0.1.8.1
 [0.1.8]: https://github.com/blarns/NuvioForLinux/releases/tag/v0.1.8
