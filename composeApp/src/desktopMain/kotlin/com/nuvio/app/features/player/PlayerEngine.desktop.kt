@@ -269,7 +269,7 @@ actual fun PlatformPlayerSurface(
         val controller = playerController ?: return@LaunchedEffect
         try {
             println("$TAG: Calling loadMedia on controller")
-            controller.loadMedia(sourceUrl, sourceHeaders, playWhenReady, startPositionMs)
+            controller.loadMedia(sourceUrl, sourceHeaders, playWhenReady, startPositionMs, sourceAudioUrl)
         } catch (e: Exception) {
             println("$TAG: loadMedia exception: ${e.message}")
             latestOnError.value(e.message ?: "Failed to load media")
@@ -544,18 +544,23 @@ private class VlcjPlayerController(
         sourceHeaders: Map<String, String>,
         playWhenReady: Boolean,
         startPositionMs: Long = 0L,
+        sourceAudioUrl: String? = null,
     ) {
-        val cacheKey = "$sourceUrl@$startPositionMs"
+        val cacheKey = "$sourceUrl@$startPositionMs@$sourceAudioUrl"
         if (cacheKey == lastLoadedUrl) {
             println("$TAG: loadMedia skipped (duplicate call) url=$sourceUrl startPositionMs=$startPositionMs")
             return
         }
         lastLoadedUrl = cacheKey
         try {
-            println("$TAG: loadMedia url=$sourceUrl playWhenReady=$playWhenReady startPositionMs=$startPositionMs")
+            println("$TAG: loadMedia url=$sourceUrl playWhenReady=$playWhenReady startPositionMs=$startPositionMs audio=${sourceAudioUrl != null}")
             val options = mutableListOf(":http-user-agent=NuvioMobile/1.0")
             if (startPositionMs > 0L) {
                 options += ":start-time=${startPositionMs / 1000}"
+            }
+            // Separate audio track (e.g. YouTube trailers extract video + audio separately).
+            if (!sourceAudioUrl.isNullOrBlank()) {
+                options += ":input-slave=$sourceAudioUrl"
             }
             val optsArray = options.toTypedArray()
 
