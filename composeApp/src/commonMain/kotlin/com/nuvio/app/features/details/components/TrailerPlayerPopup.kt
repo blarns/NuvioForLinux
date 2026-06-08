@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -173,7 +174,10 @@ fun TrailerPlayerPopup(
                             sourceUrl = playbackSource.videoUrl,
                             sourceAudioUrl = playbackSource.audioUrl,
                             useYoutubeChunkedPlayback = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            // fillMaxSize (not just width): the desktop surface is pure Compose with
+                            // no intrinsic height, so width-only collapses it to zero height (blank
+                            // video) inside this 16:9 box. Mobile's AndroidView/UIKitView filled it anyway.
+                            modifier = Modifier.fillMaxSize(),
                             playWhenReady = true,
                             resizeMode = PlayerResizeMode.Fit,
                             useNativeController = true,
