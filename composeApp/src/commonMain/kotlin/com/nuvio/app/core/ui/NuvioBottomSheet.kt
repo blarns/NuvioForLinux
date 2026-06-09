@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -26,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,6 +40,7 @@ fun NuvioModalBottomSheet(
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
     shape: Shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
     showDragHandle: Boolean = true,
+    sheetMaxWidth: Dp = BottomSheetDefaults.SheetMaxWidth,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     ModalBottomSheet(
@@ -47,6 +50,7 @@ fun NuvioModalBottomSheet(
         containerColor = containerColor,
         contentColor = contentColor,
         shape = shape,
+        sheetMaxWidth = sheetMaxWidth,
         dragHandle = if (showDragHandle) {
             { NuvioBottomSheetDragHandle() }
         } else {
