@@ -6,6 +6,19 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.11] — 2026-06-09
+
+### Added
+- **In-app trailer playback.** Trailers used to open in your browser; they now play inside the app.
+  Click a trailer on a title's details page and it resolves and plays in the built-in player, with
+  audio. On desktop the trailer appears as a wide card that slides down from the top of the window
+  (mobile keeps the bottom sheet).
+
+### Notes
+- Trailers are sourced from YouTube. Extraction can occasionally fail or break when YouTube changes
+  things (the same risk the mobile builds carry) — if a specific trailer won't play, try another.
+- The first trailer of a session may take a moment to start (the extractor warms up).
+
 ## [0.1.10] — 2026-06-07
 
 ### Added — desktop settings now persist
@@ -116,6 +129,7 @@ AMOLED, app language — takes effect on desktop.
   - Hardware video acceleration via VA-API (Intel / AMD) and NVDEC (NVIDIA).
   - MPRIS2 media-key integration, episode release notifications, and app-launcher integration.
 
+[0.1.11]: https://github.com/blarns/NuvioForLinux/releases/tag/v0.1.11
 [0.1.10]: https://github.com/blarns/NuvioForLinux/releases/tag/v0.1.10
 [0.1.9]: https://github.com/blarns/NuvioForLinux/releases/tag/v0.1.9
 [0.1.8.1]: https://github.com/blarns/NuvioForLinux/releases/tag/v0.1.8.1
