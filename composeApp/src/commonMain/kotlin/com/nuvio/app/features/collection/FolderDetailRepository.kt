@@ -415,6 +415,7 @@ object FolderDetailRepository {
                 items = tab.items,
                 availableItemCount = tab.items.size,
                 supportsPagination = tab.supportsPagination,
+                genre = tab.genre,
             )
         }
     }
