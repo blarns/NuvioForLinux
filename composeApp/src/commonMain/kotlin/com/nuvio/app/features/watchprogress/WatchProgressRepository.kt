@@ -45,6 +45,12 @@ private const val WATCH_PROGRESS_DELTA_PAGE_SIZE = 900
 private const val WATCH_PROGRESS_DELTA_OPERATION_UPSERT = "upsert"
 private const val WATCH_PROGRESS_DELTA_OPERATION_DELETE = "delete"
 
+// Regression-guard tuning: a save is treated as a startup/reload transient (and skipped) only
+// when the reported position is below NearZero while the stored position is at least
+// MinCollapse further along. Genuine backward seeks land outside this window and still save.
+private const val RegressionGuardNearZeroMs = 30_000L
+private const val RegressionGuardMinCollapseMs = 120_000L
+
 private data class RemoteMetadataResolutionResult(
     val key: Pair<String, String>,
     val entries: List<WatchProgressEntry>,
@@ -805,11 +811,17 @@ object WatchProgressRepository {
         if (!isCompleted && !shouldStoreWatchProgress(positionMs = positionMs, durationMs = durationMs)) {
             return
         }
-        // Never overwrite a known-good position with a smaller one. This protects against brief
-        // near-zero positions reported by VLC while it seeks to the :start-time offset on a new session.
+        // Suppress only a collapse to near-zero from substantial progress: VLC briefly reports
+        // ~0 while it seeks to the :start-time offset on a (re)loaded session (e.g. after a
+        // stream-URL token rotation), and the first periodic save can capture it. A blanket
+        // "never go backward" guard would break genuine rewinds and rewatches, which must save.
         if (!isCompleted) {
             val existing = entriesByVideoId[session.videoId]
-            if (existing != null && !existing.isCompleted && positionMs < existing.lastPositionMs) {
+            if (existing != null &&
+                !existing.isCompleted &&
+                positionMs < RegressionGuardNearZeroMs &&
+                existing.lastPositionMs - positionMs >= RegressionGuardMinCollapseMs
+            ) {
                 return
             }
         }
