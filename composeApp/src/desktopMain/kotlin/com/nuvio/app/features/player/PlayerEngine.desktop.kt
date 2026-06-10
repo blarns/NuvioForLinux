@@ -232,7 +232,10 @@ actual fun PlatformPlayerSurface(
     )
 
 
-    // Wire up the player controller
+    // Wire up the player controller. On a source change (token rotation, next-episode
+    // auto-play) only the controller is swapped — the new loadMedia()'s play() replaces the
+    // running media in-place. Do NOT stop() here: a deferred stop on the shared mediaPlayer
+    // can land AFTER the next play() and kill the new stream.
     DisposableEffect(sourceUrl, sourceAudioUrl, sourceHeaders) {
         println("$TAG: Creating VlcjPlayerController for $sourceUrl")
 
@@ -249,15 +252,26 @@ actual fun PlatformPlayerSurface(
         PlayerControlBridge.controller = controller
 
         onDispose {
-            println("$TAG: Disposing player for $sourceUrl")
             playerController = null
             PlayerControlBridge.controller = null
             PlayerControlBridge.isPlaying = false
+        }
+    }
+
+    // True teardown (leaving the surface): stop playback and release the native player.
+    DisposableEffect(Unit) {
+        onDispose {
+            println("$TAG: Tearing down media player")
             // stop() can block for 500ms–2s while VLC flushes buffers and closes the
             // network connection. Running it on a daemon thread keeps the Compose render
             // thread free so the next screen's buttons remain responsive immediately.
+            // release() must follow stop() or the native player (and its video surface)
+            // leaks on every playback session.
             val mp = mediaPlayer
-            Thread(null, { try { mp.controls().stop() } catch (_: Exception) {} }, "vlc-stop", 0).also {
+            Thread(null, {
+                try { mp.controls().stop() } catch (_: Exception) {}
+                try { mp.release() } catch (_: Exception) {}
+            }, "vlc-stop", 0).also {
                 it.isDaemon = true
                 it.start()
             }
@@ -303,6 +317,8 @@ private class VlcjPlayerController(
     private val onError: (Exception) -> Unit,
 ) : PlayerEngineController {
 
+    // Mutated from VLCJ event-callback threads and read from the Main-dispatcher poll loop.
+    @Volatile
     private var currentState = PlayerPlaybackSnapshot(
         isLoading = false,
         isPlaying = false,
@@ -325,6 +341,9 @@ private class VlcjPlayerController(
 
     private var externalSubtitleUri: String? = null
     private var subtitleDelayMs: Int = 0
+
+    // Written by the playing() event callback (VLCJ thread) and the UI thread.
+    @Volatile
     private var currentAudioLevel = PlayerAudioLevel(1.0f, false)
 
     init {
@@ -554,7 +573,28 @@ private class VlcjPlayerController(
         lastLoadedUrl = cacheKey
         try {
             println("$TAG: loadMedia url=$sourceUrl playWhenReady=$playWhenReady startPositionMs=$startPositionMs audio=${sourceAudioUrl != null}")
-            val options = mutableListOf(":http-user-agent=NuvioMobile/1.0")
+            // libVLC has no generic per-request header option, but the two headers addon
+            // proxyHeaders actually rely on map onto media options. Anything else is logged
+            // so a failing header-protected stream is diagnosable.
+            val userAgent = sourceHeaders.entries
+                .firstOrNull { it.key.equals("user-agent", ignoreCase = true) }?.value
+            val referer = sourceHeaders.entries
+                .firstOrNull {
+                    it.key.equals("referer", ignoreCase = true) ||
+                        it.key.equals("referrer", ignoreCase = true)
+                }?.value
+            val unsupportedHeaderKeys = sourceHeaders.keys.filterNot {
+                it.equals("user-agent", ignoreCase = true) ||
+                    it.equals("referer", ignoreCase = true) ||
+                    it.equals("referrer", ignoreCase = true)
+            }
+            if (unsupportedHeaderKeys.isNotEmpty()) {
+                println("$TAG: loadMedia ignoring headers VLC cannot send: $unsupportedHeaderKeys")
+            }
+            val options = mutableListOf(":http-user-agent=${userAgent?.takeIf { it.isNotBlank() } ?: "NuvioMobile/1.0"}")
+            if (!referer.isNullOrBlank()) {
+                options += ":http-referrer=$referer"
+            }
             if (startPositionMs > 0L) {
                 options += ":start-time=${startPositionMs / 1000}"
             }
