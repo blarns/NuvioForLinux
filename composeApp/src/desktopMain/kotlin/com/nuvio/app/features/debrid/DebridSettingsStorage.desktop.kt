@@ -28,7 +28,6 @@ private const val streamCodecFilterKey = "debrid_stream_codec_filter"
 private const val streamPreferencesKey = "debrid_stream_preferences"
 private const val streamNameTemplateKey = "debrid_stream_name_template"
 private const val streamDescriptionTemplateKey = "debrid_stream_description_template"
-private const val streamBadgeRulesKey = "debrid_stream_badge_rules"
 
 private fun loadBool(key: String): Boolean? = DesktopPrefs.getBoolean(NODE, ProfileScopedKey.of(key))
 private fun saveBool(key: String, value: Boolean) = DesktopPrefs.putBoolean(NODE, ProfileScopedKey.of(key), value)
@@ -97,8 +96,8 @@ internal actual object DebridSettingsStorage {
     actual fun saveStreamNameTemplate(template: String) = saveStr(streamNameTemplateKey, template)
     actual fun loadStreamDescriptionTemplate(): String? = loadStr(streamDescriptionTemplateKey)
     actual fun saveStreamDescriptionTemplate(template: String) = saveStr(streamDescriptionTemplateKey, template)
-    actual fun loadStreamBadgeRules(): String? = loadStr(streamBadgeRulesKey)
-    actual fun saveStreamBadgeRules(rules: String) = saveStr(streamBadgeRulesKey, rules)
+    // Badge rules moved to StreamBadgeSettingsStorage (df15c4d2); the old value stays on this
+    // node under "debrid_stream_badge_rules" until the repository's legacy migration clears it.
 
     actual fun exportToSyncPayload(): JsonObject = buildJsonObject {
         loadEnabled()?.let { put(enabledKey, encodeSyncBoolean(it)) }
