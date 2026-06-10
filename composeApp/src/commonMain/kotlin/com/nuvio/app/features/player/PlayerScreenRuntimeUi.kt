@@ -129,6 +129,10 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                 modifier = Modifier.fillMaxSize(),
                 playWhenReady = shouldPlay,
                 resizeMode = resizeMode,
+                // Fork: VLCJ resumes via the :start-time media option (seekTo right after
+                // play() silently no-ops before libVLC parses the media — the 0.1.8 fix).
+                // The runtime's initial-seek effect still runs as the generic fallback.
+                startPositionMs = activeInitialPositionMs,
                 onControllerReady = { controller ->
                     playerController = controller
                     playerControllerSourceUrl = activeSourceUrl
