@@ -225,6 +225,7 @@ val iosDistributionSourceDir = if (iosDistribution == "full") {
 }
 val iosFrameworkBundleId = "com.nuvio.media"
 val fullCommonSourceDir = project.file("src/fullCommonMain/kotlin")
+val fullPluginSourceDir = fullCommonSourceDir.resolve("com/nuvio/app/features/plugins")
 val generatedRuntimeConfigDir = layout.buildDirectory.dir("generated/runtime-config/kotlin")
 val requestedGradleTasks = gradle.startParameter.taskNames.map { taskName ->
     taskName.substringAfterLast(':').lowercase()
@@ -302,10 +303,14 @@ kotlin {
         val jvmMain by getting {
             dependsOn(commonMain)
             kotlin.srcDir("src/desktopMain/kotlin")
+            kotlin.srcDir(fullPluginSourceDir)
             dependencies {
                 implementation(compose.desktop.currentOs)
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.8.1")
                 implementation(libs.ktor.client.java)
+                // Plugin runtime (JS scrapers) — same deps upstream's desktop target uses
+                implementation(libs.quickjs.kt)
+                implementation(libs.ksoup)
                 // VLCJ for cross-platform video playback on desktop
                 implementation("uk.co.caprica:vlcj:4.8.2")
                 // Ktor server for OAuth localhost redirect handler
