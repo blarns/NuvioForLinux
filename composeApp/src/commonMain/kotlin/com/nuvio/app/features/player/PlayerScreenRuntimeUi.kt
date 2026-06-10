@@ -87,6 +87,12 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         modifier = Modifier
             .fillMaxSize()
             .onSizeChanged { layoutSize = it }
+            // Fork (desktop): mouse movement re-shows the controls and feeds the idle timer.
+            .playerSurfaceMouseActivity(
+                lastMouseMoveMs = lastMouseMoveMs,
+                playerControlsLockedState = gestureCallbacks.playerControlsLocked,
+                onShowControls = { controlsVisible = true },
+            )
             .playerSurfaceTapGestures(
                 layoutSize = layoutSize,
                 playerControlsLockedState = gestureCallbacks.playerControlsLocked,
@@ -196,6 +202,8 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long, 
             episodeTitle = activeEpisodeTitle,
             playbackSnapshot = playbackSnapshot,
             displayedPositionMs = displayedPositionMs,
+            // Fork: desktop volume slider in the controls pill row.
+            currentVolumeFraction = playerController?.currentVolume()?.fraction,
             metrics = metrics,
             resizeMode = resizeMode,
             isLocked = playerControlsLocked,

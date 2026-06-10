@@ -4,6 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import com.nuvio.app.features.details.MetaDetailsRepository
+import com.nuvio.app.registerPlaybackFlushCallback
+import com.nuvio.app.unregisterPlaybackFlushCallback
 import com.nuvio.app.features.p2p.P2pSettingsRepository
 import com.nuvio.app.features.p2p.P2pStreamRequest
 import com.nuvio.app.features.p2p.P2pStreamingEngine
@@ -50,7 +52,11 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         }
     }
 
-    LaunchedEffect(activeSourceUrl, activeSourceAudioUrl, activeSourceHeaders, activeSourceResponseHeaders) {
+    // Fork: header maps are intentionally NOT keys here. A header refresh mid-session (e.g.
+    // a rotated token while the URL stays the same) must not tear down the whole playback
+    // session — VLCJ keeps streaming on the already-open connection. Source URL changes
+    // still reset everything below.
+    LaunchedEffect(activeSourceUrl, activeSourceAudioUrl) {
         errorMessage = null
         playerController = null
         playerControllerSourceUrl = null
@@ -243,7 +249,11 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
     }
 
     DisposableEffect(Unit) {
+        // Fork (desktop): flush watch progress when the window closes mid-playback
+        // (Main.kt invokes the registered callback from onCloseRequest).
+        registerPlaybackFlushCallback { flushWatchProgress() }
         onDispose {
+            unregisterPlaybackFlushCallback()
             P2pStreamingEngine.shutdown()
             PlayerStreamsRepository.clearAll()
         }
@@ -272,6 +282,22 @@ private fun PlayerScreenRuntime.BindPlayerUiVisibilityEffects() {
         }
         delay(3500)
         controlsVisible = false
+    }
+
+    // Fork (desktop): hide the controls after 3s without mouse movement. Any mouse move over
+    // the surface re-shows them (playerSurfaceMouseActivity). Touch platforms skip this via
+    // suppressSurfaceTapGestures (false on Android/iOS).
+    LaunchedEffect(controlsVisible) {
+        if (controlsVisible && suppressSurfaceTapGestures) {
+            while (true) {
+                delay(500)
+                val idleMs = System.currentTimeMillis() - lastMouseMoveMs.value
+                if (idleMs >= PlayerMouseHideDelayMs) {
+                    controlsVisible = false
+                    break
+                }
+            }
+        }
     }
 
     LaunchedEffect(playerControlsLocked, lockedOverlayVisible) {

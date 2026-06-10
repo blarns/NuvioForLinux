@@ -91,6 +91,9 @@ internal class PlayerScreenRuntime(
     var gestureController: PlayerGestureController? = null
 
     var controlsVisible by mutableStateOf(true)
+    // Fork (desktop): wall-clock time of the last mouse move over the player surface;
+    // drives the mouse-idle auto-hide in BindPlayerUiVisibilityEffects.
+    val lastMouseMoveMs = mutableStateOf(0L)
     var playerControlsLocked by mutableStateOf(false)
     var activeSourceUrl by mutableStateOf(sourceUrl)
     var activeSourceAudioUrl by mutableStateOf(sourceAudioUrl)
