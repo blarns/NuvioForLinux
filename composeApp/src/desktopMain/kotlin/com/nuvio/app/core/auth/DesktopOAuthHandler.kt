@@ -26,7 +26,11 @@ import java.net.ServerSocket
  * 5. Stop server: `handler.stop()`
  */
 object DesktopOAuthHandler {
-    private val redirectUri = CompletableDeferred<String>()
+    // Recreated on every start(): CompletableDeferred is one-shot, and a stale completed
+    // instance would make a second login attempt in the same app run instantly "succeed"
+    // with the previous attempt's (already consumed) authorization code.
+    private var redirectUri = CompletableDeferred<String>()
+    private var oauthCallbackData = CompletableDeferred<OAuthCallbackData>()
     private var server: io.ktor.server.engine.EmbeddedServer<*, *>? = null
     private var port: Int = 8080
 
@@ -55,6 +59,10 @@ object DesktopOAuthHandler {
         if (server != null) {
             return redirectUri.await()
         }
+
+        // Fresh one-shot deferreds for this attempt (see comment on the fields).
+        redirectUri = CompletableDeferred()
+        oauthCallbackData = CompletableDeferred()
 
         port = findAvailablePort()
         val callbackDeferred = CompletableDeferred<Unit>()
@@ -100,7 +108,12 @@ object DesktopOAuthHandler {
         }
     }
 
-    private val oauthCallbackData = CompletableDeferred<OAuthCallbackData>()
+    /** Minimal HTML escaping for values reflected into the callback result pages. */
+    private fun escapeHtml(raw: String): String = raw
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
 
     private fun Application.setupOAuthRoutes(callbackDeferred: CompletableDeferred<Unit>) {
         routing {
@@ -151,8 +164,8 @@ object DesktopOAuthHandler {
                         <head><title>Authorization Failed</title></head>
                         <body style="font-family: sans-serif; text-align: center; margin-top: 50px;">
                         <h1>✗ Authorization Failed</h1>
-                        <p><strong>Error:</strong> $errorMsg</p>
-                        <p>$errorDesc</p>
+                        <p><strong>Error:</strong> ${escapeHtml(errorMsg)}</p>
+                        <p>${escapeHtml(errorDesc)}</p>
                         <p>You can close this window and try again.</p>
                         </body>
                         </html>

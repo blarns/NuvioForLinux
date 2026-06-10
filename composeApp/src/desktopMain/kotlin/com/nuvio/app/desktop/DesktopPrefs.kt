@@ -26,11 +26,12 @@ internal object DesktopPrefs {
         dir
     }
 
-    private fun overflowFile(node: String, key: String): File {
-        // Sanitise node/key into a safe filename
-        val safeName = "${node}_${key}".replace(Regex("[^a-zA-Z0-9_.-]"), "_")
-        return File(overflowDir, "$safeName.dat")
-    }
+    private val unsafeFilenameChars = Regex("[^a-zA-Z0-9_.-]")
+
+    private fun sanitizeFilename(raw: String): String = raw.replace(unsafeFilenameChars, "_")
+
+    private fun overflowFile(node: String, key: String): File =
+        File(overflowDir, "${sanitizeFilename("${node}_$key")}.dat")
 
     fun node(name: String): Preferences = root.node(name)
 
@@ -98,11 +99,19 @@ internal object DesktopPrefs {
     fun putStringSet(node: String, key: String, value: Set<String>) =
         putString(node, key, value.joinToString("\u001F"))
 
+    /** Removes a key from both the Preferences node and any overflow file it spilled to. */
+    fun remove(node: String, key: String) {
+        try { node(node).remove(key) } catch (_: Exception) {}
+        try { overflowFile(node, key).delete() } catch (_: Exception) {}
+    }
+
     fun clear(node: String) {
         try { node(node).clear() } catch (_: Exception) {}
-        // Also clear any overflow files for this node
+        // Also clear any overflow files for this node. The prefix must be sanitised the same
+        // way overflowFile() builds names, or nodes containing '/' never match their files.
+        val prefix = sanitizeFilename("${node}_")
         try {
-            overflowDir.listFiles()?.filter { it.name.startsWith("${node}_") }?.forEach { it.delete() }
+            overflowDir.listFiles()?.filter { it.name.startsWith(prefix) }?.forEach { it.delete() }
         } catch (_: Exception) {}
     }
 }

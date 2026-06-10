@@ -24,7 +24,7 @@ actual object AppUpdaterPlatform {
         if (tag != null) {
             DesktopPrefs.putString("updater", "ignored_tag", tag)
         } else {
-            DesktopPrefs.node("updater").remove("ignored_tag")
+            DesktopPrefs.remove("updater", "ignored_tag")
         }
     }
 
