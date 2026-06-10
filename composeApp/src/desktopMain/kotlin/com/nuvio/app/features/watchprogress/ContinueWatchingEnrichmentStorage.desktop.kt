@@ -7,4 +7,6 @@ internal actual object ContinueWatchingEnrichmentStorage {
         DesktopPrefs.getString("cwEnrichment", key)
     actual fun savePayload(key: String, payload: String) =
         DesktopPrefs.putString("cwEnrichment", key, payload)
+    actual fun removePayload(key: String) =
+        DesktopPrefs.remove("cwEnrichment", key)
 }
