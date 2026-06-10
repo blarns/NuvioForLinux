@@ -5,7 +5,7 @@ import kotlinx.serialization.json.Json
 
 @Serializable
 data class CachedStreamLink(
-    val url: String,
+    val url: String = "",
     val streamName: String,
     val addonName: String,
     val addonId: String,
@@ -14,6 +14,10 @@ data class CachedStreamLink(
     val responseHeaders: Map<String, String> = emptyMap(),
     val filename: String? = null,
     val videoSize: Long? = null,
+    val infoHash: String? = null,
+    val fileIdx: Int? = null,
+    val magnetUri: String? = null,
+    val sources: List<String> = emptyList(),
     val bingeGroup: String? = null,
 )
 
@@ -47,6 +51,10 @@ object StreamLinkCacheRepository {
         responseHeaders: Map<String, String> = emptyMap(),
         filename: String? = null,
         videoSize: Long? = null,
+        infoHash: String? = null,
+        fileIdx: Int? = null,
+        magnetUri: String? = null,
+        sources: List<String> = emptyList(),
         bingeGroup: String? = null,
     ) {
         val entry = CachedStreamLink(
@@ -59,6 +67,10 @@ object StreamLinkCacheRepository {
             responseHeaders = responseHeaders,
             filename = filename,
             videoSize = videoSize,
+            infoHash = infoHash,
+            fileIdx = fileIdx,
+            magnetUri = magnetUri,
+            sources = sources,
             bingeGroup = bingeGroup,
         )
         val payload = json.encodeToString(CachedStreamLink.serializer(), entry)
@@ -83,7 +95,7 @@ object StreamLinkCacheRepository {
             StreamLinkCacheStorage.removeEntry(hashedKey(contentKey))
             return null
         }
-        if (entry.url.isBlank()) {
+        if (entry.url.isBlank() && entry.infoHash.isNullOrBlank() && entry.magnetUri.isNullOrBlank()) {
             StreamLinkCacheStorage.removeEntry(hashedKey(contentKey))
             return null
         }
