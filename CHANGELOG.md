@@ -6,6 +6,38 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.12] — 2026-06-10
+
+### Added — second upstream sync (10 commits)
+- **Remember last used profile** — skip the profile picker on launch (toggle in the new
+  Advanced settings section).
+- **Advanced settings section**, including a clear-continue-watching-cache action.
+- **Trakt as a source for "More like this"** on details pages (configurable in Trakt settings;
+  defaults to Trakt when authenticated).
+- **Stream badges overhaul** — Fusion badge settings are now global (moved out of Debrid
+  settings; existing rules migrate automatically), plus a size-badge toggle and a badge
+  position option (top/bottom of stream cards).
+- **Credentialed stream auto-recovery** — when a tokened stream URL expires mid-playback,
+  the app re-resolves the stream and resumes from where it failed instead of erroring out.
+
+### Changed
+- Player screen internals reorganized to match upstream's new structure; all desktop
+  behavior (resume via `:start-time`, mouse auto-hide controls, window-close progress flush,
+  volume slider) re-ported on top.
+- Design-token refactor of the theming layer (synced from upstream).
+- Adopted upstream's P2P module scaffolding — **disabled on desktop** (no torrent streaming
+  on Linux; this just keeps future syncs clean and unblocked the badges overhaul).
+
+### Fixed — desktop bug scan
+- **Rewinding then quitting now saves the earlier position.** The resume guard used to
+  refuse any backward save, snapping you back to the furthest point watched.
+- **Stream headers (User-Agent / Referer) are now actually sent to VLC** — header-protected
+  addon streams previously played without them or failed.
+- A native media-player instance leaked on every playback session (never released).
+- Switching sources/episodes could kill the new stream (a stop-race on the shared player).
+- Logging in a second time no longer requires an app restart (stale OAuth state).
+- Settings cleanup now removes spilled overflow files correctly.
+
 ## [0.1.11] — 2026-06-09
 
 ### Added
@@ -129,6 +161,7 @@ AMOLED, app language — takes effect on desktop.
   - Hardware video acceleration via VA-API (Intel / AMD) and NVDEC (NVIDIA).
   - MPRIS2 media-key integration, episode release notifications, and app-launcher integration.
 
+[0.1.12]: https://github.com/blarns/NuvioForLinux/releases/tag/v0.1.12
 [0.1.11]: https://github.com/blarns/NuvioForLinux/releases/tag/v0.1.11
 [0.1.10]: https://github.com/blarns/NuvioForLinux/releases/tag/v0.1.10
 [0.1.9]: https://github.com/blarns/NuvioForLinux/releases/tag/v0.1.9
