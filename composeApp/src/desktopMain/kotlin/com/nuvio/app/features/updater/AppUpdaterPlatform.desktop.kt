@@ -1,12 +1,15 @@
 package com.nuvio.app.features.updater
 
-import com.nuvio.app.desktop.DesktopPrefs
+import com.nuvio.app.core.storage.DesktopStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.URI
 
 actual object AppUpdaterPlatform {
+    // Fork-only store: the official client has no updater, it just ignores this file.
+    private val store = DesktopStorage.store("nuvio_updater")
+
     actual val isSupported: Boolean = true
 
     actual fun getSupportedAbis(): List<String> {
@@ -18,13 +21,13 @@ actual object AppUpdaterPlatform {
     }
 
     actual fun getIgnoredTag(): String? =
-        DesktopPrefs.getString("updater", "ignored_tag")
+        store.getString("ignored_tag")
 
     actual fun setIgnoredTag(tag: String?) {
         if (tag != null) {
-            DesktopPrefs.putString("updater", "ignored_tag", tag)
+            store.putString("ignored_tag", tag)
         } else {
-            DesktopPrefs.remove("updater", "ignored_tag")
+            store.remove("ignored_tag")
         }
     }
 

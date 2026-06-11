@@ -14,13 +14,15 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import com.nuvio.app.desktop.DesktopPrefs
+import com.nuvio.app.core.storage.DesktopStorage
 import com.nuvio.app.features.player.PlayerControlBridge
 import com.nuvio.app.features.player.PlayerLaunchStore
 import com.nuvio.app.features.settings.AppLanguage
 import com.nuvio.app.features.settings.ThemeSettingsStorage
 
 fun main() {
+    // Fork-only store: window geometry is machine-local; the official client ignores it.
+    val windowStore = DesktopStorage.store("nuvio_window")
     // Apply the saved app language before any Compose UI composes so bundled string
     // resources resolve to the selected locale. Global (not profile-scoped), so safe this early.
     ThemeSettingsStorage.applySelectedAppLanguage(
@@ -32,8 +34,8 @@ fun main() {
     val windowTitle = if (mediaTitle != null) "Nuvio — $mediaTitle" else "Nuvio"
     val appIcon = runCatching { BitmapPainter(useResource("nuvio-icon.png", ::loadImageBitmap)) }.getOrNull()
     val windowState = rememberWindowState(
-        width = (DesktopPrefs.getFloat("window", "width") ?: 1280f).dp,
-        height = (DesktopPrefs.getFloat("window", "height") ?: 720f).dp,
+        width = (windowStore.getFloat("width") ?: 1280f).dp,
+        height = (windowStore.getFloat("height") ?: 720f).dp,
     )
     DesktopWindowState.toggleFullscreen = {
         windowState.placement = if (windowState.placement == WindowPlacement.Fullscreen)
@@ -56,8 +58,8 @@ fun main() {
                 it.isDaemon = true
                 it.start()
             }
-            DesktopPrefs.putFloat("window", "width", windowState.size.width.value)
-            DesktopPrefs.putFloat("window", "height", windowState.size.height.value)
+            windowStore.putFloat("width", windowState.size.width.value)
+            windowStore.putFloat("height", windowState.size.height.value)
             exitApplication()
         },
         onKeyEvent = { keyEvent ->
