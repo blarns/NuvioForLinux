@@ -6,6 +6,14 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.12.1] — 2026-06-11
+
+### Fixed
+- **Player controls work again.** 0.1.12's player reorg re-introduced a controller reset
+  that raced controller delivery on desktop, leaving every control button a no-op.
+- **Volume slider is back.** Its change-handler was dropped from the new controls wiring,
+  which hid the slider entirely.
+
 ## [0.1.12] — 2026-06-10
 
 ### Added — second upstream sync (10 commits)
