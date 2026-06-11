@@ -15,12 +15,16 @@ import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.nuvio.app.core.storage.DesktopStorage
+import com.nuvio.app.desktop.DesktopLegacyPrefsMigration
 import com.nuvio.app.features.player.PlayerControlBridge
 import com.nuvio.app.features.player.PlayerLaunchStore
 import com.nuvio.app.features.settings.AppLanguage
 import com.nuvio.app.features.settings.ThemeSettingsStorage
 
 fun main() {
+    // One-time legacy java.util.prefs → ~/.config/nuvio migration. MUST stay the first
+    // statement: nothing may read a DesktopStorage store before this runs.
+    DesktopLegacyPrefsMigration.runIfNeeded()
     // Fork-only store: window geometry is machine-local; the official client ignores it.
     val windowStore = DesktopStorage.store("nuvio_window")
     // Apply the saved app language before any Compose UI composes so bundled string
