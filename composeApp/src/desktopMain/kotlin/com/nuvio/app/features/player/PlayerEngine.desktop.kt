@@ -41,6 +41,11 @@ import java.nio.ByteBuffer
 
 private const val TAG = "NuvioPlayerDesktop"
 
+// How close libVLC's reported time must get to an in-flight seek target before the
+// poll trusts it again, and how long to hold the optimistic target at most.
+private const val SEEK_SETTLE_TOLERANCE_MS = 3_000L
+private const val SEEK_SETTLE_TIMEOUT_MS = 8_000L
+
 private var vlcjFactory: MediaPlayerFactory? = null
 
 private fun getVlcjFactory(): MediaPlayerFactory {
@@ -335,6 +340,15 @@ private class VlcjPlayerController(
     private val lastGoodPositionMs = java.util.concurrent.atomic.AtomicLong(0L)
     private val lastGoodDurationMs = java.util.concurrent.atomic.AtomicLong(0L)
 
+    // In-flight seek target (-1 when idle). libVLC keeps reporting the PRE-seek time
+    // until the demuxer lands, so the 100ms poll would snap the timeline back to the
+    // old position — which reads as "the rewind didn't take" and invites repeated
+    // seeks that compound into a long stall. While a seek is pending we report the
+    // target instead, and seekBy() accumulates from it.
+    private val pendingSeekTargetMs = java.util.concurrent.atomic.AtomicLong(-1L)
+    @Volatile
+    private var pendingSeekStartedAtMs = 0L
+
     // Guard against duplicate loadMedia calls (LaunchedEffect can fire twice when
     // sourceHeaders updates after onControllerReady triggers a PlayerScreen recomposition).
     private var lastLoadedUrl: String? = null
@@ -420,8 +434,18 @@ private class VlcjPlayerController(
     fun currentSnapshot(): PlayerPlaybackSnapshot {
         if (!currentState.isPlaying) return currentState
         return try {
-            val pos = mediaPlayer.status().time().coerceAtLeast(0L)
+            var pos = mediaPlayer.status().time().coerceAtLeast(0L)
             val dur = mediaPlayer.status().length().coerceAtLeast(0L)
+            val pending = pendingSeekTargetMs.get()
+            if (pending >= 0L) {
+                val settled = kotlin.math.abs(pos - pending) <= SEEK_SETTLE_TOLERANCE_MS
+                val expired = System.currentTimeMillis() - pendingSeekStartedAtMs >= SEEK_SETTLE_TIMEOUT_MS
+                if (settled || expired) {
+                    pendingSeekTargetMs.compareAndSet(pending, -1L)
+                } else {
+                    pos = pending
+                }
+            }
             if (pos > 0L) lastGoodPositionMs.set(pos)
             if (dur > 0L) lastGoodDurationMs.set(dur)
             currentState.copy(positionMs = pos, durationMs = dur)
@@ -442,26 +466,33 @@ private class VlcjPlayerController(
 
     override fun seekTo(positionMs: Long) {
         val target = positionMs.coerceAtLeast(0L)
-        val doSeek = {
-            mediaPlayer.controls().setTime(target)
-            if (currentState.durationMs > 0) {
-                mediaPlayer.controls().setPosition(target.toFloat() / currentState.durationMs.toFloat())
-            }
-        }
-        
-        if (!currentState.isPlaying) {
+        pendingSeekTargetMs.set(target)
+        pendingSeekStartedAtMs = System.currentTimeMillis()
+        println("$TAG: seekTo($target) playing=${mediaPlayer.status().isPlaying}")
+        // Single setTime: the old setTime+setPosition pair issued two demux seeks
+        // (two flushes + two network reopens) per UI seek for no benefit.
+        if (!mediaPlayer.status().isPlaying) {
+            // Paused seek: libVLC only applies the new time (and renders a fresh
+            // frame) on a playing pipeline, so briefly resume around the seek.
+            // Queried fresh from libVLC — currentState can lag mid-rebuffer and a
+            // misfired pause() here would freeze playback with no auto-recovery.
             mediaPlayer.controls().play()
-            doSeek()
+            mediaPlayer.controls().setTime(target)
             mediaPlayer.controls().pause()
         } else {
-            doSeek()
+            mediaPlayer.controls().setTime(target)
         }
         currentState = currentState.copy(positionMs = target)
         onSnapshot(currentState)
     }
 
     override fun seekBy(offsetMs: Long) {
-        seekTo(mediaPlayer.status().time() + offsetMs)
+        // Accumulate from the in-flight target — status().time() still reports the
+        // pre-seek position while a seek is landing, so rapid ±10s presses would
+        // each re-seek from the stale spot instead of stacking.
+        val pending = pendingSeekTargetMs.get()
+        val base = if (pending >= 0L) pending else bestPositionMs()
+        seekTo(base + offsetMs)
     }
 
     override fun retry() {
@@ -571,6 +602,7 @@ private class VlcjPlayerController(
             return
         }
         lastLoadedUrl = cacheKey
+        pendingSeekTargetMs.set(-1L)
         try {
             println("$TAG: loadMedia url=$sourceUrl playWhenReady=$playWhenReady startPositionMs=$startPositionMs audio=${sourceAudioUrl != null}")
             // libVLC has no generic per-request header option, but the two headers addon
