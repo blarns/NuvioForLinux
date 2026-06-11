@@ -6,6 +6,17 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.13] — 2026-06-11
+
+### Changed
+- **Settings and data now live in `~/.config/nuvio/`** (one `.properties` file per
+  store), adopting the official NuvioDesktop storage layout. Everything migrates
+  automatically and verbatim on first launch — profiles, login session, addons,
+  library, watch progress, watched history, settings — and the old data is left in
+  place as a backup. If an official Linux client ever ships, it will read this data
+  as-is.
+- Clearing local account data now also removes the legacy preference data.
+
 ## [0.1.12.1] — 2026-06-11
 
 ### Fixed
