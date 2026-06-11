@@ -45,7 +45,11 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -64,6 +68,7 @@ import com.nuvio.app.core.ui.appIconPainter
 import com.nuvio.app.core.ui.nuvioTypeScale
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
+import kotlin.math.abs
 
 @Composable
 internal fun PlayerControlsShell(
@@ -455,6 +460,17 @@ private fun VolumeSlider(
     metrics: PlayerLayoutMetrics,
     modifier: Modifier = Modifier
 ) {
+    // The external fraction only refreshes with the playback snapshot poll, so following it
+    // mid-drag makes the thumb rubber-band toward stale values. Track the drag locally and
+    // hand back to the external value once it has caught up.
+    var dragFraction by remember { mutableStateOf<Float?>(null) }
+    LaunchedEffect(volumeFraction, dragFraction) {
+        val drag = dragFraction
+        if (drag != null && abs(volumeFraction - drag) < 0.02f) {
+            dragFraction = null
+        }
+    }
+    val displayedFraction = dragFraction ?: volumeFraction
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(24.dp))
@@ -466,14 +482,17 @@ private fun VolumeSlider(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Icon(
-            imageVector = if (volumeFraction <= 0f) androidx.compose.material.icons.Icons.Rounded.VolumeOff else androidx.compose.material.icons.Icons.Rounded.VolumeUp,
+            imageVector = if (displayedFraction <= 0f) androidx.compose.material.icons.Icons.Rounded.VolumeOff else androidx.compose.material.icons.Icons.Rounded.VolumeUp,
             contentDescription = "Volume",
             tint = Color.White,
             modifier = Modifier.size(20.dp)
         )
         androidx.compose.material3.Slider(
-            value = volumeFraction,
-            onValueChange = onVolumeChange,
+            value = displayedFraction,
+            onValueChange = { fraction ->
+                dragFraction = fraction
+                onVolumeChange(fraction)
+            },
             valueRange = 0f..1f,
             modifier = Modifier.height(24.dp),
             colors = androidx.compose.material3.SliderDefaults.colors(
