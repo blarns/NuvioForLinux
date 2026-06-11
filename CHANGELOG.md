@@ -13,6 +13,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   that raced controller delivery on desktop, leaving every control button a no-op.
 - **Volume slider is back.** Its change-handler was dropped from the new controls wiring,
   which hid the slider entirely.
+- **Volume slider drags smoothly.** The thumb used to rubber-band toward stale
+  poll values mid-drag.
+- **Rewinding no longer stalls playback for ~15 seconds.** While a seek was still
+  landing, the timeline snapped back to the pre-seek position (inviting repeat seeks),
+  rapid ±10s presses re-sought from the stale position instead of stacking, and every
+  seek was issued twice. Seeks now hold their target until the player catches up,
+  accumulate correctly, and flush only once.
 
 ## [0.1.12] — 2026-06-10
 
