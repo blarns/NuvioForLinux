@@ -1,10 +1,13 @@
 package com.nuvio.app.features.profiles
 
-import com.nuvio.app.desktop.DesktopPrefs
+import com.nuvio.app.core.storage.DesktopStorage
 
 internal actual object AvatarStorage {
-    actual fun loadPayload(): String? =
-        DesktopPrefs.getString("avatarStorage", "payload")
-    actual fun savePayload(payload: String) =
-        DesktopPrefs.putString("avatarStorage", "payload", payload)
+    private val store = DesktopStorage.store("nuvio_avatars")
+
+    actual fun loadPayload(): String? = store.getString("avatars")
+
+    actual fun savePayload(payload: String) {
+        store.putString("avatars", payload)
+    }
 }

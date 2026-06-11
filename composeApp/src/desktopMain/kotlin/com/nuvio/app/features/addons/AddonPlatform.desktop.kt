@@ -1,93 +1,108 @@
 package com.nuvio.app.features.addons
 
-import com.nuvio.app.desktop.DesktopPrefs
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.java.Java
-import io.ktor.client.request.get
-import io.ktor.client.request.post
-import io.ktor.client.request.request
-import io.ktor.client.request.setBody
-import io.ktor.client.request.header
-import io.ktor.client.statement.HttpResponse
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.HttpMethod
-import io.ktor.http.isSuccess
-
-private val addonHttpClient = HttpClient(Java) {
-    engine {
-        pipelining = true
-    }
-}
+import com.nuvio.app.core.storage.DesktopStorage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.time.Duration
 
 internal actual object AddonStorage {
-    actual fun loadInstalledAddonUrls(profileId: Int): List<String> {
-        val str = DesktopPrefs.getString("addons", "installed_$profileId") ?: ""
-        return if (str.isEmpty()) emptyList() else str.split(",")
-    }
+    private val store = DesktopStorage.store("nuvio_addons")
+    private val json = Json { ignoreUnknownKeys = true }
+
+    actual fun loadInstalledAddonUrls(profileId: Int): List<String> =
+        store.getString("installed_addon_urls_$profileId")
+            ?.let { payload -> runCatching { json.decodeFromString<List<String>>(payload) }.getOrNull() }
+            ?: emptyList()
 
     actual fun saveInstalledAddonUrls(profileId: Int, urls: List<String>) {
-        DesktopPrefs.putString("addons", "installed_$profileId", urls.joinToString(","))
+        store.putString("installed_addon_urls_$profileId", json.encodeToString(urls))
     }
 
-    actual fun loadAddonEnabledStates(profileId: Int): Map<String, Boolean> {
-        val str = DesktopPrefs.getString("addons", "enabled_$profileId") ?: ""
-        if (str.isEmpty()) return emptyMap()
-        return str.split(",").associate {
-            val parts = it.split("=")
-            parts[0] to parts[1].toBoolean()
-        }
-    }
+    actual fun loadAddonEnabledStates(profileId: Int): Map<String, Boolean> =
+        store.getString("addon_enabled_states_$profileId")
+            ?.let { payload -> runCatching { json.decodeFromString<Map<String, Boolean>>(payload) }.getOrNull() }
+            ?: emptyMap()
 
     actual fun saveAddonEnabledStates(profileId: Int, states: Map<String, Boolean>) {
-        val str = states.map { "${it.key}=${it.value}" }.joinToString(",")
-        DesktopPrefs.putString("addons", "enabled_$profileId", str)
+        store.putString("addon_enabled_states_$profileId", json.encodeToString(states))
     }
 }
 
+private val desktopHttpClient: HttpClient = HttpClient.newBuilder()
+    .connectTimeout(Duration.ofSeconds(30))
+    .followRedirects(HttpClient.Redirect.NORMAL)
+    .build()
+
 actual suspend fun httpGetText(url: String): String =
-    addonHttpClient.get(url).bodyAsText()
+    httpGetTextWithHeaders(url, emptyMap())
 
 actual suspend fun httpPostJson(url: String, body: String): String =
-    addonHttpClient.post(url) {
-        header("Content-Type", "application/json")
-        setBody(body)
-    }.bodyAsText()
+    httpPostJsonWithHeaders(url, body, emptyMap())
 
-actual suspend fun httpGetTextWithHeaders(url: String, headers: Map<String, String>): String =
-    addonHttpClient.get(url) {
-        headers.forEach { (k, v) -> header(k, v) }
-    }.bodyAsText()
+actual suspend fun httpGetTextWithHeaders(
+    url: String,
+    headers: Map<String, String>,
+): String =
+    httpRequestRaw("GET", url, headers, body = "").body
 
-actual suspend fun httpPostJsonWithHeaders(url: String, body: String, headers: Map<String, String>): String =
-    addonHttpClient.post(url) {
-        headers.forEach { (k, v) -> header(k, v) }
-        header("Content-Type", "application/json")
-        setBody(body)
-    }.bodyAsText()
+actual suspend fun httpPostJsonWithHeaders(
+    url: String,
+    body: String,
+    headers: Map<String, String>,
+): String =
+    httpRequestRaw(
+        method = "POST",
+        url = url,
+        headers = mapOf("Content-Type" to "application/json") + headers,
+        body = body,
+    ).body
 
 actual suspend fun httpRequestRaw(
     method: String,
     url: String,
     headers: Map<String, String>,
     body: String,
-    followRedirects: Boolean
-): RawHttpResponse {
-    val response = addonHttpClient.request(url) {
-        this.method = HttpMethod.parse(method)
-        headers.forEach { (k, v) -> header(k, v) }
-        if (body.isNotEmpty()) setBody(body)
+    followRedirects: Boolean,
+): RawHttpResponse = withContext(Dispatchers.IO) {
+    val client = if (followRedirects) {
+        desktopHttpClient
+    } else {
+        HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(30))
+            .followRedirects(HttpClient.Redirect.NEVER)
+            .build()
     }
-    
-    val responseHeaders = mutableMapOf<String, String>()
-    response.headers.entries().forEach {
-        responseHeaders[it.key] = it.value.joinToString(", ")
+    val normalizedMethod = method.trim().uppercase().ifBlank { "GET" }
+    val requestBuilder = HttpRequest.newBuilder()
+        .uri(URI(url))
+        .timeout(Duration.ofSeconds(60))
+        .method(
+            normalizedMethod,
+            if (normalizedMethod == "GET" || normalizedMethod == "HEAD") {
+                HttpRequest.BodyPublishers.noBody()
+            } else {
+                HttpRequest.BodyPublishers.ofString(body)
+            },
+        )
+
+    headers.forEach { (key, value) ->
+        if (key.isNotBlank() && value.isNotBlank()) {
+            requestBuilder.header(key, value)
+        }
     }
-    
-    return RawHttpResponse(
-        status = response.status.value,
-        statusText = response.status.description,
-        url = url,
-        body = response.bodyAsText(),
-        headers = responseHeaders
+
+    val response = client.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString())
+    RawHttpResponse(
+        status = response.statusCode(),
+        statusText = "HTTP ${response.statusCode()}",
+        url = response.uri().toString(),
+        body = response.body(),
+        headers = response.headers().map().mapValues { (_, values) -> values.joinToString(",") },
     )
 }

@@ -1,10 +1,14 @@
 package com.nuvio.app.features.watched
 
-import com.nuvio.app.desktop.DesktopPrefs
+import com.nuvio.app.core.storage.DesktopStorage
 
- actual object WatchedStorage {
+actual object WatchedStorage {
+    private val store = DesktopStorage.store("nuvio_watched")
+
     actual fun loadPayload(profileId: Int): String? =
-        DesktopPrefs.getString("watchedStorage", "payload_$profileId")
-    actual fun savePayload(profileId: Int, payload: String) =
-        DesktopPrefs.putString("watchedStorage", "payload_$profileId", payload)
+        store.getString("watched_$profileId")
+
+    actual fun savePayload(profileId: Int, payload: String) {
+        store.putString("watched_$profileId", payload)
+    }
 }

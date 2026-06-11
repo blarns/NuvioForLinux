@@ -1,12 +1,20 @@
 package com.nuvio.app.features.profiles
 
-import com.nuvio.app.desktop.DesktopPrefs
+import com.nuvio.app.core.storage.DesktopStorage
 
 internal actual object ProfilePinCacheStorage {
+    private val store = DesktopStorage.store("nuvio_profile_pin_cache")
+
     actual fun loadPayload(profileIndex: Int): String? =
-        DesktopPrefs.getString("profilePinCache", "payload_$profileIndex")
-    actual fun savePayload(profileIndex: Int, payload: String) =
-        DesktopPrefs.putString("profilePinCache", "payload_$profileIndex", payload)
-    actual fun removePayload(profileIndex: Int) =
-        DesktopPrefs.putString("profilePinCache", "payload_$profileIndex", "")
+        store.getString(key(profileIndex))
+
+    actual fun savePayload(profileIndex: Int, payload: String) {
+        store.putString(key(profileIndex), payload)
+    }
+
+    actual fun removePayload(profileIndex: Int) {
+        store.remove(key(profileIndex))
+    }
+
+    private fun key(profileIndex: Int): String = "profile_pin_$profileIndex"
 }

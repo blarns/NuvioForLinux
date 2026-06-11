@@ -1,10 +1,15 @@
 package com.nuvio.app.features.details
 
-import com.nuvio.app.desktop.DesktopPrefs
+import com.nuvio.app.core.storage.DesktopStorage
+import com.nuvio.app.core.storage.ProfileScopedKey
 
 internal actual object MetaScreenSettingsStorage {
+    private val store = DesktopStorage.store("nuvio_meta_screen_settings")
+
     actual fun loadPayload(): String? =
-        DesktopPrefs.getString("metaScreenSettings", "payload")
-    actual fun savePayload(payload: String) =
-        DesktopPrefs.putString("metaScreenSettings", "payload", payload)
+        store.getString(ProfileScopedKey.of("meta_screen_settings"))
+
+    actual fun savePayload(payload: String) {
+        store.putString(ProfileScopedKey.of("meta_screen_settings"), payload)
+    }
 }

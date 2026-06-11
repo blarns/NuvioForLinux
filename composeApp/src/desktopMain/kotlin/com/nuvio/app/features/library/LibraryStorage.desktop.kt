@@ -1,10 +1,14 @@
 package com.nuvio.app.features.library
 
-import com.nuvio.app.desktop.DesktopPrefs
+import com.nuvio.app.core.storage.DesktopStorage
 
 internal actual object LibraryStorage {
+    private val store = DesktopStorage.store("nuvio_library")
+
     actual fun loadPayload(profileId: Int): String? =
-        DesktopPrefs.getString("libraryStorage", "payload_$profileId")
-    actual fun savePayload(profileId: Int, payload: String) =
-        DesktopPrefs.putString("libraryStorage", "payload_$profileId", payload)
+        store.getString("library_$profileId")
+
+    actual fun savePayload(profileId: Int, payload: String) {
+        store.putString("library_$profileId", payload)
+    }
 }

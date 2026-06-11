@@ -1,75 +1,85 @@
 package com.nuvio.app.features.settings
 
+import com.nuvio.app.core.storage.DesktopStorage
 import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.core.sync.decodeSyncBoolean
 import com.nuvio.app.core.sync.decodeSyncString
 import com.nuvio.app.core.sync.encodeSyncBoolean
 import com.nuvio.app.core.sync.encodeSyncString
-import com.nuvio.app.desktop.DesktopPrefs
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-
-private const val NODE = "themeSettings"
-private const val selectedThemeKey = "selected_theme"
-private const val amoledEnabledKey = "amoled_enabled"
-private const val liquidGlassNativeTabBarEnabledKey = "liquid_glass_native_tab_bar_enabled"
-private const val selectedAppLanguageKey = "selected_app_language"
-
-// theme/amoled/liquidGlass are per-profile; app language is global (matches Android).
-private val profileScopedSyncKeys = listOf(selectedThemeKey, amoledEnabledKey, liquidGlassNativeTabBarEnabledKey)
-private val globalSyncKeys = listOf(selectedAppLanguageKey)
+import java.util.Locale
 
 internal actual object ThemeSettingsStorage {
-    actual fun loadSelectedTheme(): String? =
-        DesktopPrefs.getString(NODE, ProfileScopedKey.of(selectedThemeKey))
+    private const val selectedThemeKey = "selected_theme"
+    private const val amoledEnabledKey = "amoled_enabled"
+    private const val liquidGlassNativeTabBarEnabledKey = "liquid_glass_native_tab_bar_enabled"
+    private const val desktopNavigationLayoutKey = "desktop_navigation_layout"
+    private const val selectedAppLanguageKey = "selected_app_language"
+    private val profileScopedSyncKeys = listOf(
+        selectedThemeKey,
+        amoledEnabledKey,
+        liquidGlassNativeTabBarEnabledKey,
+        desktopNavigationLayoutKey,
+    )
+    private val store = DesktopStorage.store("nuvio_theme_settings")
 
-    actual fun saveSelectedTheme(themeName: String) =
-        DesktopPrefs.putString(NODE, ProfileScopedKey.of(selectedThemeKey), themeName)
+    actual fun loadSelectedTheme(): String? =
+        store.getString(ProfileScopedKey.of(selectedThemeKey))
+
+    actual fun saveSelectedTheme(themeName: String) {
+        store.putString(ProfileScopedKey.of(selectedThemeKey), themeName)
+    }
 
     actual fun loadAmoledEnabled(): Boolean? =
-        DesktopPrefs.getBoolean(NODE, ProfileScopedKey.of(amoledEnabledKey))
+        store.getBoolean(ProfileScopedKey.of(amoledEnabledKey))
 
-    actual fun saveAmoledEnabled(enabled: Boolean) =
-        DesktopPrefs.putBoolean(NODE, ProfileScopedKey.of(amoledEnabledKey), enabled)
+    actual fun saveAmoledEnabled(enabled: Boolean) {
+        store.putBoolean(ProfileScopedKey.of(amoledEnabledKey), enabled)
+    }
 
     actual fun loadLiquidGlassNativeTabBarEnabled(): Boolean? =
-        DesktopPrefs.getBoolean(NODE, ProfileScopedKey.of(liquidGlassNativeTabBarEnabledKey))
+        store.getBoolean(ProfileScopedKey.of(liquidGlassNativeTabBarEnabledKey))
 
-    actual fun saveLiquidGlassNativeTabBarEnabled(enabled: Boolean) =
-        DesktopPrefs.putBoolean(NODE, ProfileScopedKey.of(liquidGlassNativeTabBarEnabledKey), enabled)
+    actual fun saveLiquidGlassNativeTabBarEnabled(enabled: Boolean) {
+        store.putBoolean(ProfileScopedKey.of(liquidGlassNativeTabBarEnabledKey), enabled)
+    }
+
+    // Fork: no desktop-navigation-layout expect in NuvioMobile's commonMain — kept
+    // non-actual so this file stays otherwise identical to NuvioDesktop's.
+    fun loadDesktopNavigationLayout(): String? =
+        store.getString(ProfileScopedKey.of(desktopNavigationLayoutKey))
+
+    fun saveDesktopNavigationLayout(layoutName: String) {
+        store.putString(ProfileScopedKey.of(desktopNavigationLayoutKey), layoutName)
+    }
 
     actual fun loadSelectedAppLanguage(): String? =
-        DesktopPrefs.getString(NODE, selectedAppLanguageKey)
+        store.getString(selectedAppLanguageKey)
+            ?: Locale.getDefault().toLanguageTag().takeIf { it.isNotBlank() }
 
-    actual fun saveSelectedAppLanguage(languageCode: String) =
-        DesktopPrefs.putString(NODE, selectedAppLanguageKey, languageCode)
+    actual fun saveSelectedAppLanguage(languageCode: String) {
+        store.putString(selectedAppLanguageKey, languageCode)
+    }
 
-    // Compose Multiplatform resolves bundled string resources from the JVM default locale,
-    // so this takes effect for newly composed strings (fully on next launch). Applied at
-    // startup from Main.kt and after a sync pull.
     actual fun applySelectedAppLanguage(languageCode: String) {
-        val normalized = languageCode.trim().takeIf { it.isNotBlank() } ?: AppLanguage.ENGLISH.code
-        runCatching {
-            java.util.Locale.setDefault(java.util.Locale.forLanguageTag(normalized))
-        }
+        Locale.setDefault(Locale.forLanguageTag(languageCode))
     }
 
     actual fun exportToSyncPayload(): JsonObject = buildJsonObject {
         loadSelectedTheme()?.let { put(selectedThemeKey, encodeSyncString(it)) }
         loadAmoledEnabled()?.let { put(amoledEnabledKey, encodeSyncBoolean(it)) }
         loadLiquidGlassNativeTabBarEnabled()?.let { put(liquidGlassNativeTabBarEnabledKey, encodeSyncBoolean(it)) }
-        loadSelectedAppLanguage()?.let { put(selectedAppLanguageKey, encodeSyncString(it)) }
+        loadDesktopNavigationLayout()?.let { put(desktopNavigationLayoutKey, encodeSyncString(it)) }
     }
 
     actual fun replaceFromSyncPayload(payload: JsonObject) {
-        profileScopedSyncKeys.forEach { DesktopPrefs.node(NODE).remove(ProfileScopedKey.of(it)) }
-        globalSyncKeys.forEach { DesktopPrefs.node(NODE).remove(it) }
-
+        store.removeAll(profileScopedSyncKeys.map(ProfileScopedKey::of))
         payload.decodeSyncString(selectedThemeKey)?.let(::saveSelectedTheme)
         payload.decodeSyncBoolean(amoledEnabledKey)?.let(::saveAmoledEnabled)
         payload.decodeSyncBoolean(liquidGlassNativeTabBarEnabledKey)?.let(::saveLiquidGlassNativeTabBarEnabled)
-        payload.decodeSyncString(selectedAppLanguageKey)?.let(::saveSelectedAppLanguage)
+        payload.decodeSyncString(desktopNavigationLayoutKey)?.let(::saveDesktopNavigationLayout)
         applySelectedAppLanguage(loadSelectedAppLanguage() ?: AppLanguage.ENGLISH.code)
     }
 }

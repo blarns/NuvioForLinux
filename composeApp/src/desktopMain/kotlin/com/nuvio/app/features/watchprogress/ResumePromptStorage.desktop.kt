@@ -1,16 +1,21 @@
 package com.nuvio.app.features.watchprogress
 
-import com.nuvio.app.desktop.DesktopPrefs
+import com.nuvio.app.core.storage.DesktopStorage
 
 internal actual object ResumePromptStorage {
+    private val store = DesktopStorage.store("nuvio_resume_prompt")
+
     actual fun loadWasInPlayer(): Boolean =
-        DesktopPrefs.getBoolean("resumePrompt", "wasInPlayer") ?: false
-    actual fun saveWasInPlayer(value: Boolean) =
-        DesktopPrefs.putBoolean("resumePrompt", "wasInPlayer", value)
+        store.getBoolean("was_in_player") ?: false
+
+    actual fun saveWasInPlayer(value: Boolean) {
+        store.putBoolean("was_in_player", value)
+    }
+
     actual fun loadLastPlayerVideoId(): String? =
-        DesktopPrefs.getString("resumePrompt", "lastPlayerVideoId")
+        store.getString("last_player_video_id")
+
     actual fun saveLastPlayerVideoId(videoId: String?) {
-        if (videoId != null) DesktopPrefs.putString("resumePrompt", "lastPlayerVideoId", videoId)
-        else DesktopPrefs.putString("resumePrompt", "lastPlayerVideoId", "")
+        store.putString("last_player_video_id", videoId?.takeIf { it.isNotBlank() })
     }
 }

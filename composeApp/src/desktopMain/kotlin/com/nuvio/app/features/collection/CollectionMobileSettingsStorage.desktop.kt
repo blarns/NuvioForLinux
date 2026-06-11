@@ -1,10 +1,15 @@
 package com.nuvio.app.features.collection
 
-import com.nuvio.app.desktop.DesktopPrefs
+import com.nuvio.app.core.storage.DesktopStorage
+import com.nuvio.app.core.storage.ProfileScopedKey
 
 internal actual object CollectionMobileSettingsStorage {
+    private val store = DesktopStorage.store("nuvio_collection_mobile_settings")
+
     actual fun loadPayload(): String? =
-        DesktopPrefs.getString("collectionMobileSettings", "payload")
-    actual fun savePayload(payload: String) =
-        DesktopPrefs.putString("collectionMobileSettings", "payload", payload)
+        store.getString(ProfileScopedKey.of("collection_mobile_settings"))
+
+    actual fun savePayload(payload: String) {
+        store.putString(ProfileScopedKey.of("collection_mobile_settings"), payload)
+    }
 }

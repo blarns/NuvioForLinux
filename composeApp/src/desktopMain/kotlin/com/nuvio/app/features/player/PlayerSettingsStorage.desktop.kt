@@ -1,5 +1,6 @@
 package com.nuvio.app.features.player
 
+import com.nuvio.app.core.storage.DesktopStorage
 import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.core.sync.decodeSyncBoolean
 import com.nuvio.app.core.sync.decodeSyncFloat
@@ -11,245 +12,272 @@ import com.nuvio.app.core.sync.encodeSyncFloat
 import com.nuvio.app.core.sync.encodeSyncInt
 import com.nuvio.app.core.sync.encodeSyncString
 import com.nuvio.app.core.sync.encodeSyncStringSet
-import com.nuvio.app.desktop.DesktopPrefs
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-// Player settings are persisted via DesktopPrefs with profile-scoped keys, mirroring the Android
-// implementation (same key names + types so cloud sync stays compatible). Two settings are
-// machine-specific and intentionally kept on a separate, non-profile-scoped, non-synced node:
-// hwAccelEnabled (GPU/driver) and audioOutput (VLC aout module — pulse/alsa/jack).
-private const val NODE = "playerSettings"
-
-private const val showLoadingOverlayKey = "show_loading_overlay"
-private const val resizeModeKey = "resize_mode"
-private const val holdToSpeedEnabledKey = "hold_to_speed_enabled"
-private const val holdToSpeedValueKey = "hold_to_speed_value"
-private const val externalPlayerEnabledKey = "external_player_enabled"
-private const val externalPlayerForwardSubtitlesKey = "external_player_forward_subtitles"
-private const val externalPlayerIdKey = "external_player_id"
-private const val preferredAudioLanguageKey = "preferred_audio_language"
-private const val secondaryPreferredAudioLanguageKey = "secondary_preferred_audio_language"
-private const val preferredSubtitleLanguageKey = "preferred_subtitle_language"
-private const val secondaryPreferredSubtitleLanguageKey = "secondary_preferred_subtitle_language"
-private const val subtitleTextColorKey = "subtitle_text_color"
-private const val subtitleBackgroundColorKey = "subtitle_background_color"
-private const val subtitleOutlineColorKey = "subtitle_outline_color"
-private const val subtitleOutlineEnabledKey = "subtitle_outline_enabled"
-private const val subtitleOutlineWidthKey = "subtitle_outline_width"
-private const val subtitleBoldKey = "subtitle_bold"
-private const val subtitleFontSizeSpKey = "subtitle_font_size_sp"
-private const val subtitleBottomOffsetKey = "subtitle_bottom_offset"
-private const val subtitleUseForcedSubtitlesKey = "subtitle_use_forced_subtitles"
-private const val subtitleShowOnlyPreferredLanguagesKey = "subtitle_show_only_preferred_languages"
-private const val addonSubtitleStartupModeKey = "addon_subtitle_startup_mode"
-private const val streamReuseLastLinkEnabledKey = "stream_reuse_last_link_enabled"
-private const val streamReuseLastLinkCacheHoursKey = "stream_reuse_last_link_cache_hours"
-private const val decoderPriorityKey = "decoder_priority"
-private const val mapDV7ToHevcKey = "map_dv7_to_hevc"
-private const val tunnelingEnabledKey = "tunneling_enabled"
-private const val streamAutoPlayModeKey = "stream_auto_play_mode"
-private const val streamAutoPlaySourceKey = "stream_auto_play_source"
-private const val streamAutoPlaySelectedAddonsKey = "stream_auto_play_selected_addons"
-private const val streamAutoPlaySelectedPluginsKey = "stream_auto_play_selected_plugins"
-private const val streamAutoPlayRegexKey = "stream_auto_play_regex"
-private const val streamAutoPlayTimeoutSecondsKey = "stream_auto_play_timeout_seconds"
-private const val skipIntroEnabledKey = "skip_intro_enabled"
-private const val animeSkipEnabledKey = "animeskip_enabled"
-private const val animeSkipClientIdKey = "animeskip_client_id"
-private const val introDbApiKeyKey = "introdb_api_key"
-private const val introSubmitEnabledKey = "intro_submit_enabled"
-private const val streamAutoPlayNextEpisodeEnabledKey = "stream_auto_play_next_episode_enabled"
-private const val streamAutoPlayPreferBingeGroupKey = "stream_auto_play_prefer_binge_group"
-private const val streamAutoPlayReuseBingeGroupKey = "stream_auto_play_reuse_binge_group"
-private const val nextEpisodeThresholdModeKey = "next_episode_threshold_mode"
-private const val nextEpisodeThresholdPercentKey = "next_episode_threshold_percent_v2"
-private const val nextEpisodeThresholdMinutesBeforeEndKey = "next_episode_threshold_minutes_before_end_v2"
-private const val useLibassKey = "use_libass"
-private const val libassRenderTypeKey = "libass_render_type"
-private const val iosVideoOutputPresetKey = "ios_video_output_preset"
-private const val iosToneMappingModeKey = "ios_tone_mapping_mode"
-private const val iosTargetPrimariesKey = "ios_target_primaries"
-private const val iosTargetTransferKey = "ios_target_transfer"
-private const val iosHardwareDecoderModeKey = "ios_hardware_decoder_mode"
-private const val iosExtendedDynamicRangeEnabledKey = "ios_extended_dynamic_range_enabled"
-private const val iosTargetColorspaceHintEnabledKey = "ios_target_colorspace_hint_enabled"
-private const val iosHdrComputePeakEnabledKey = "ios_hdr_compute_peak_enabled"
-private const val iosDebandEnabledKey = "ios_deband_enabled"
-private const val iosInterpolationEnabledKey = "ios_interpolation_enabled"
-private const val iosBrightnessKey = "ios_brightness"
-private const val iosContrastKey = "ios_contrast"
-private const val iosSaturationKey = "ios_saturation"
-private const val iosGammaKey = "ios_gamma"
-
-private val syncKeys = listOf(
-    showLoadingOverlayKey, resizeModeKey, holdToSpeedEnabledKey, holdToSpeedValueKey,
-    externalPlayerEnabledKey, externalPlayerForwardSubtitlesKey, externalPlayerIdKey,
-    preferredAudioLanguageKey, secondaryPreferredAudioLanguageKey, preferredSubtitleLanguageKey,
-    secondaryPreferredSubtitleLanguageKey, subtitleTextColorKey, subtitleBackgroundColorKey,
-    subtitleOutlineColorKey, subtitleOutlineEnabledKey, subtitleOutlineWidthKey, subtitleBoldKey,
-    subtitleFontSizeSpKey, subtitleBottomOffsetKey, subtitleUseForcedSubtitlesKey,
-    subtitleShowOnlyPreferredLanguagesKey, addonSubtitleStartupModeKey, streamReuseLastLinkEnabledKey,
-    streamReuseLastLinkCacheHoursKey, decoderPriorityKey, mapDV7ToHevcKey, tunnelingEnabledKey,
-    streamAutoPlayModeKey, streamAutoPlaySourceKey, streamAutoPlaySelectedAddonsKey,
-    streamAutoPlaySelectedPluginsKey, streamAutoPlayRegexKey, streamAutoPlayTimeoutSecondsKey,
-    skipIntroEnabledKey, animeSkipEnabledKey, animeSkipClientIdKey, streamAutoPlayNextEpisodeEnabledKey,
-    streamAutoPlayPreferBingeGroupKey, streamAutoPlayReuseBingeGroupKey, nextEpisodeThresholdModeKey,
-    nextEpisodeThresholdPercentKey, nextEpisodeThresholdMinutesBeforeEndKey, useLibassKey,
-    libassRenderTypeKey, iosVideoOutputPresetKey, iosToneMappingModeKey, iosTargetPrimariesKey,
-    iosTargetTransferKey, iosHardwareDecoderModeKey, iosExtendedDynamicRangeEnabledKey,
-    iosTargetColorspaceHintEnabledKey, iosHdrComputePeakEnabledKey, iosDebandEnabledKey,
-    iosInterpolationEnabledKey, iosBrightnessKey, iosContrastKey, iosSaturationKey, iosGammaKey,
-)
-
-// DesktopPrefs getters already return null when absent, so no contains()/default boilerplate needed.
-private fun loadBool(key: String): Boolean? = DesktopPrefs.getBoolean(NODE, ProfileScopedKey.of(key))
-private fun saveBool(key: String, value: Boolean) = DesktopPrefs.putBoolean(NODE, ProfileScopedKey.of(key), value)
-private fun loadStr(key: String): String? = DesktopPrefs.getString(NODE, ProfileScopedKey.of(key))
-private fun saveStr(key: String, value: String) = DesktopPrefs.putString(NODE, ProfileScopedKey.of(key), value)
-private fun loadIntVal(key: String): Int? = DesktopPrefs.getInt(NODE, ProfileScopedKey.of(key))
-private fun saveIntVal(key: String, value: Int) = DesktopPrefs.putInt(NODE, ProfileScopedKey.of(key), value)
-private fun loadFloatVal(key: String): Float? = DesktopPrefs.getFloat(NODE, ProfileScopedKey.of(key))
-private fun saveFloatVal(key: String, value: Float) = DesktopPrefs.putFloat(NODE, ProfileScopedKey.of(key), value)
-private fun loadSet(key: String): Set<String>? = DesktopPrefs.getStringSet(NODE, ProfileScopedKey.of(key))
-private fun saveSet(key: String, value: Set<String>) = DesktopPrefs.putStringSet(NODE, ProfileScopedKey.of(key), value)
-private fun removeKey(key: String) = DesktopPrefs.node(NODE).remove(ProfileScopedKey.of(key))
-
 internal actual object PlayerSettingsStorage {
-    // Machine-specific, non-profile-scoped, excluded from cloud sync (Android stubs these).
-    private val machinePrefs = java.util.prefs.Preferences.userRoot().node("nuvio/player")
-    actual fun loadHwAccelEnabled(): Boolean? = machinePrefs.get("hwAccelEnabled", null)?.toBooleanStrictOrNull()
-    actual fun saveHwAccelEnabled(enabled: Boolean) { machinePrefs.put("hwAccelEnabled", enabled.toString()) }
-    actual fun loadAudioOutput(): String? = machinePrefs.get("audioOutput", null)
-    actual fun saveAudioOutput(module: String) { machinePrefs.put("audioOutput", module) }
+    private const val showLoadingOverlayKey = "show_loading_overlay"
+    private const val resizeModeKey = "resize_mode"
+    private const val holdToSpeedEnabledKey = "hold_to_speed_enabled"
+    private const val holdToSpeedValueKey = "hold_to_speed_value"
+    private const val externalPlayerEnabledKey = "external_player_enabled"
+    private const val externalPlayerForwardSubtitlesKey = "external_player_forward_subtitles"
+    private const val externalPlayerIdKey = "external_player_id"
+    private const val preferredAudioLanguageKey = "preferred_audio_language"
+    private const val secondaryPreferredAudioLanguageKey = "secondary_preferred_audio_language"
+    private const val preferredSubtitleLanguageKey = "preferred_subtitle_language"
+    private const val secondaryPreferredSubtitleLanguageKey = "secondary_preferred_subtitle_language"
+    private const val subtitleTextColorKey = "subtitle_text_color"
+    private const val subtitleBackgroundColorKey = "subtitle_background_color"
+    private const val subtitleOutlineColorKey = "subtitle_outline_color"
+    private const val subtitleOutlineEnabledKey = "subtitle_outline_enabled"
+    private const val subtitleOutlineWidthKey = "subtitle_outline_width"
+    private const val subtitleBoldKey = "subtitle_bold"
+    private const val subtitleFontSizeSpKey = "subtitle_font_size_sp"
+    private const val subtitleBottomOffsetKey = "subtitle_bottom_offset"
+    private const val subtitleUseForcedSubtitlesKey = "subtitle_use_forced_subtitles"
+    private const val subtitleShowOnlyPreferredLanguagesKey = "subtitle_show_only_preferred_languages"
+    private const val addonSubtitleStartupModeKey = "addon_subtitle_startup_mode"
+    private const val streamReuseLastLinkEnabledKey = "stream_reuse_last_link_enabled"
+    private const val streamReuseLastLinkCacheHoursKey = "stream_reuse_last_link_cache_hours"
+    private const val decoderPriorityKey = "decoder_priority"
+    private const val mapDV7ToHevcKey = "map_dv7_to_hevc"
+    private const val tunnelingEnabledKey = "tunneling_enabled"
+    private const val streamAutoPlayModeKey = "stream_auto_play_mode"
+    private const val streamAutoPlaySourceKey = "stream_auto_play_source"
+    private const val streamAutoPlaySelectedAddonsKey = "stream_auto_play_selected_addons"
+    private const val streamAutoPlaySelectedPluginsKey = "stream_auto_play_selected_plugins"
+    private const val streamAutoPlayRegexKey = "stream_auto_play_regex"
+    private const val streamAutoPlayTimeoutSecondsKey = "stream_auto_play_timeout_seconds"
+    private const val skipIntroEnabledKey = "skip_intro_enabled"
+    private const val animeSkipEnabledKey = "animeskip_enabled"
+    private const val animeSkipClientIdKey = "animeskip_client_id"
+    private const val introDbApiKeyKey = "introdb_api_key"
+    private const val introSubmitEnabledKey = "intro_submit_enabled"
+    private const val streamAutoPlayNextEpisodeEnabledKey = "stream_auto_play_next_episode_enabled"
+    private const val streamAutoPlayPreferBingeGroupKey = "stream_auto_play_prefer_binge_group"
+    private const val streamAutoPlayReuseBingeGroupKey = "stream_auto_play_reuse_binge_group"
+    private const val nextEpisodeThresholdModeKey = "next_episode_threshold_mode"
+    private const val nextEpisodeThresholdPercentKey = "next_episode_threshold_percent_v2"
+    private const val nextEpisodeThresholdMinutesBeforeEndKey = "next_episode_threshold_minutes_before_end_v2"
+    private const val useLibassKey = "use_libass"
+    private const val libassRenderTypeKey = "libass_render_type"
+    private const val iosVideoOutputPresetKey = "ios_video_output_preset"
+    private const val iosToneMappingModeKey = "ios_tone_mapping_mode"
+    private const val iosTargetPrimariesKey = "ios_target_primaries"
+    private const val iosTargetTransferKey = "ios_target_transfer"
+    private const val iosHardwareDecoderModeKey = "ios_hardware_decoder_mode"
+    private const val iosAudioOutputModeKey = "ios_audio_output_mode"
+    private const val iosExtendedDynamicRangeEnabledKey = "ios_extended_dynamic_range_enabled"
+    private const val iosTargetColorspaceHintEnabledKey = "ios_target_colorspace_hint_enabled"
+    private const val iosHdrComputePeakEnabledKey = "ios_hdr_compute_peak_enabled"
+    private const val iosDebandEnabledKey = "ios_deband_enabled"
+    private const val iosInterpolationEnabledKey = "ios_interpolation_enabled"
+    private const val iosBrightnessKey = "ios_brightness"
+    private const val iosContrastKey = "ios_contrast"
+    private const val iosSaturationKey = "ios_saturation"
+    private const val iosGammaKey = "ios_gamma"
+    private val syncKeys = listOf(
+        showLoadingOverlayKey,
+        resizeModeKey,
+        holdToSpeedEnabledKey,
+        holdToSpeedValueKey,
+        externalPlayerEnabledKey,
+        externalPlayerForwardSubtitlesKey,
+        externalPlayerIdKey,
+        preferredAudioLanguageKey,
+        secondaryPreferredAudioLanguageKey,
+        preferredSubtitleLanguageKey,
+        secondaryPreferredSubtitleLanguageKey,
+        subtitleTextColorKey,
+        subtitleBackgroundColorKey,
+        subtitleOutlineColorKey,
+        subtitleOutlineEnabledKey,
+        subtitleOutlineWidthKey,
+        subtitleBoldKey,
+        subtitleFontSizeSpKey,
+        subtitleBottomOffsetKey,
+        subtitleUseForcedSubtitlesKey,
+        subtitleShowOnlyPreferredLanguagesKey,
+        addonSubtitleStartupModeKey,
+        streamReuseLastLinkEnabledKey,
+        streamReuseLastLinkCacheHoursKey,
+        decoderPriorityKey,
+        mapDV7ToHevcKey,
+        tunnelingEnabledKey,
+        streamAutoPlayModeKey,
+        streamAutoPlaySourceKey,
+        streamAutoPlaySelectedAddonsKey,
+        streamAutoPlaySelectedPluginsKey,
+        streamAutoPlayRegexKey,
+        streamAutoPlayTimeoutSecondsKey,
+        skipIntroEnabledKey,
+        animeSkipEnabledKey,
+        animeSkipClientIdKey,
+        streamAutoPlayNextEpisodeEnabledKey,
+        streamAutoPlayPreferBingeGroupKey,
+        streamAutoPlayReuseBingeGroupKey,
+        nextEpisodeThresholdModeKey,
+        nextEpisodeThresholdPercentKey,
+        nextEpisodeThresholdMinutesBeforeEndKey,
+        useLibassKey,
+        libassRenderTypeKey,
+        iosVideoOutputPresetKey,
+        iosToneMappingModeKey,
+        iosTargetPrimariesKey,
+        iosTargetTransferKey,
+        iosHardwareDecoderModeKey,
+        iosAudioOutputModeKey,
+        iosExtendedDynamicRangeEnabledKey,
+        iosTargetColorspaceHintEnabledKey,
+        iosHdrComputePeakEnabledKey,
+        iosDebandEnabledKey,
+        iosInterpolationEnabledKey,
+        iosBrightnessKey,
+        iosContrastKey,
+        iosSaturationKey,
+        iosGammaKey,
+    )
+    private val store = DesktopStorage.store("nuvio_player_settings")
 
-    actual fun loadShowLoadingOverlay(): Boolean? = loadBool(showLoadingOverlayKey)
-    actual fun saveShowLoadingOverlay(enabled: Boolean) = saveBool(showLoadingOverlayKey, enabled)
-    actual fun loadResizeMode(): String? = loadStr(resizeModeKey)
-    actual fun saveResizeMode(mode: String) = saveStr(resizeModeKey, mode)
-    actual fun loadHoldToSpeedEnabled(): Boolean? = loadBool(holdToSpeedEnabledKey)
-    actual fun saveHoldToSpeedEnabled(enabled: Boolean) = saveBool(holdToSpeedEnabledKey, enabled)
-    actual fun loadHoldToSpeedValue(): Float? = loadFloatVal(holdToSpeedValueKey)
-    actual fun saveHoldToSpeedValue(speed: Float) = saveFloatVal(holdToSpeedValueKey, speed)
-    actual fun loadExternalPlayerEnabled(): Boolean? = loadBool(externalPlayerEnabledKey)
-    actual fun saveExternalPlayerEnabled(enabled: Boolean) = saveBool(externalPlayerEnabledKey, enabled)
-    actual fun loadExternalPlayerForwardSubtitles(): Boolean? = loadBool(externalPlayerForwardSubtitlesKey)
-    actual fun saveExternalPlayerForwardSubtitles(enabled: Boolean) = saveBool(externalPlayerForwardSubtitlesKey, enabled)
-    actual fun loadExternalPlayerId(): String? = loadStr(externalPlayerIdKey)
-    actual fun saveExternalPlayerId(playerId: String?) {
-        if (playerId.isNullOrBlank()) removeKey(externalPlayerIdKey) else saveStr(externalPlayerIdKey, playerId)
-    }
-    actual fun loadPreferredAudioLanguage(): String? = loadStr(preferredAudioLanguageKey)
-    actual fun savePreferredAudioLanguage(language: String) = saveStr(preferredAudioLanguageKey, language)
-    actual fun loadSecondaryPreferredAudioLanguage(): String? = loadStr(secondaryPreferredAudioLanguageKey)
-    actual fun saveSecondaryPreferredAudioLanguage(language: String?) {
-        if (language.isNullOrBlank()) removeKey(secondaryPreferredAudioLanguageKey) else saveStr(secondaryPreferredAudioLanguageKey, language)
-    }
-    actual fun loadPreferredSubtitleLanguage(): String? = loadStr(preferredSubtitleLanguageKey)
-    actual fun savePreferredSubtitleLanguage(language: String) = saveStr(preferredSubtitleLanguageKey, language)
-    actual fun loadSecondaryPreferredSubtitleLanguage(): String? = loadStr(secondaryPreferredSubtitleLanguageKey)
-    actual fun saveSecondaryPreferredSubtitleLanguage(language: String?) {
-        if (language.isNullOrBlank()) removeKey(secondaryPreferredSubtitleLanguageKey) else saveStr(secondaryPreferredSubtitleLanguageKey, language)
-    }
-    actual fun loadSubtitleTextColor(): String? = loadStr(subtitleTextColorKey)
-    actual fun saveSubtitleTextColor(colorHex: String) = saveStr(subtitleTextColorKey, colorHex)
-    actual fun loadSubtitleBackgroundColor(): String? = loadStr(subtitleBackgroundColorKey)
-    actual fun saveSubtitleBackgroundColor(colorHex: String) = saveStr(subtitleBackgroundColorKey, colorHex)
-    actual fun loadSubtitleOutlineColor(): String? = loadStr(subtitleOutlineColorKey)
-    actual fun saveSubtitleOutlineColor(colorHex: String) = saveStr(subtitleOutlineColorKey, colorHex)
-    actual fun loadSubtitleOutlineEnabled(): Boolean? = loadBool(subtitleOutlineEnabledKey)
-    actual fun saveSubtitleOutlineEnabled(enabled: Boolean) = saveBool(subtitleOutlineEnabledKey, enabled)
-    actual fun loadSubtitleOutlineWidth(): Int? = loadIntVal(subtitleOutlineWidthKey)
-    actual fun saveSubtitleOutlineWidth(width: Int) = saveIntVal(subtitleOutlineWidthKey, width)
-    actual fun loadSubtitleBold(): Boolean? = loadBool(subtitleBoldKey)
-    actual fun saveSubtitleBold(enabled: Boolean) = saveBool(subtitleBoldKey, enabled)
-    actual fun loadSubtitleFontSizeSp(): Int? = loadIntVal(subtitleFontSizeSpKey)
-    actual fun saveSubtitleFontSizeSp(fontSizeSp: Int) = saveIntVal(subtitleFontSizeSpKey, fontSizeSp)
-    actual fun loadSubtitleBottomOffset(): Int? = loadIntVal(subtitleBottomOffsetKey)
-    actual fun saveSubtitleBottomOffset(bottomOffset: Int) = saveIntVal(subtitleBottomOffsetKey, bottomOffset)
-    actual fun loadSubtitleUseForcedSubtitles(): Boolean? = loadBool(subtitleUseForcedSubtitlesKey)
-    actual fun saveSubtitleUseForcedSubtitles(enabled: Boolean) = saveBool(subtitleUseForcedSubtitlesKey, enabled)
-    actual fun loadSubtitleShowOnlyPreferredLanguages(): Boolean? = loadBool(subtitleShowOnlyPreferredLanguagesKey)
-    actual fun saveSubtitleShowOnlyPreferredLanguages(enabled: Boolean) = saveBool(subtitleShowOnlyPreferredLanguagesKey, enabled)
-    actual fun loadAddonSubtitleStartupMode(): String? = loadStr(addonSubtitleStartupModeKey)
-    actual fun saveAddonSubtitleStartupMode(mode: String) = saveStr(addonSubtitleStartupModeKey, mode)
-    actual fun loadStreamReuseLastLinkEnabled(): Boolean? = loadBool(streamReuseLastLinkEnabledKey)
-    actual fun saveStreamReuseLastLinkEnabled(enabled: Boolean) = saveBool(streamReuseLastLinkEnabledKey, enabled)
-    actual fun loadStreamReuseLastLinkCacheHours(): Int? = loadIntVal(streamReuseLastLinkCacheHoursKey)
-    actual fun saveStreamReuseLastLinkCacheHours(hours: Int) = saveIntVal(streamReuseLastLinkCacheHoursKey, hours)
-    actual fun loadDecoderPriority(): Int? = loadIntVal(decoderPriorityKey)
-    actual fun saveDecoderPriority(priority: Int) = saveIntVal(decoderPriorityKey, priority)
-    actual fun loadMapDV7ToHevc(): Boolean? = loadBool(mapDV7ToHevcKey)
-    actual fun saveMapDV7ToHevc(enabled: Boolean) = saveBool(mapDV7ToHevcKey, enabled)
-    actual fun loadTunnelingEnabled(): Boolean? = loadBool(tunnelingEnabledKey)
-    actual fun saveTunnelingEnabled(enabled: Boolean) = saveBool(tunnelingEnabledKey, enabled)
-    actual fun loadStreamAutoPlayMode(): String? = loadStr(streamAutoPlayModeKey)
-    actual fun saveStreamAutoPlayMode(mode: String) = saveStr(streamAutoPlayModeKey, mode)
-    actual fun loadStreamAutoPlaySource(): String? = loadStr(streamAutoPlaySourceKey)
-    actual fun saveStreamAutoPlaySource(source: String) = saveStr(streamAutoPlaySourceKey, source)
-    actual fun loadStreamAutoPlaySelectedAddons(): Set<String>? = loadSet(streamAutoPlaySelectedAddonsKey)
-    actual fun saveStreamAutoPlaySelectedAddons(addons: Set<String>) = saveSet(streamAutoPlaySelectedAddonsKey, addons)
-    actual fun loadStreamAutoPlaySelectedPlugins(): Set<String>? = loadSet(streamAutoPlaySelectedPluginsKey)
-    actual fun saveStreamAutoPlaySelectedPlugins(plugins: Set<String>) = saveSet(streamAutoPlaySelectedPluginsKey, plugins)
-    actual fun loadStreamAutoPlayRegex(): String? = loadStr(streamAutoPlayRegexKey)
-    actual fun saveStreamAutoPlayRegex(regex: String) = saveStr(streamAutoPlayRegexKey, regex)
-    actual fun loadStreamAutoPlayTimeoutSeconds(): Int? = loadIntVal(streamAutoPlayTimeoutSecondsKey)
-    actual fun saveStreamAutoPlayTimeoutSeconds(seconds: Int) = saveIntVal(streamAutoPlayTimeoutSecondsKey, seconds)
-    actual fun loadSkipIntroEnabled(): Boolean? = loadBool(skipIntroEnabledKey)
-    actual fun saveSkipIntroEnabled(enabled: Boolean) = saveBool(skipIntroEnabledKey, enabled)
-    actual fun loadAnimeSkipEnabled(): Boolean? = loadBool(animeSkipEnabledKey)
-    actual fun saveAnimeSkipEnabled(enabled: Boolean) = saveBool(animeSkipEnabledKey, enabled)
-    actual fun loadAnimeSkipClientId(): String? = loadStr(animeSkipClientIdKey)
-    actual fun saveAnimeSkipClientId(clientId: String) = saveStr(animeSkipClientIdKey, clientId)
-    actual fun loadIntroDbApiKey(): String? = loadStr(introDbApiKeyKey)
-    actual fun saveIntroDbApiKey(apiKey: String) = saveStr(introDbApiKeyKey, apiKey)
-    actual fun loadIntroSubmitEnabled(): Boolean? = loadBool(introSubmitEnabledKey)
-    actual fun saveIntroSubmitEnabled(enabled: Boolean) = saveBool(introSubmitEnabledKey, enabled)
-    actual fun loadStreamAutoPlayNextEpisodeEnabled(): Boolean? = loadBool(streamAutoPlayNextEpisodeEnabledKey)
-    actual fun saveStreamAutoPlayNextEpisodeEnabled(enabled: Boolean) = saveBool(streamAutoPlayNextEpisodeEnabledKey, enabled)
-    actual fun loadStreamAutoPlayPreferBingeGroup(): Boolean? = loadBool(streamAutoPlayPreferBingeGroupKey)
-    actual fun saveStreamAutoPlayPreferBingeGroup(enabled: Boolean) = saveBool(streamAutoPlayPreferBingeGroupKey, enabled)
-    actual fun loadStreamAutoPlayReuseBingeGroup(): Boolean? = loadBool(streamAutoPlayReuseBingeGroupKey)
-    actual fun saveStreamAutoPlayReuseBingeGroup(enabled: Boolean) = saveBool(streamAutoPlayReuseBingeGroupKey, enabled)
-    actual fun loadNextEpisodeThresholdMode(): String? = loadStr(nextEpisodeThresholdModeKey)
-    actual fun saveNextEpisodeThresholdMode(mode: String) = saveStr(nextEpisodeThresholdModeKey, mode)
-    actual fun loadNextEpisodeThresholdPercent(): Float? = loadFloatVal(nextEpisodeThresholdPercentKey)
-    actual fun saveNextEpisodeThresholdPercent(percent: Float) = saveFloatVal(nextEpisodeThresholdPercentKey, percent)
-    actual fun loadNextEpisodeThresholdMinutesBeforeEnd(): Float? = loadFloatVal(nextEpisodeThresholdMinutesBeforeEndKey)
-    actual fun saveNextEpisodeThresholdMinutesBeforeEnd(minutes: Float) = saveFloatVal(nextEpisodeThresholdMinutesBeforeEndKey, minutes)
-    actual fun loadUseLibass(): Boolean? = loadBool(useLibassKey)
-    actual fun saveUseLibass(enabled: Boolean) = saveBool(useLibassKey, enabled)
-    actual fun loadLibassRenderType(): String? = loadStr(libassRenderTypeKey)
-    actual fun saveLibassRenderType(renderType: String) = saveStr(libassRenderTypeKey, renderType)
-    actual fun loadIosVideoOutputPreset(): String? = loadStr(iosVideoOutputPresetKey)
-    actual fun saveIosVideoOutputPreset(preset: String) = saveStr(iosVideoOutputPresetKey, preset)
-    actual fun loadIosToneMappingMode(): String? = loadStr(iosToneMappingModeKey)
-    actual fun saveIosToneMappingMode(mode: String) = saveStr(iosToneMappingModeKey, mode)
-    actual fun loadIosTargetPrimaries(): String? = loadStr(iosTargetPrimariesKey)
-    actual fun saveIosTargetPrimaries(primaries: String) = saveStr(iosTargetPrimariesKey, primaries)
-    actual fun loadIosTargetTransfer(): String? = loadStr(iosTargetTransferKey)
-    actual fun saveIosTargetTransfer(transfer: String) = saveStr(iosTargetTransferKey, transfer)
-    actual fun loadIosHardwareDecoderMode(): String? = loadStr(iosHardwareDecoderModeKey)
-    actual fun saveIosHardwareDecoderMode(mode: String) = saveStr(iosHardwareDecoderModeKey, mode)
-    actual fun loadIosExtendedDynamicRangeEnabled(): Boolean? = loadBool(iosExtendedDynamicRangeEnabledKey)
-    actual fun saveIosExtendedDynamicRangeEnabled(enabled: Boolean) = saveBool(iosExtendedDynamicRangeEnabledKey, enabled)
-    actual fun loadIosTargetColorspaceHintEnabled(): Boolean? = loadBool(iosTargetColorspaceHintEnabledKey)
-    actual fun saveIosTargetColorspaceHintEnabled(enabled: Boolean) = saveBool(iosTargetColorspaceHintEnabledKey, enabled)
-    actual fun loadIosHdrComputePeakEnabled(): Boolean? = loadBool(iosHdrComputePeakEnabledKey)
-    actual fun saveIosHdrComputePeakEnabled(enabled: Boolean) = saveBool(iosHdrComputePeakEnabledKey, enabled)
-    actual fun loadIosDebandEnabled(): Boolean? = loadBool(iosDebandEnabledKey)
-    actual fun saveIosDebandEnabled(enabled: Boolean) = saveBool(iosDebandEnabledKey, enabled)
-    actual fun loadIosInterpolationEnabled(): Boolean? = loadBool(iosInterpolationEnabledKey)
-    actual fun saveIosInterpolationEnabled(enabled: Boolean) = saveBool(iosInterpolationEnabledKey, enabled)
-    actual fun loadIosBrightness(): Int? = loadIntVal(iosBrightnessKey)
-    actual fun saveIosBrightness(value: Int) = saveIntVal(iosBrightnessKey, value)
-    actual fun loadIosContrast(): Int? = loadIntVal(iosContrastKey)
-    actual fun saveIosContrast(value: Int) = saveIntVal(iosContrastKey, value)
-    actual fun loadIosSaturation(): Int? = loadIntVal(iosSaturationKey)
-    actual fun saveIosSaturation(value: Int) = saveIntVal(iosSaturationKey, value)
-    actual fun loadIosGamma(): Int? = loadIntVal(iosGammaKey)
-    actual fun saveIosGamma(value: Int) = saveIntVal(iosGammaKey, value)
+    actual fun loadShowLoadingOverlay(): Boolean? = loadBoolean(showLoadingOverlayKey)
+    actual fun saveShowLoadingOverlay(enabled: Boolean) = saveBoolean(showLoadingOverlayKey, enabled)
+    actual fun loadResizeMode(): String? = loadString(resizeModeKey)
+    actual fun saveResizeMode(mode: String) = saveString(resizeModeKey, mode)
+    actual fun loadHoldToSpeedEnabled(): Boolean? = loadBoolean(holdToSpeedEnabledKey)
+    actual fun saveHoldToSpeedEnabled(enabled: Boolean) = saveBoolean(holdToSpeedEnabledKey, enabled)
+    actual fun loadHoldToSpeedValue(): Float? = loadFloat(holdToSpeedValueKey)
+    actual fun saveHoldToSpeedValue(speed: Float) = saveFloat(holdToSpeedValueKey, speed)
+    actual fun loadExternalPlayerEnabled(): Boolean? = loadBoolean(externalPlayerEnabledKey)
+    actual fun saveExternalPlayerEnabled(enabled: Boolean) = saveBoolean(externalPlayerEnabledKey, enabled)
+    actual fun loadExternalPlayerForwardSubtitles(): Boolean? = loadBoolean(externalPlayerForwardSubtitlesKey)
+    actual fun saveExternalPlayerForwardSubtitles(enabled: Boolean) = saveBoolean(externalPlayerForwardSubtitlesKey, enabled)
+    actual fun loadExternalPlayerId(): String? = loadString(externalPlayerIdKey)
+    actual fun saveExternalPlayerId(playerId: String?) = saveOptionalString(externalPlayerIdKey, playerId)
+    actual fun loadPreferredAudioLanguage(): String? = loadString(preferredAudioLanguageKey)
+    actual fun savePreferredAudioLanguage(language: String) = saveString(preferredAudioLanguageKey, language)
+    actual fun loadSecondaryPreferredAudioLanguage(): String? = loadString(secondaryPreferredAudioLanguageKey)
+    actual fun saveSecondaryPreferredAudioLanguage(language: String?) = saveOptionalString(secondaryPreferredAudioLanguageKey, language)
+    actual fun loadPreferredSubtitleLanguage(): String? = loadString(preferredSubtitleLanguageKey)
+    actual fun savePreferredSubtitleLanguage(language: String) = saveString(preferredSubtitleLanguageKey, language)
+    actual fun loadSecondaryPreferredSubtitleLanguage(): String? = loadString(secondaryPreferredSubtitleLanguageKey)
+    actual fun saveSecondaryPreferredSubtitleLanguage(language: String?) = saveOptionalString(secondaryPreferredSubtitleLanguageKey, language)
+    actual fun loadSubtitleTextColor(): String? = loadString(subtitleTextColorKey)
+    actual fun saveSubtitleTextColor(colorHex: String) = saveString(subtitleTextColorKey, colorHex)
+    actual fun loadSubtitleBackgroundColor(): String? = loadString(subtitleBackgroundColorKey)
+    actual fun saveSubtitleBackgroundColor(colorHex: String) = saveString(subtitleBackgroundColorKey, colorHex)
+    actual fun loadSubtitleOutlineColor(): String? = loadString(subtitleOutlineColorKey)
+    actual fun saveSubtitleOutlineColor(colorHex: String) = saveString(subtitleOutlineColorKey, colorHex)
+    actual fun loadSubtitleOutlineEnabled(): Boolean? = loadBoolean(subtitleOutlineEnabledKey)
+    actual fun saveSubtitleOutlineEnabled(enabled: Boolean) = saveBoolean(subtitleOutlineEnabledKey, enabled)
+    actual fun loadSubtitleOutlineWidth(): Int? = loadInt(subtitleOutlineWidthKey)
+    actual fun saveSubtitleOutlineWidth(width: Int) = saveInt(subtitleOutlineWidthKey, width)
+    actual fun loadSubtitleBold(): Boolean? = loadBoolean(subtitleBoldKey)
+    actual fun saveSubtitleBold(enabled: Boolean) = saveBoolean(subtitleBoldKey, enabled)
+    actual fun loadSubtitleFontSizeSp(): Int? = loadInt(subtitleFontSizeSpKey)
+    actual fun saveSubtitleFontSizeSp(fontSizeSp: Int) = saveInt(subtitleFontSizeSpKey, fontSizeSp)
+    actual fun loadSubtitleBottomOffset(): Int? = loadInt(subtitleBottomOffsetKey)
+    actual fun saveSubtitleBottomOffset(bottomOffset: Int) = saveInt(subtitleBottomOffsetKey, bottomOffset)
+    actual fun loadSubtitleUseForcedSubtitles(): Boolean? = loadBoolean(subtitleUseForcedSubtitlesKey)
+    actual fun saveSubtitleUseForcedSubtitles(enabled: Boolean) = saveBoolean(subtitleUseForcedSubtitlesKey, enabled)
+    actual fun loadSubtitleShowOnlyPreferredLanguages(): Boolean? = loadBoolean(subtitleShowOnlyPreferredLanguagesKey)
+    actual fun saveSubtitleShowOnlyPreferredLanguages(enabled: Boolean) = saveBoolean(subtitleShowOnlyPreferredLanguagesKey, enabled)
+    actual fun loadAddonSubtitleStartupMode(): String? = loadString(addonSubtitleStartupModeKey)
+    actual fun saveAddonSubtitleStartupMode(mode: String) = saveString(addonSubtitleStartupModeKey, mode)
+    actual fun loadStreamReuseLastLinkEnabled(): Boolean? = loadBoolean(streamReuseLastLinkEnabledKey)
+    actual fun saveStreamReuseLastLinkEnabled(enabled: Boolean) = saveBoolean(streamReuseLastLinkEnabledKey, enabled)
+    actual fun loadStreamReuseLastLinkCacheHours(): Int? = loadInt(streamReuseLastLinkCacheHoursKey)
+    actual fun saveStreamReuseLastLinkCacheHours(hours: Int) = saveInt(streamReuseLastLinkCacheHoursKey, hours)
+    actual fun loadDecoderPriority(): Int? = loadInt(decoderPriorityKey)
+    actual fun saveDecoderPriority(priority: Int) = saveInt(decoderPriorityKey, priority)
+    actual fun loadMapDV7ToHevc(): Boolean? = loadBoolean(mapDV7ToHevcKey)
+    actual fun saveMapDV7ToHevc(enabled: Boolean) = saveBoolean(mapDV7ToHevcKey, enabled)
+    actual fun loadTunnelingEnabled(): Boolean? = loadBoolean(tunnelingEnabledKey)
+    actual fun saveTunnelingEnabled(enabled: Boolean) = saveBoolean(tunnelingEnabledKey, enabled)
+    actual fun loadStreamAutoPlayMode(): String? = loadString(streamAutoPlayModeKey)
+    actual fun saveStreamAutoPlayMode(mode: String) = saveString(streamAutoPlayModeKey, mode)
+    actual fun loadStreamAutoPlaySource(): String? = loadString(streamAutoPlaySourceKey)
+    actual fun saveStreamAutoPlaySource(source: String) = saveString(streamAutoPlaySourceKey, source)
+    actual fun loadStreamAutoPlaySelectedAddons(): Set<String>? = loadStringSet(streamAutoPlaySelectedAddonsKey)
+    actual fun saveStreamAutoPlaySelectedAddons(addons: Set<String>) = saveStringSet(streamAutoPlaySelectedAddonsKey, addons)
+    actual fun loadStreamAutoPlaySelectedPlugins(): Set<String>? = loadStringSet(streamAutoPlaySelectedPluginsKey)
+    actual fun saveStreamAutoPlaySelectedPlugins(plugins: Set<String>) = saveStringSet(streamAutoPlaySelectedPluginsKey, plugins)
+    actual fun loadStreamAutoPlayRegex(): String? = loadString(streamAutoPlayRegexKey)
+    actual fun saveStreamAutoPlayRegex(regex: String) = saveString(streamAutoPlayRegexKey, regex)
+    actual fun loadStreamAutoPlayTimeoutSeconds(): Int? = loadInt(streamAutoPlayTimeoutSecondsKey)
+    actual fun saveStreamAutoPlayTimeoutSeconds(seconds: Int) = saveInt(streamAutoPlayTimeoutSecondsKey, seconds)
+    actual fun loadSkipIntroEnabled(): Boolean? = loadBoolean(skipIntroEnabledKey)
+    actual fun saveSkipIntroEnabled(enabled: Boolean) = saveBoolean(skipIntroEnabledKey, enabled)
+    actual fun loadAnimeSkipEnabled(): Boolean? = loadBoolean(animeSkipEnabledKey)
+    actual fun saveAnimeSkipEnabled(enabled: Boolean) = saveBoolean(animeSkipEnabledKey, enabled)
+    actual fun loadAnimeSkipClientId(): String? = loadString(animeSkipClientIdKey)
+    actual fun saveAnimeSkipClientId(clientId: String) = saveString(animeSkipClientIdKey, clientId)
+    actual fun loadIntroDbApiKey(): String? = loadString(introDbApiKeyKey)
+    actual fun saveIntroDbApiKey(apiKey: String) = saveString(introDbApiKeyKey, apiKey)
+    actual fun loadIntroSubmitEnabled(): Boolean? = loadBoolean(introSubmitEnabledKey)
+    actual fun saveIntroSubmitEnabled(enabled: Boolean) = saveBoolean(introSubmitEnabledKey, enabled)
+    actual fun loadStreamAutoPlayNextEpisodeEnabled(): Boolean? = loadBoolean(streamAutoPlayNextEpisodeEnabledKey)
+    actual fun saveStreamAutoPlayNextEpisodeEnabled(enabled: Boolean) = saveBoolean(streamAutoPlayNextEpisodeEnabledKey, enabled)
+    actual fun loadStreamAutoPlayPreferBingeGroup(): Boolean? = loadBoolean(streamAutoPlayPreferBingeGroupKey)
+    actual fun saveStreamAutoPlayPreferBingeGroup(enabled: Boolean) = saveBoolean(streamAutoPlayPreferBingeGroupKey, enabled)
+    actual fun loadStreamAutoPlayReuseBingeGroup(): Boolean? = loadBoolean(streamAutoPlayReuseBingeGroupKey)
+    actual fun saveStreamAutoPlayReuseBingeGroup(enabled: Boolean) = saveBoolean(streamAutoPlayReuseBingeGroupKey, enabled)
+    actual fun loadNextEpisodeThresholdMode(): String? = loadString(nextEpisodeThresholdModeKey)
+    actual fun saveNextEpisodeThresholdMode(mode: String) = saveString(nextEpisodeThresholdModeKey, mode)
+    actual fun loadNextEpisodeThresholdPercent(): Float? = loadFloat(nextEpisodeThresholdPercentKey)
+    actual fun saveNextEpisodeThresholdPercent(percent: Float) = saveFloat(nextEpisodeThresholdPercentKey, percent)
+    actual fun loadNextEpisodeThresholdMinutesBeforeEnd(): Float? = loadFloat(nextEpisodeThresholdMinutesBeforeEndKey)
+    actual fun saveNextEpisodeThresholdMinutesBeforeEnd(minutes: Float) = saveFloat(nextEpisodeThresholdMinutesBeforeEndKey, minutes)
+    actual fun loadUseLibass(): Boolean? = loadBoolean(useLibassKey)
+    actual fun saveUseLibass(enabled: Boolean) = saveBoolean(useLibassKey, enabled)
+    actual fun loadLibassRenderType(): String? = loadString(libassRenderTypeKey)
+    actual fun saveLibassRenderType(renderType: String) = saveString(libassRenderTypeKey, renderType)
+    actual fun loadIosVideoOutputPreset(): String? = loadString(iosVideoOutputPresetKey)
+    actual fun saveIosVideoOutputPreset(preset: String) = saveString(iosVideoOutputPresetKey, preset)
+    actual fun loadIosToneMappingMode(): String? = loadString(iosToneMappingModeKey)
+    actual fun saveIosToneMappingMode(mode: String) = saveString(iosToneMappingModeKey, mode)
+    actual fun loadIosTargetPrimaries(): String? = loadString(iosTargetPrimariesKey)
+    actual fun saveIosTargetPrimaries(primaries: String) = saveString(iosTargetPrimariesKey, primaries)
+    actual fun loadIosTargetTransfer(): String? = loadString(iosTargetTransferKey)
+    actual fun saveIosTargetTransfer(transfer: String) = saveString(iosTargetTransferKey, transfer)
+    actual fun loadIosHardwareDecoderMode(): String? = loadString(iosHardwareDecoderModeKey)
+    actual fun saveIosHardwareDecoderMode(mode: String) = saveString(iosHardwareDecoderModeKey, mode)
+    // Fork: no iOS-audio-output expect in NuvioMobile's commonMain — kept non-actual so
+    // the sync import/export below stays identical to NuvioDesktop's file.
+    fun loadIosAudioOutputMode(): String? = loadString(iosAudioOutputModeKey)
+    fun saveIosAudioOutputMode(mode: String) = saveString(iosAudioOutputModeKey, mode)
+    actual fun loadIosExtendedDynamicRangeEnabled(): Boolean? = loadBoolean(iosExtendedDynamicRangeEnabledKey)
+    actual fun saveIosExtendedDynamicRangeEnabled(enabled: Boolean) = saveBoolean(iosExtendedDynamicRangeEnabledKey, enabled)
+    actual fun loadIosTargetColorspaceHintEnabled(): Boolean? = loadBoolean(iosTargetColorspaceHintEnabledKey)
+    actual fun saveIosTargetColorspaceHintEnabled(enabled: Boolean) = saveBoolean(iosTargetColorspaceHintEnabledKey, enabled)
+    actual fun loadIosHdrComputePeakEnabled(): Boolean? = loadBoolean(iosHdrComputePeakEnabledKey)
+    actual fun saveIosHdrComputePeakEnabled(enabled: Boolean) = saveBoolean(iosHdrComputePeakEnabledKey, enabled)
+    actual fun loadIosDebandEnabled(): Boolean? = loadBoolean(iosDebandEnabledKey)
+    actual fun saveIosDebandEnabled(enabled: Boolean) = saveBoolean(iosDebandEnabledKey, enabled)
+    actual fun loadIosInterpolationEnabled(): Boolean? = loadBoolean(iosInterpolationEnabledKey)
+    actual fun saveIosInterpolationEnabled(enabled: Boolean) = saveBoolean(iosInterpolationEnabledKey, enabled)
+    actual fun loadIosBrightness(): Int? = loadInt(iosBrightnessKey)
+    actual fun saveIosBrightness(value: Int) = saveInt(iosBrightnessKey, value)
+    actual fun loadIosContrast(): Int? = loadInt(iosContrastKey)
+    actual fun saveIosContrast(value: Int) = saveInt(iosContrastKey, value)
+    actual fun loadIosSaturation(): Int? = loadInt(iosSaturationKey)
+    actual fun saveIosSaturation(value: Int) = saveInt(iosSaturationKey, value)
+    actual fun loadIosGamma(): Int? = loadInt(iosGammaKey)
+    actual fun saveIosGamma(value: Int) = saveInt(iosGammaKey, value)
+
+    private fun scoped(key: String): String = ProfileScopedKey.of(key)
+    private fun loadString(key: String): String? = store.getString(scoped(key))
+    private fun saveString(key: String, value: String) = store.putString(scoped(key), value)
+    private fun saveOptionalString(key: String, value: String?) = store.putString(scoped(key), value?.takeIf { it.isNotBlank() })
+    private fun loadBoolean(key: String): Boolean? = store.getBoolean(scoped(key))
+    private fun saveBoolean(key: String, value: Boolean) = store.putBoolean(scoped(key), value)
+    private fun loadInt(key: String): Int? = store.getInt(scoped(key))
+    private fun saveInt(key: String, value: Int) = store.putInt(scoped(key), value)
+    private fun loadFloat(key: String): Float? = store.getFloat(scoped(key))
+    private fun saveFloat(key: String, value: Float) = store.putFloat(scoped(key), value)
+    private fun loadStringSet(key: String): Set<String>? = store.getStringSet(scoped(key))
+    private fun saveStringSet(key: String, values: Set<String>) = store.putStringSet(scoped(key), values)
 
     actual fun exportToSyncPayload(): JsonObject = buildJsonObject {
         loadShowLoadingOverlay()?.let { put(showLoadingOverlayKey, encodeSyncBoolean(it)) }
@@ -301,6 +329,7 @@ internal actual object PlayerSettingsStorage {
         loadIosTargetPrimaries()?.let { put(iosTargetPrimariesKey, encodeSyncString(it)) }
         loadIosTargetTransfer()?.let { put(iosTargetTransferKey, encodeSyncString(it)) }
         loadIosHardwareDecoderMode()?.let { put(iosHardwareDecoderModeKey, encodeSyncString(it)) }
+        loadIosAudioOutputMode()?.let { put(iosAudioOutputModeKey, encodeSyncString(it)) }
         loadIosExtendedDynamicRangeEnabled()?.let { put(iosExtendedDynamicRangeEnabledKey, encodeSyncBoolean(it)) }
         loadIosTargetColorspaceHintEnabled()?.let { put(iosTargetColorspaceHintEnabledKey, encodeSyncBoolean(it)) }
         loadIosHdrComputePeakEnabled()?.let { put(iosHdrComputePeakEnabledKey, encodeSyncBoolean(it)) }
@@ -313,8 +342,7 @@ internal actual object PlayerSettingsStorage {
     }
 
     actual fun replaceFromSyncPayload(payload: JsonObject) {
-        syncKeys.forEach { removeKey(it) }
-
+        store.removeAll(syncKeys.map(::scoped))
         payload.decodeSyncBoolean(showLoadingOverlayKey)?.let(::saveShowLoadingOverlay)
         payload.decodeSyncString(resizeModeKey)?.let(::saveResizeMode)
         payload.decodeSyncBoolean(holdToSpeedEnabledKey)?.let(::saveHoldToSpeedEnabled)
@@ -366,6 +394,7 @@ internal actual object PlayerSettingsStorage {
         payload.decodeSyncString(iosTargetPrimariesKey)?.let(::saveIosTargetPrimaries)
         payload.decodeSyncString(iosTargetTransferKey)?.let(::saveIosTargetTransfer)
         payload.decodeSyncString(iosHardwareDecoderModeKey)?.let(::saveIosHardwareDecoderMode)
+        payload.decodeSyncString(iosAudioOutputModeKey)?.let(::saveIosAudioOutputMode)
         payload.decodeSyncBoolean(iosExtendedDynamicRangeEnabledKey)?.let(::saveIosExtendedDynamicRangeEnabled)
         payload.decodeSyncBoolean(iosTargetColorspaceHintEnabledKey)?.let(::saveIosTargetColorspaceHintEnabled)
         payload.decodeSyncBoolean(iosHdrComputePeakEnabledKey)?.let(::saveIosHdrComputePeakEnabled)
@@ -376,4 +405,18 @@ internal actual object PlayerSettingsStorage {
         payload.decodeSyncInt(iosSaturationKey)?.let(::saveIosSaturation)
         payload.decodeSyncInt(iosGammaKey)?.let(::saveIosGamma)
     }
+
+    // ------------------------------------------------------------------
+    // Fork-only desktop expects (NuvioMobile commonMain): machine-specific
+    // player settings. Kept in a separate store that is never exported in
+    // the sync payload above — GPU/driver and audio-module choices must not
+    // roam to other devices. Key names match the legacy java.util.prefs
+    // node (nuvio/player) so the one-time migration copies them verbatim.
+    // ------------------------------------------------------------------
+    private val machineStore = DesktopStorage.store("nuvio_machine")
+
+    actual fun loadHwAccelEnabled(): Boolean? = machineStore.getBoolean("hwAccelEnabled")
+    actual fun saveHwAccelEnabled(enabled: Boolean) { machineStore.putBoolean("hwAccelEnabled", enabled) }
+    actual fun loadAudioOutput(): String? = machineStore.getString("audioOutput")
+    actual fun saveAudioOutput(module: String) { machineStore.putString("audioOutput", module) }
 }
