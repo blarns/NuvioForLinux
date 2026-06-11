@@ -293,6 +293,10 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long, 
                 playerController?.seekTo(positionMs)
                 scheduleProgressSyncAfterSeek()
             },
+            // Fork: desktop volume slider — PlayerControls only shows it when non-null.
+            onVolumeChange = { volumeFraction ->
+                playerController?.setVolume(volumeFraction)
+            },
             horizontalSafePadding = horizontalSafePadding,
             modifier = Modifier.fillMaxSize(),
         )

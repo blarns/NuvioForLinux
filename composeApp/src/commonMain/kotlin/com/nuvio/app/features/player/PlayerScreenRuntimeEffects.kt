@@ -60,7 +60,10 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
     // still reset everything below.
     LaunchedEffect(activeSourceUrl, activeSourceAudioUrl) {
         errorMessage = null
-        playerController = null
+        // Fork: do NOT reset playerController here. The desktop surface delivers the
+        // controller once via onControllerReady (at surface creation); this effect also
+        // runs on first composition and would null it right back out, leaving every
+        // control a no-op. Platform DisposableEffects handle real teardown.
         playerControllerSourceUrl = null
         playbackSnapshot = PlayerPlaybackSnapshot()
         isScrubbingTimeline = false
