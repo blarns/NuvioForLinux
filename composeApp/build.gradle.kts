@@ -4,10 +4,13 @@ import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputDirectory
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.TaskAction
+import org.gradle.process.ExecOperations
+import javax.inject.Inject
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import java.util.Properties
@@ -124,12 +127,47 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 |package com.nuvio.app.features.settings
                 |
                 |object CommunityConfig {
-                |    const val CONTRIBUTIONS_URL = "${props.getProperty("CONTRIBUTIONS_URL", "")}" 
-                |    const val DONATIONS_BASE_URL = "${props.getProperty("DONATIONS_BASE_URL", "")}" 
-                |    const val DONATIONS_DONATE_URL = "${props.getProperty("DONATIONS_DONATE_URL", "")}" 
+                |    const val CONTRIBUTIONS_URL = "${props.getProperty("CONTRIBUTIONS_URL", "")}"
+                |    const val DONATIONS_BASE_URL = "${props.getProperty("DONATIONS_BASE_URL", "")}"
+                |    const val DONATIONS_DONATE_URL = "${props.getProperty("DONATIONS_DONATE_URL", "")}"
                 |}
                 """.trimMargin()
             )
+        }
+    }
+}
+
+// jpackage doesn't let the Compose plugin declare extra package relationships, so
+// repack the deb with a Recommends on the emoji font — stream lists are full of
+// emoji-formatted addon text that renders as tofu without one installed.
+abstract class PatchDebRecommendsTask : DefaultTask() {
+    @get:Inject
+    abstract val execOperations: ExecOperations
+
+    @get:InputDirectory
+    abstract val debDirectory: DirectoryProperty
+
+    @get:Input
+    abstract val recommends: Property<String>
+
+    @TaskAction
+    fun patch() {
+        val debs = debDirectory.get().asFile.listFiles { file -> file.extension == "deb" }.orEmpty()
+        debs.forEach { deb ->
+            val workDir = File(temporaryDir, deb.nameWithoutExtension)
+            workDir.deleteRecursively()
+            execOperations.exec {
+                commandLine("dpkg-deb", "-R", deb.absolutePath, workDir.absolutePath)
+            }
+            val control = workDir.resolve("DEBIAN/control")
+            val lines = control.readLines().filterNot { it.isBlank() }
+            if (lines.none { it.startsWith("Recommends:") }) {
+                control.writeText((lines + "Recommends: ${recommends.get()}").joinToString("\n") + "\n")
+                execOperations.exec {
+                    commandLine("dpkg-deb", "-b", "--root-owner-group", workDir.absolutePath, deb.absolutePath)
+                }
+            }
+            workDir.deleteRecursively()
         }
     }
 }
@@ -458,4 +496,13 @@ compose.desktop {
             isEnabled.set(false)
         }
     }
+}
+
+val patchDebRecommends = tasks.register<PatchDebRecommendsTask>("patchDebRecommends") {
+    debDirectory.set(layout.buildDirectory.dir("compose/binaries/main/deb"))
+    recommends.set("fonts-noto-color-emoji")
+}
+
+tasks.matching { it.name == "packageDeb" }.configureEach {
+    finalizedBy(patchDebRecommends)
 }

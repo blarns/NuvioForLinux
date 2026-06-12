@@ -19,6 +19,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   install pointing at the stale config. The new swap action (⇄) on each addon card
   lets you paste the new manifest URL — the addon keeps its position, enabled state
   and custom name, and the change syncs to your account.
+- **The .deb now recommends `fonts-noto-color-emoji`.** Many addons (AIOStreams
+  formatters in particular) use emoji in stream names and descriptions, which render
+  as empty boxes when no emoji font is installed. Installing via apt or a software
+  center now pulls the font in automatically; if you installed with plain `dpkg -i`
+  and see boxes, install `fonts-noto-color-emoji` manually.
 
 ### Fixed
 - **Initial sync no longer races sign-in restore at boot.** The first server pull
