@@ -159,6 +159,8 @@ fun StreamsScreen(
     val noDirectStreamLinkText = stringResource(Res.string.streams_no_direct_link)
     var streamActionsTarget by remember(videoId) { mutableStateOf<StreamItem?>(null) }
     var preferredFilterApplied by remember(videoId) { mutableStateOf(false) }
+    var autoPlayOverlayLogoLoadError by remember(logo) { mutableStateOf(false) }
+    val autoPlayOverlayLogoUrl = logo?.takeIf { it.isNotBlank() }
     val storedProgress = if (startFromBeginning) {
         null
     } else {
@@ -332,13 +334,24 @@ fun StreamsScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    if (!logo.isNullOrBlank()) {
+                    if (autoPlayOverlayLogoUrl != null && !autoPlayOverlayLogoLoadError) {
                         AsyncImage(
-                            model = logo,
-                            contentDescription = null,
+                            model = autoPlayOverlayLogoUrl,
+                            contentDescription = title,
                             modifier = Modifier
                                 .height(48.dp),
                             contentScale = ContentScale.Fit,
+                            onError = { autoPlayOverlayLogoLoadError = true },
+                        )
+                    } else if (title.isNotBlank()) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
+                            color = Color.White,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 24.dp),
                         )
                     }
                     CircularProgressIndicator(
@@ -548,6 +561,9 @@ private fun MovieHeroBlock(
     logo: String?,
     modifier: Modifier = Modifier,
 ) {
+    var logoLoadError by remember(logo) { mutableStateOf(false) }
+    val logoUrl = logo?.takeIf { it.isNotBlank() }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -555,14 +571,15 @@ private fun MovieHeroBlock(
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)),
         contentAlignment = Alignment.Center,
     ) {
-        if (logo != null) {
+        if (logoUrl != null && !logoLoadError) {
             AsyncImage(
-                model = logo,
-                contentDescription = null,
+                model = logoUrl,
+                contentDescription = title,
                 modifier = Modifier
                     .height(80.dp)
                     .fillMaxWidth(0.85f),
                 contentScale = ContentScale.Fit,
+                onError = { logoLoadError = true },
             )
         } else {
             Text(
