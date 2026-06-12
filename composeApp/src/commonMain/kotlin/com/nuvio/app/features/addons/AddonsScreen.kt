@@ -96,12 +96,39 @@ internal fun AddonsSettingsPageContent(
 
     val overview = remember(uiState.addons) { uiState.addons.toOverview() }
 
+    val availableVersions by AddonUpdateChecker.availableVersions.collectAsStateWithLifecycle()
+    val pendingUpdates = remember(uiState.addons, availableVersions) {
+        uiState.addons
+            .distinctBy { it.manifestUrl }
+            .mapNotNull { addon ->
+                val loadedVersion = addon.manifest?.version ?: return@mapNotNull null
+                val remoteVersion = availableVersions[addon.manifestUrl] ?: return@mapNotNull null
+                if (addon.enabled && remoteVersion != loadedVersion) {
+                    PendingAddonUpdate(addon, loadedVersion, remoteVersion)
+                } else {
+                    null
+                }
+            }
+    }
+
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         SectionHeader(stringResource(Res.string.addons_section_overview))
         OverviewCard(overview = overview)
+
+        if (pendingUpdates.isNotEmpty()) {
+            SectionHeader(stringResource(Res.string.addons_section_updates))
+            AddonUpdatesCard(
+                updates = pendingUpdates,
+                onRefreshAllClick = {
+                    pendingUpdates.forEach { update ->
+                        AddonRepository.refreshAddon(update.addon.manifestUrl)
+                    }
+                },
+            )
+        }
 
         SectionHeader(stringResource(Res.string.addons_section_add_addon))
         AddAddonCard(
@@ -342,6 +369,44 @@ private fun EmptyStateCard() {
             text = stringResource(Res.string.addons_empty_subtitle),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+private data class PendingAddonUpdate(
+    val addon: ManagedAddon,
+    val loadedVersion: String,
+    val remoteVersion: String,
+)
+
+@Composable
+private fun AddonUpdatesCard(
+    updates: List<PendingAddonUpdate>,
+    onRefreshAllClick: () -> Unit,
+) {
+    NuvioSurfaceCard {
+        Text(
+            text = stringResource(Res.string.addons_updates_available_title),
+            style = MaterialTheme.typography.headlineLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        updates.forEach { update ->
+            Text(
+                text = stringResource(
+                    Res.string.addons_update_row_format,
+                    update.addon.displayTitle,
+                    update.loadedVersion,
+                    update.remoteVersion,
+                ),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        NuvioPrimaryButton(
+            text = stringResource(Res.string.addons_updates_refresh_all),
+            onClick = onRefreshAllClick,
         )
     }
 }

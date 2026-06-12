@@ -51,7 +51,12 @@
     <string name="addons_section_add_addon">Add Addon</string>
     <string name="addons_section_installed">Installed Addons</string>
     <string name="addons_section_overview">Overview</string>
+    <string name="addons_section_updates">Updates</string>
     <string name="addons_summary_id_rules">%1$d id rules</string>
+    <string name="addons_update_row_format">%1$s: %2$s → %3$s</string>
+    <string name="addons_updates_available_title">Addon updates available</string>
+    <string name="addons_updates_refresh_all">Refresh now</string>
+    <string name="addons_updates_toast">Addon updates available: %1$s — refresh from the Addons page</string>
     <string name="addons_version_format">Version %1$s</string>
     <string name="cd_selected">Selected</string>
     <string name="collections_copy_json">Copy JSON</string>
