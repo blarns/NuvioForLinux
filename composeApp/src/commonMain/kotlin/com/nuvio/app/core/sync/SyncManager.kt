@@ -18,24 +18,40 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 private const val FOREGROUND_PULL_DELAY_MS = 2500L
 private const val FOREGROUND_PULL_MIN_INTERVAL_MS = 30 * 60_000L
+private const val AUTH_SETTLE_TIMEOUT_MS = 15_000L
 
 object SyncManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val log = Logger.withTag("SyncManager")
     private var foregroundPullJob: Job? = null
     private var lastForegroundPullAtMs: Long = 0L
+    private val initialPullRequestedProfiles = mutableSetOf<Int>()
+
+    fun pullAllForProfileIfNeverPulled(profileId: Int) {
+        if (!initialPullRequestedProfiles.add(profileId)) return
+        pullAllForProfile(profileId)
+    }
 
     fun pullAllForProfile(profileId: Int) {
-        val authState = AuthRepository.state.value
-        if (authState !is AuthState.Authenticated) return
-        if (authState.isAnonymous) return
-
         scope.launch {
-            log.i { "pullAllForProfile($profileId) — auth=${(authState as AuthState.Authenticated).isAnonymous}" }
+            // At boot this can be called while Supabase session restore is still in
+            // flight; sampling the state once would silently drop the initial pull.
+            val authState = withTimeoutOrNull(AUTH_SETTLE_TIMEOUT_MS) {
+                AuthRepository.state.first { it !is AuthState.Loading }
+            } ?: AuthRepository.state.value
+            if (authState !is AuthState.Authenticated || authState.isAnonymous) {
+                initialPullRequestedProfiles.remove(profileId)
+                log.i { "pullAllForProfile($profileId) — skipped, auth not ready (state=${authState::class.simpleName})" }
+                return@launch
+            }
+            initialPullRequestedProfiles.add(profileId)
+            log.i { "pullAllForProfile($profileId) — auth=${authState.isAnonymous}" }
 
             log.i { "pullAllForProfile — pulling addons first (await)..." }
             runCatching { AddonRepository.pullFromServer(profileId) }

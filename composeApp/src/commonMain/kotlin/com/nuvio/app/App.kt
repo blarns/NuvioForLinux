@@ -480,6 +480,11 @@ fun App() {
                     ProfileRepository.ensureLoaded(authenticatedState.userId)
                     if (gateScreen == AppGateScreen.Loading.name || gateScreen == AppGateScreen.Auth.name) {
                         enterProfileGate(ProfileRepository.state.value.profiles, syncOnEnter = true)
+                    } else if (gateScreen == AppGateScreen.Main.name && !authenticatedState.isAnonymous) {
+                        // Boot can enter Main before session restore settles (network
+                        // condition starts Unknown, so the offline-tolerant gate skips
+                        // syncOnEnter); backfill the initial pull once auth lands.
+                        SyncManager.pullAllForProfileIfNeverPulled(ProfileRepository.activeProfileId)
                     }
                 }
             }
