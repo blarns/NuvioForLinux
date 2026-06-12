@@ -20,12 +20,16 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material3.BasicAlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -92,6 +96,7 @@ internal fun AddonsSettingsPageContent(
     var addonUrl by rememberSaveable { mutableStateOf("") }
     var formMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var installModalState by remember { mutableStateOf<AddonInstallModalState?>(null) }
+    var updateUrlTarget by remember { mutableStateOf<ManagedAddon?>(null) }
     val enterAddonUrlMessage = stringResource(Res.string.addons_error_enter_url)
 
     val overview = remember(uiState.addons) { uiState.addons.toOverview() }
@@ -198,6 +203,7 @@ internal fun AddonsSettingsPageContent(
                     } else {
                         null
                     },
+                    onUpdateUrlClick = { updateUrlTarget = addon },
                     onDeleteClick = { AddonRepository.removeAddon(addon.manifestUrl) },
                 )
             }
@@ -236,6 +242,70 @@ internal fun AddonsSettingsPageContent(
                 }
             },
         )
+    }
+
+    updateUrlTarget?.let { target ->
+        UpdateAddonUrlDialog(
+            addon = target,
+            onConfirm = { newUrl ->
+                updateUrlTarget = null
+                installModalState = AddonInstallModalState.Checking
+                coroutineScope.launch {
+                    installModalState = when (val result = AddonRepository.replaceAddonUrl(target.manifestUrl, newUrl)) {
+                        is AddAddonResult.Success -> AddonInstallModalState.Success(result.manifest.name)
+                        is AddAddonResult.Error -> AddonInstallModalState.Error(result.message)
+                    }
+                }
+            },
+            onDismiss = { updateUrlTarget = null },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun UpdateAddonUrlDialog(
+    addon: ManagedAddon,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var draftUrl by rememberSaveable { mutableStateOf("") }
+
+    BasicAlertDialog(onDismissRequest = onDismiss) {
+        NuvioSurfaceCard {
+            Text(
+                text = stringResource(Res.string.addons_update_url_title),
+                style = MaterialTheme.typography.headlineLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = stringResource(Res.string.addons_update_url_message, addon.displayTitle),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            NuvioInputField(
+                value = draftUrl,
+                onValueChange = { draftUrl = it },
+                placeholder = stringResource(Res.string.addons_input_placeholder),
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(text = stringResource(Res.string.action_cancel), maxLines = 1)
+                }
+                TextButton(
+                    enabled = draftUrl.isNotBlank(),
+                    onClick = { onConfirm(draftUrl.trim()) },
+                ) {
+                    Text(text = stringResource(Res.string.action_update), maxLines = 1)
+                }
+            }
+        }
     }
 }
 
@@ -419,6 +489,7 @@ private fun InstalledAddonCard(
     onRefreshClick: () -> Unit,
     onEnabledChange: (Boolean) -> Unit,
     onConfigureClick: (() -> Unit)?,
+    onUpdateUrlClick: () -> Unit,
     onDeleteClick: () -> Unit,
 ) {
     val manifest = addon.manifest
@@ -492,6 +563,12 @@ private fun InstalledAddonCard(
                 contentDescription = stringResource(Res.string.addons_refresh),
                 tint = MaterialTheme.colorScheme.primary,
                 onClick = onRefreshClick,
+            )
+            NuvioIconActionButton(
+                icon = Icons.Rounded.SwapHoriz,
+                contentDescription = stringResource(Res.string.addons_update_url),
+                tint = MaterialTheme.colorScheme.secondary,
+                onClick = onUpdateUrlClick,
             )
             onConfigureClick?.let { onConfigure ->
                 NuvioIconActionButton(

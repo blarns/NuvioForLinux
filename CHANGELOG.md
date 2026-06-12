@@ -14,6 +14,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   version, a toast appears and the Addons page shows an Updates section listing each
   change (old → new version) with a one-click "Refresh now" action. (Addons are still
   refreshed automatically at every app start, as before.)
+- **Update an addon's URL in place.** Config-based addons (AIOStreams and friends)
+  generate a new manifest URL when you rebuild their configuration, leaving the old
+  install pointing at the stale config. The new swap action (⇄) on each addon card
+  lets you paste the new manifest URL — the addon keeps its position, enabled state
+  and custom name, and the change syncs to your account.
 
 ### Fixed
 - **Initial sync no longer races sign-in restore at boot.** The first server pull
