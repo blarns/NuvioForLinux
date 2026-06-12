@@ -6,6 +6,22 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.14] — 2026-06-12
+
+### Added
+- **Addon update notifications.** Nuvio now re-checks your enabled addons' manifests
+  twice a week while the app is running. When an addon server starts serving a newer
+  version, a toast appears and the Addons page shows an Updates section listing each
+  change (old → new version) with a one-click "Refresh now" action. (Addons are still
+  refreshed automatically at every app start, as before.)
+
+### Fixed
+- **Initial sync no longer races sign-in restore at boot.** The first server pull
+  (addons, library, watch progress, settings, collections) could be silently skipped
+  when the app started faster than the session restore — most visible as data not
+  syncing until much later. The pull now waits for sign-in to settle and backfills
+  itself if boot got ahead of it.
+
 ## [0.1.13] — 2026-06-11
 
 ### Changed
