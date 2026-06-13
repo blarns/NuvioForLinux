@@ -6,6 +6,7 @@ import com.nuvio.app.features.catalog.CATALOG_PAGE_SIZE
 import com.nuvio.app.features.catalog.CatalogPage
 import com.nuvio.app.features.catalog.fetchCatalogPage
 import com.nuvio.app.features.catalog.mergeCatalogItems
+import com.nuvio.app.features.catalog.nextCatalogPaginationState
 import com.nuvio.app.features.catalog.supportsPagination
 import com.nuvio.app.core.i18n.localizedMediaTypeLabel
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
@@ -42,6 +43,7 @@ data class FolderTab(
     val isLoading: Boolean = true,
     val isLoadingMore: Boolean = false,
     val nextSkip: Int? = null,
+    val consecutiveDuplicatePages: Int = 0,
     val error: String? = null,
     val isAllTab: Boolean = false,
 ) {
@@ -292,6 +294,7 @@ object FolderDetailRepository {
                     isLoading = true,
                     isLoadingMore = false,
                     nextSkip = null,
+                    consecutiveDuplicatePages = 0,
                     error = null,
                 )
             } else {
@@ -334,12 +337,20 @@ object FolderDetailRepository {
                     }
                     val supportsPagination = tab.supportsPagination || page.rawItemCount >= CATALOG_PAGE_SIZE
                     val loadedNewItems = reset || mergedItems.size > tab.items.size
+                    val paginationState = nextCatalogPaginationState(
+                        supportsPagination = supportsPagination,
+                        requestedSkip = requestedSkip,
+                        page = page,
+                        loadedNewItems = loadedNewItems,
+                        consecutiveDuplicatePages = if (reset) 0 else tab.consecutiveDuplicatePages,
+                    )
                     tab.copy(
                         items = mergedItems,
                         supportsPagination = supportsPagination,
                         isLoading = false,
                         isLoadingMore = false,
-                        nextSkip = if (supportsPagination && loadedNewItems) page.nextSkip else null,
+                        nextSkip = paginationState.nextSkip,
+                        consecutiveDuplicatePages = paginationState.consecutiveDuplicatePages,
                         error = null,
                     )
                 }
@@ -415,6 +426,7 @@ object FolderDetailRepository {
                 items = tab.items,
                 availableItemCount = tab.items.size,
                 supportsPagination = tab.supportsPagination,
+                hasMore = tab.canLoadMore,
                 genre = tab.genre,
             )
         }
