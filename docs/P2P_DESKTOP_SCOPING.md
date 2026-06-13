@@ -126,6 +126,32 @@ De-risk the two real unknowns before committing to the full estimate:
 A throwaway shell script (download binary, run it, curl `/stream`) plus a one-off
 `ProcessBuilder` launch answers both. Green spike → the rest is the near-verbatim port.
 
+## Spike results (2026-06-13) — both unknowns GREEN ✅
+
+Ran the spike against `TorrServer-linux-amd64` MatriX.141.5 (a 74 MB Go binary) on a clean
+machine, streaming Blender's *Big Buck Bunny* (CC-BY).
+
+- **Q1 — headless binary:** ✅ Runs with no Go toolchain, serves its HTTP API (`/echo` →
+  `MatriX.141.5`), DNS + outbound connectivity fine. Exactly the shape `ProcessBuilder`
+  would launch and drive.
+- **Data path:** ✅ `GET /stream/<name>?link=<hash>&index=<n>&play` serves the file with
+  HTTP range support; a 3 MB range fetch returned valid `ISO Media, MP4`.
+- **Q2 — libVLC plays it:** ✅ `cvlc` (the same libVLC VLCJ wraps) opened the `/stream`
+  URL, demuxed the MP4 (3 tracks), started the **h264** decoder, and decoded at
+  **1920×1080**. VLCJ plays it unchanged — `startStream` just returns this URL into the
+  existing player path.
+
+**Caveat to carry into the implementation *and* the user-facing UX:** in this sandbox,
+fetching magnet metadata via **DHT/UDP failed** (firewalled) — `Torrent close by timeout`,
+no peers found. Adding via the **`.torrent` HTTP URL + webseed** worked perfectly. Real
+torrents reach plenty of **TCP** peers via trackers so this is usually a non-issue, but:
+(a) keep DHT + trackers enabled and tolerate webseeds; (b) users on restrictive networks or
+UDP-blocking VPNs may see slow starts — worth a line in the consent/help text. This also
+reinforces that debrid (pure HTTPS) is the more robust default; P2P is the opt-in.
+
+**Conclusion:** the architecture is validated end-to-end, no surprises. Proceed with the
+~6–9 day implementation whenever it's greenlit.
+
 ## Preconditions / triggers
 
 - 0.1.15 is shipped; **no contract churn here** — the P2P engine API was untouched by the
