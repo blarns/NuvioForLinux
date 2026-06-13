@@ -138,8 +138,10 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
 }
 
 // jpackage doesn't let the Compose plugin declare extra package relationships, so
-// repack the deb with a Recommends on the emoji font — stream lists are full of
-// emoji-formatted addon text that renders as tofu without one installed.
+// repack the deb to (1) add a hard runtime dependency on libVLC — VLCJ dlopen's the
+// system libvlc.so, so a fresh .deb install has NO playback without it — and (2) add a
+// Recommends on the emoji font (stream lists are full of emoji-formatted addon text
+// that renders as tofu without one installed).
 abstract class PatchDebRecommendsTask : DefaultTask() {
     @get:Inject
     abstract val execOperations: ExecOperations
@@ -150,9 +152,14 @@ abstract class PatchDebRecommendsTask : DefaultTask() {
     @get:Input
     abstract val recommends: Property<String>
 
+    @get:Input
+    abstract val extraDepends: Property<String>
+
     @TaskAction
     fun patch() {
         val debs = debDirectory.get().asFile.listFiles { file -> file.extension == "deb" }.orEmpty()
+        val dep = extraDepends.get().takeIf { it.isNotBlank() }
+        val rec = recommends.get().takeIf { it.isNotBlank() }
         debs.forEach { deb ->
             val workDir = File(temporaryDir, deb.nameWithoutExtension)
             workDir.deleteRecursively()
@@ -160,9 +167,27 @@ abstract class PatchDebRecommendsTask : DefaultTask() {
                 commandLine("dpkg-deb", "-R", deb.absolutePath, workDir.absolutePath)
             }
             val control = workDir.resolve("DEBIAN/control")
-            val lines = control.readLines().filterNot { it.isBlank() }
-            if (lines.none { it.startsWith("Recommends:") }) {
-                control.writeText((lines + "Recommends: ${recommends.get()}").joinToString("\n") + "\n")
+            var lines = control.readLines().filterNot { it.isBlank() }
+            var changed = false
+
+            // Append the runtime dependency onto the existing Depends: field (or add one).
+            if (dep != null && lines.none { it.contains(dep) }) {
+                lines = if (lines.any { it.startsWith("Depends:") }) {
+                    lines.map { if (it.startsWith("Depends:")) "$it, $dep" else it }
+                } else {
+                    lines + "Depends: $dep"
+                }
+                changed = true
+            }
+
+            // Add the Recommends: field if absent.
+            if (rec != null && lines.none { it.startsWith("Recommends:") }) {
+                lines = lines + "Recommends: $rec"
+                changed = true
+            }
+
+            if (changed) {
+                control.writeText(lines.joinToString("\n") + "\n")
                 execOperations.exec {
                     commandLine("dpkg-deb", "-b", "--root-owner-group", workDir.absolutePath, deb.absolutePath)
                 }
@@ -506,6 +531,7 @@ compose.desktop {
 val patchDebRecommends = tasks.register<PatchDebRecommendsTask>("patchDebRecommends") {
     debDirectory.set(layout.buildDirectory.dir("compose/binaries/main/deb"))
     recommends.set("fonts-noto-color-emoji")
+    extraDepends.set("vlc-plugin-base | vlc")
 }
 
 tasks.matching { it.name == "packageDeb" }.configureEach {

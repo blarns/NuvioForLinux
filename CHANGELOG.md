@@ -6,6 +6,17 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.15.1] — 2026-06-13
+
+### Fixed
+- **`.deb` installs now pull in libVLC automatically.** The package embeds the VLCJ Java
+  bindings but relies on the system's native `libvlc.so` at runtime, and the generated
+  `.deb` previously declared no VLC dependency — so installing it on a machine without VLC
+  left video playback silently broken (a blank player, no obvious cause). The package now
+  declares `Depends: vlc-plugin-base | vlc`, so `apt` installs the libVLC runtime (plus its
+  codec/demux/output plugins) alongside Nuvio. Users who already have VLC are unaffected,
+  and building from source was never affected (its setup step already installs VLC).
+
 ## [0.1.15] — 2026-06-13
 
 An upstream parity sync (NuvioMedia/NuvioMobile). No Linux-specific changes this round —
