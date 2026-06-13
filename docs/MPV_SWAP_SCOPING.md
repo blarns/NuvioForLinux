@@ -75,9 +75,10 @@ Keep the entire Compose/Skia side unchanged. Replace only what's behind the
 
 ## Preconditions and triggers
 
-- **Do not start before sync 3 lands.** Upstream's desktop merge changed the
-  `PlatformPlayerSurface` expect signature (resize mode, native controls plumbing);
-  swapping engines against a moving contract doubles the work.
+- **Sync 3 has landed (v0.1.15); the contract is stable.** Upstream's desktop merge —
+  which would have changed the `PlatformPlayerSurface` expect signature — was *reverted
+  upstream*, so there is no longer a moving contract blocking a swap. (Superseded note:
+  this previously said "do not start before sync 3"; sync 3 shipped 2026-06-13.)
 - Triggers that would justify scheduling it: real user demand for subtitle styling or
   audio passthrough; a VLCJ defect we can't work around; upstream shipping a Linux
   bridge (at which point migrate to official instead — see strategy notes).

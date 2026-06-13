@@ -65,10 +65,32 @@ Download the latest Android build from [NuvioMedia/NuvioMobile Releases](https:/
 
 ### Linux Desktop (JVM)
 
-**Status:** Community-maintained. Video playback and audio working. See known issues.
+**Status:** Community-maintained and actively developed. Video, audio, OAuth, addon
+persistence, debrid, and resume-across-restart all working. See known issues.
+
+#### Install the `.deb` (recommended)
+
+Download the latest `nuvio_<version>_amd64.deb` from the
+[Releases page](https://github.com/blarns/NuvioForLinux/releases/latest), then:
 
 ```bash
-# Install dependencies (Ubuntu/Debian/Mint)
+# VLC provides the libVLC runtime the player needs — it is NOT bundled in the .deb
+sudo apt install vlc
+
+# Install Nuvio (apt resolves the remaining runtime dependencies and the emoji font)
+sudo apt install ./nuvio_*_amd64.deb
+```
+
+Nuvio then appears in your application launcher. To update, download the newer `.deb` and
+run the same command, or use the in-app update prompt.
+
+> **Note:** libVLC is a hard requirement at runtime. If playback fails right after a `.deb`
+> install, install VLC with `sudo apt install vlc` and relaunch.
+
+#### Build from source
+
+```bash
+# Build + runtime dependencies (Ubuntu/Debian/Mint)
 sudo apt install openjdk-17-jdk libvlc-dev vlc
 
 # Optional: VA-API drivers for hardware video acceleration
@@ -97,6 +119,8 @@ See [LINUX_QUICKSTART.md](LINUX_QUICKSTART.md) for quick setup, or [LINUX_DESKTO
 - ✅ Subtitle support (SRT, VTT, ASS)
 - ✅ OAuth authentication with persistent session
 - ✅ Full addon ecosystem support with persistent storage
+- ✅ Addon update notifications — twice-weekly manifest re-checks with an Updates section, plus one-click URL swap (⇄) for reconfigured addons (AIOStreams and friends)
+- ✅ JavaScript plugin/scraper support (QuickJS runtime) — Settings → Plugins
 - ✅ Continue Watching, Library, Search
 - ✅ Resume playback from where you left off (persists across restarts)
 - ✅ Right-click context menus (mark watched, mark previous/season watched, play manually, remove from Continue Watching)
