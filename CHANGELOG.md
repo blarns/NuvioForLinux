@@ -6,6 +6,29 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.15] — 2026-06-13
+
+An upstream parity sync (NuvioMedia/NuvioMobile). No Linux-specific changes this round —
+upstream briefly merged then reverted its own "desktop port," so the fork's player path
+is unchanged; these are the worthwhile cross-platform fixes from that window.
+
+### Fixed
+- **Autoplay no longer skips post-credits scenes**, and post-credit detection now
+  respects your configured skip threshold. (upstream)
+- **Trakt: the next episode is no longer wrongly marked as watched** when an episode
+  finishes, and Trakt save failures now surface as a toast instead of failing silently.
+  (upstream)
+- **Missing logos fall back to the title text** on the details hero, home hero and
+  stream rows, instead of leaving a blank gap when a logo image is absent or fails to
+  load. (upstream)
+- **Clearing the Continue Watching cache refreshes watch progress immediately** rather
+  than waiting for the next sync. (upstream)
+
+### Changed
+- **The home hero carousel now loops** around past the last item. (upstream)
+- **Shelf rows: the "View All" action is now icon-only**, and shelf headers stay aligned
+  even on rows that have no View All. (upstream)
+
 ## [0.1.14] — 2026-06-12
 
 ### Added
