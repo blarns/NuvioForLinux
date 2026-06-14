@@ -1,5 +1,7 @@
 *.iml
 .kotlin
+# Bundled TorrServer binary (downloaded at build time by :composeApp:fetchTorrServer)
+composeApp/desktop-resources/*/torrserver
 .gradle
 **/build/
 !composeApp/src/**/kotlin/com/nuvio/app/core/build/
