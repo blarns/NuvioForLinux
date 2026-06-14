@@ -6,6 +6,19 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.17] — 2026-06-14
+
+### Fixed
+- **Catalog pagination.** Scrolling to the end of a catalog (in Home rows, the catalog grid,
+  Search results, and collection folders) now loads the next page correctly instead of
+  stopping short or re-requesting the same page. (upstream)
+
+### Changed
+- **Stream lists are no longer prefetched on the details screen.** Opening a movie/show page
+  used to start resolving its streams in the background before you asked; that warm-up is
+  removed, so streams resolve when you open the stream list. Reduces unnecessary addon/debrid
+  requests and avoids prematurely waking sources. (upstream)
+
 ## [0.1.16] — 2026-06-14
 
 ### Added
