@@ -8,9 +8,12 @@ import org.gradle.api.tasks.InputDirectory
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
 import org.gradle.process.ExecOperations
 import javax.inject.Inject
+import java.net.URI
+import java.security.MessageDigest
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import java.util.Properties
@@ -155,11 +158,19 @@ abstract class PatchDebRecommendsTask : DefaultTask() {
     @get:Input
     abstract val extraDepends: Property<String>
 
+    // Files (by name) inside the deb that must be marked executable. jpackage/dpkg can
+    // drop the exec bit on bundled app resources, and the installed copy is root-owned so
+    // the app can't chmod it at runtime — so we fix it in the package itself.
+    @get:Input
+    @get:Optional
+    abstract val executables: Property<String>
+
     @TaskAction
     fun patch() {
         val debs = debDirectory.get().asFile.listFiles { file -> file.extension == "deb" }.orEmpty()
         val dep = extraDepends.get().takeIf { it.isNotBlank() }
         val rec = recommends.get().takeIf { it.isNotBlank() }
+        val execNames = executables.orNull?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() }.orEmpty()
         debs.forEach { deb ->
             val workDir = File(temporaryDir, deb.nameWithoutExtension)
             workDir.deleteRecursively()
@@ -169,6 +180,18 @@ abstract class PatchDebRecommendsTask : DefaultTask() {
             val control = workDir.resolve("DEBIAN/control")
             var lines = control.readLines().filterNot { it.isBlank() }
             var changed = false
+
+            // Ensure bundled binaries are executable inside the package.
+            if (execNames.isNotEmpty()) {
+                workDir.walkTopDown()
+                    .filter { it.isFile && it.name in execNames }
+                    .forEach { bin ->
+                        if (!bin.canExecute()) {
+                            bin.setExecutable(true, false)
+                            changed = true
+                        }
+                    }
+            }
 
             // Append the runtime dependency onto the existing Depends: field (or add one).
             if (dep != null && lines.none { it.contains(dep) }) {
@@ -194,6 +217,54 @@ abstract class PatchDebRecommendsTask : DefaultTask() {
             }
             workDir.deleteRecursively()
         }
+    }
+}
+
+// Downloads the TorrServer Linux binary (P2P engine) into the app-resources dir at build
+// time, so the ~74 MB binary stays out of git. Pinned + SHA-256 verified for reproducibility.
+abstract class FetchTorrServerTask : DefaultTask() {
+    @get:Input
+    abstract val downloadUrl: Property<String>
+
+    @get:Input
+    abstract val sha256: Property<String>
+
+    @get:OutputFile
+    abstract val target: RegularFileProperty
+
+    @TaskAction
+    fun fetch() {
+        val out = target.get().asFile
+        val expected = sha256.get().lowercase()
+        if (out.exists() && sha256Of(out) == expected) {
+            logger.lifecycle("TorrServer binary already present and verified: ${out.absolutePath}")
+            return
+        }
+        out.parentFile.mkdirs()
+        val url = downloadUrl.get()
+        logger.lifecycle("Downloading TorrServer from $url")
+        URI(url).toURL().openStream().use { input ->
+            out.outputStream().use { output -> input.copyTo(output) }
+        }
+        val actual = sha256Of(out)
+        check(actual == expected) {
+            "TorrServer checksum mismatch.\n  expected: $expected\n  actual:   $actual\n  file:     ${out.absolutePath}"
+        }
+        out.setExecutable(true, false)
+        logger.lifecycle("TorrServer downloaded and verified (${out.length()} bytes)")
+    }
+
+    private fun sha256Of(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { stream ->
+            val buf = ByteArray(1 shl 16)
+            while (true) {
+                val n = stream.read(buf)
+                if (n < 0) break
+                digest.update(buf, 0, n)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 }
 
@@ -507,6 +578,10 @@ compose.desktop {
         jvmArgs("--add-opens=java.base/sun.misc=ALL-UNNAMED")
         nativeDistributions {
             targetFormats(TargetFormat.Deb)
+            // Bundles desktop-resources/<os-arch>/* into the app image; at runtime the
+            // bundled files live under the dir named by the compose.application.resources.dir
+            // system property (how P2pStreamingEngine.desktop locates the torrserver binary).
+            appResourcesRootDir.set(project.layout.projectDirectory.dir("desktop-resources"))
             packageName = "nuvio"
             packageVersion = project.findProperty("packageVersion") as String? ?: releaseAppVersionName
             description = "Modern media hub with Stremio addon ecosystem support"
@@ -528,10 +603,30 @@ compose.desktop {
     }
 }
 
+// Pinned TorrServer release (YouROK/TorrServer) bundled for the desktop P2P engine.
+val torrServerVersion = "MatriX.141.5"
+val torrServerSha256 = "770233787f6020fc5a8ad225626e3102fada71a48522e9131de17033d1bbe8f1"
+
+val fetchTorrServer = tasks.register<FetchTorrServerTask>("fetchTorrServer") {
+    description = "Downloads the pinned TorrServer Linux binary into desktop-resources."
+    downloadUrl.set(
+        "https://github.com/YouROK/TorrServer/releases/download/$torrServerVersion/TorrServer-linux-amd64"
+    )
+    sha256.set(torrServerSha256)
+    target.set(layout.projectDirectory.file("desktop-resources/linux-x64/torrserver"))
+}
+
+// Compose's prepareAppResources copies appResourcesRootDir into the app image; ensure the
+// binary is present (and verified) before that runs.
+tasks.matching { it.name == "prepareAppResources" }.configureEach {
+    dependsOn(fetchTorrServer)
+}
+
 val patchDebRecommends = tasks.register<PatchDebRecommendsTask>("patchDebRecommends") {
     debDirectory.set(layout.buildDirectory.dir("compose/binaries/main/deb"))
     recommends.set("fonts-noto-color-emoji")
     extraDepends.set("vlc-plugin-base | vlc")
+    executables.set("torrserver")
 }
 
 tasks.matching { it.name == "packageDeb" }.configureEach {
