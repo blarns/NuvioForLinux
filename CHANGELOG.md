@@ -6,6 +6,30 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.16] — 2026-06-14
+
+### Added
+- **Peer-to-peer (P2P) torrent streaming — experimental, opt-in.** Desktop can now stream
+  torrents directly, peer-to-peer, without a debrid subscription. This brings the fork to
+  parity with the Android app's P2P feature.
+  - **Off by default and gated behind consent.** P2P is disabled out of the box. Enabling it
+    in Settings first shows a consent dialog explaining that **your real IP address becomes
+    visible to other peers in the swarm** and that you are responsible for what you download.
+    Debrid (which resolves torrents server-side over plain HTTPS, so your IP is never exposed
+    to peers) remains the recommended default. **If you enable P2P, a VPN is strongly
+    advised.**
+  - **How it works.** The `.deb` bundles [TorrServer](https://github.com/YouROK/TorrServer)
+    (MatriX.141.5), a self-contained torrent-streaming engine. When you play a P2P stream,
+    Nuvio launches it locally, hands it the torrent, and plays the resulting stream through
+    the normal VLC-based player — so seeking, resume and subtitles work the same as any other
+    source. The engine idles down automatically a couple of minutes after playback stops.
+  - **Why "experimental":** the full data path is verified (engine launch, torrent add,
+    range-served playback, libVLC decode), but in-app playback hasn't yet had a wide test
+    pass across many torrents. Expect rough edges on restrictive networks (e.g. UDP-blocking
+    VPNs can slow the initial connect). Please report issues.
+  - **Package size:** the bundled engine adds ~25 MB to the download (the `.deb` is now
+    ~140 MB). TorrServer is GPL-3.0; its license and a source offer ship inside the package.
+
 ## [0.1.15.1] — 2026-06-13
 
 ### Fixed
