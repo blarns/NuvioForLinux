@@ -152,6 +152,45 @@ reinforces that debrid (pure HTTPS) is the more robust default; P2P is the opt-i
 **Conclusion:** the architecture is validated end-to-end, no surprises. Proceed with the
 ~6–9 day implementation whenever it's greenlit.
 
+## Implementation results (2026-06-14) — phases 1–4 done on `p2p-desktop`
+
+Built on branch `p2p-desktop` (cmp-rewrite stays releasable). Commits:
+
+- **Phase 1** (`0484bd9d0`) — ported the Android engine to
+  `P2pStreamingEngine.desktop.kt` (~700 lines): `TorrServerBinary` (ProcessBuilder
+  lifecycle, port 8091, XDG config dir, idle TTL), `TorrServerApi` on the JDK
+  `java.net.http.HttpClient` + `kotlinx.serialization.json` (no OkHttp/org.json),
+  stream selector, state mapping, warmup/cooldown. Compiles clean.
+- **Phase 3** (`d1bd5c700`) — flipped `AppFeaturePolicy.desktop.p2pEnabled` → true.
+  Only surfaces the toggle + consent flow (already commonMain); the `p2pEnabled`
+  **setting** stays off by default. Consent dialog already warns about real-IP exposure.
+- **Phase 2** (`f328bafe9`) — bundling: `appResourcesRootDir = desktop-resources/`,
+  so the binary lands at `/opt/nuvio/lib/app/resources/torrserver` (where the engine's
+  `compose.application.resources.dir` resolution looks). `fetchTorrServer` Gradle task
+  downloads the **pinned MatriX.141.5 linux-amd64** binary (SHA-256
+  `770233787f…be8f1`) at build time → the ~74 MB binary stays out of git
+  (`prepareAppResources dependsOn fetchTorrServer`). `PatchDebRecommendsTask` also
+  guarantees the exec bit inside the deb (installed copy is root-owned).
+- **Phase 4** (license) — ship `TorrServer-LICENSE.txt` (GPL-3.0) + a source-offer
+  `TorrServer-NOTICE.txt` next to the binary (mere aggregation).
+
+**Deb verified:** `nuvio_0.1.15.1_amd64.deb` is ~140 MB (74 MB binary compresses),
+contains `./opt/nuvio/lib/app/resources/torrserver` `rwxr-xr-x` + both license files,
+`Depends:` still carries `vlc-plugin-base | vlc`.
+
+**E2E data path verified** (against the *bundled deb binary*, extracted + launched with
+the engine's exact `--port 8091 --path <cfg>` args, driving the engine's exact HTTP
+contract): `/echo` readiness → `/settings` get+set → `/torrents` add (link=.torrent,
+save_to_db=false) → `hash` → poll `file_stats` (`Torrent working`) → `/stream?...&play&index=N`
+returns **HTTP 206 range**; `index=2` = the MP4 streamed as valid `ISO Media, MP4`. Combined
+with the spike's `cvlc`/libVLC playback proof (decoded at 1920×1080), the full chain holds.
+GUI playback through VLCJ in the running app still wants a manual pass on a desktop with a
+display (VLCJ wraps the same libVLC the spike validated).
+
+**Remaining before merge to cmp-rewrite + release:** manual GUI pass (enable toggle →
+consent → pick a Torrentio/P2P stream → play/seek/resume through VLCJ) on a real display;
+then merge and cut a release with proper P2P patch notes (per [[release-detailed-patch-notes]]).
+
 ## Preconditions / triggers
 
 - 0.1.15 is shipped; **no contract churn here** — the P2P engine API was untouched by the
