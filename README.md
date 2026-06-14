@@ -66,7 +66,8 @@ Download the latest Android build from [NuvioMedia/NuvioMobile Releases](https:/
 ### Linux Desktop (JVM)
 
 **Status:** Community-maintained and actively developed. Video, audio, OAuth, addon
-persistence, debrid, and resume-across-restart all working. See known issues.
+persistence, debrid, resume-across-restart, and experimental P2P torrent streaming all
+working. See known issues.
 
 #### Install the `.deb` (recommended)
 
@@ -126,6 +127,7 @@ See [LINUX_QUICKSTART.md](LINUX_QUICKSTART.md) for quick setup, or [LINUX_DESKTO
 - ✅ Right-click context menus (mark watched, mark previous/season watched, play manually, remove from Continue Watching)
 - ✅ In-app update notifications — checks for new releases on startup and downloads the `.deb`
 - ✅ TMDB enrichment, MDBList ratings, and Debrid (Torbox/Real-Debrid) settings — configurable and persistent (Settings → Integrations)
+- 🧪 **Peer-to-peer (P2P) torrent streaming — experimental, off by default.** Stream torrents without a debrid subscription, via a bundled [TorrServer](https://github.com/YouROK/TorrServer) engine. Enabling it (Settings → P2P) requires accepting a consent dialog. **⚠️ P2P exposes your real IP address to other peers in the swarm — use a VPN.** Debrid (which resolves torrents server-side over HTTPS, never exposing your IP) remains the recommended default.
 - ✅ Hardware video acceleration via VA-API (Intel/AMD) or NVDEC (NVIDIA) — toggle in Settings → Playback
 - ✅ Audio output selection (Auto / PulseAudio / ALSA / JACK) — Settings → Playback
 - ✅ Keyboard shortcuts (Space, arrows, M, F for fullscreen, scroll wheel for volume)
