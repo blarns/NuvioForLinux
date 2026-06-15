@@ -411,6 +411,7 @@
     <string name="compose_settings_page_playback">Playback</string>
     <string name="compose_settings_page_plugins">Plugins</string>
     <string name="compose_settings_page_poster_customization">Poster Card Style</string>
+    <string name="compose_settings_page_p2p">P2P Streaming</string>
     <string name="compose_settings_page_root">Settings</string>
     <string name="compose_settings_page_streams">Streams</string>
     <string name="compose_settings_page_supporters_contributors">Supporters &amp; Contributors</string>
@@ -430,6 +431,7 @@
     <string name="compose_settings_root_general_section">GENERAL</string>
     <string name="compose_settings_root_integrations_description">Manage available integrations</string>
     <string name="compose_settings_root_notifications_description">Manage episode release alerts and send a test notification.</string>
+    <string name="compose_settings_root_p2p_description">Experimental peer-to-peer torrent streaming.</string>
     <string name="compose_settings_root_streams_description">Stream result display and badge URL rules.</string>
     <string name="compose_settings_root_switch_profile_description">Change to a different profile.</string>
     <string name="compose_settings_root_switch_profile_title">Switch Profile</string>

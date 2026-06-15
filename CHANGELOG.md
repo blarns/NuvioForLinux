@@ -6,6 +6,33 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.18] — 2026-06-15
+
+### Fixed
+- **Sign-in was broken (regression).** Releases since 0.1.13 (confirmed: 0.1.15.1, 0.1.17) were
+  built without the Supabase configuration present, which baked an **empty** backend URL into the
+  app. At runtime an empty URL makes every auth and data request resolve to `localhost` and fail —
+  so signing in failed (`POST /auth/v1/token`), profiles couldn't sync, and **profile avatars
+  rendered blank**. It stayed hidden while a previously-cached session kept working, and surfaced
+  once that session expired and a fresh login was required. 0.1.18 ships with the correct backend
+  configuration. **If you were affected, just sign in again after updating.**
+- **Profile avatars no longer silently vanish.** The avatar catalog now falls back to a
+  session-independent (anon) fetch — it's a public catalog, so a stale login must not blank it —
+  and each avatar falls back to your initial if the image ever fails to load, instead of an empty
+  circle.
+
+### Added
+- **Dedicated "P2P Streaming" settings page** (Settings → General → P2P). Peer-to-peer streaming
+  can now be enabled directly from Settings; previously it was only reachable via an in-player
+  consent prompt that never appeared when debrid resolved your streams. Includes the
+  IP-exposure / VPN warning and the upload / hide-stats toggles. Off by default; debrid remains
+  the recommended way to stream.
+
+### Changed
+- **The build now refuses to package an empty Supabase configuration.** Release builds fail fast
+  if the backend URL/key are missing (e.g. building without `local.properties`), so the
+  0.1.13–0.1.17 "empty config → localhost → broken login" class of regression can never ship again.
+
 ## [0.1.17] — 2026-06-14
 
 ### Fixed

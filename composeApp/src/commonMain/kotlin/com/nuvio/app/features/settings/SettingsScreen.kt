@@ -77,6 +77,8 @@ import com.nuvio.app.features.trakt.TraktSettingsRepository
 import com.nuvio.app.features.trakt.TraktSettingsUiState
 import com.nuvio.app.features.tmdb.TmdbSettings
 import com.nuvio.app.features.tmdb.TmdbSettingsRepository
+import com.nuvio.app.features.p2p.P2pSettingsRepository
+import com.nuvio.app.features.p2p.P2pSettingsUiState
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepository
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesUiState
 import nuvio.composeapp.generated.resources.Res
@@ -198,6 +200,10 @@ fun SettingsScreen(
         val profileSettingsState by remember {
             ProfileRepository.state
         }.collectAsStateWithLifecycle()
+        val p2pSettingsUiState by remember {
+            P2pSettingsRepository.ensureLoaded()
+            P2pSettingsRepository.uiState
+        }.collectAsStateWithLifecycle()
 
         LaunchedEffect(homescreenCatalogRefreshKey) {
             if (homescreenCatalogRefreshKey.isEmpty()) return@LaunchedEffect
@@ -287,6 +293,7 @@ fun SettingsScreen(
                 homescreenItems = homescreenSettingsUiState.items,
                 metaScreenSettingsUiState = metaScreenSettingsUiState,
                 continueWatchingPreferencesUiState = continueWatchingPreferencesUiState,
+                p2pSettingsUiState = p2pSettingsUiState,
                 posterCardStyleUiState = posterCardStyleUiState,
                 onSwitchProfile = onSwitchProfile,
                 onDownloadsClick = onDownloadsClick,
@@ -339,6 +346,7 @@ fun SettingsScreen(
                 homescreenItems = homescreenSettingsUiState.items,
                 metaScreenSettingsUiState = metaScreenSettingsUiState,
                 continueWatchingPreferencesUiState = continueWatchingPreferencesUiState,
+                p2pSettingsUiState = p2pSettingsUiState,
                 posterCardStyleUiState = posterCardStyleUiState,
                 onSwitchProfile = onSwitchProfile,
                 onHomescreenClick = onHomescreenClick,
@@ -401,6 +409,7 @@ private fun MobileSettingsScreen(
     homescreenItems: List<HomeCatalogSettingsItem>,
     metaScreenSettingsUiState: MetaScreenSettingsUiState,
     continueWatchingPreferencesUiState: ContinueWatchingPreferencesUiState,
+    p2pSettingsUiState: P2pSettingsUiState,
     posterCardStyleUiState: PosterCardStyleUiState,
     onSwitchProfile: (() -> Unit)? = null,
     onHomescreenClick: () -> Unit = {},
@@ -511,6 +520,11 @@ private fun MobileSettingsScreen(
                             onAppearanceClick = { onPageChange(SettingsPage.Appearance) },
                             onAdvancedClick = { onPageChange(SettingsPage.Advanced) },
                             onNotificationsClick = { onPageChange(SettingsPage.Notifications) },
+                            onP2pClick = if (P2pSettingsRepository.isVisible) {
+                                { onPageChange(SettingsPage.P2p) }
+                            } else {
+                                null
+                            },
                             onContentDiscoveryClick = { onPageChange(SettingsPage.ContentDiscovery) },
                             onIntegrationsClick = { onPageChange(SettingsPage.Integrations) },
                             onTraktClick = { onPageChange(SettingsPage.TraktAuthentication) },
@@ -553,6 +567,12 @@ private fun MobileSettingsScreen(
                 )
                 SettingsPage.Streams -> streamsSettingsContent(
                     isTablet = false,
+                )
+                SettingsPage.P2p -> p2pSettingsContent(
+                    isTablet = false,
+                    p2pEnabled = p2pSettingsUiState.p2pEnabled,
+                    enableUpload = p2pSettingsUiState.enableUpload,
+                    hideTorrentStats = p2pSettingsUiState.hideTorrentStats,
                 )
                 SettingsPage.Appearance -> appearanceSettingsContent(
                     isTablet = false,
@@ -729,6 +749,7 @@ private fun TabletSettingsScreen(
     homescreenItems: List<HomeCatalogSettingsItem>,
     metaScreenSettingsUiState: MetaScreenSettingsUiState,
     continueWatchingPreferencesUiState: ContinueWatchingPreferencesUiState,
+    p2pSettingsUiState: P2pSettingsUiState,
     posterCardStyleUiState: PosterCardStyleUiState,
     onSwitchProfile: (() -> Unit)? = null,
     onDownloadsClick: () -> Unit = {},
@@ -894,6 +915,11 @@ private fun TabletSettingsScreen(
                                 onAppearanceClick = { openInlinePage(SettingsPage.Appearance) },
                                 onAdvancedClick = { openInlinePage(SettingsPage.Advanced) },
                                 onNotificationsClick = { openInlinePage(SettingsPage.Notifications) },
+                                onP2pClick = if (P2pSettingsRepository.isVisible) {
+                                    { openInlinePage(SettingsPage.P2p) }
+                                } else {
+                                    null
+                                },
                                 onContentDiscoveryClick = { openInlinePage(SettingsPage.ContentDiscovery) },
                                 onIntegrationsClick = { openInlinePage(SettingsPage.Integrations) },
                                 onTraktClick = { openInlinePage(SettingsPage.TraktAuthentication) },
@@ -940,6 +966,12 @@ private fun TabletSettingsScreen(
                     )
                     SettingsPage.Streams -> streamsSettingsContent(
                         isTablet = true,
+                    )
+                    SettingsPage.P2p -> p2pSettingsContent(
+                        isTablet = true,
+                        p2pEnabled = p2pSettingsUiState.p2pEnabled,
+                        enableUpload = p2pSettingsUiState.enableUpload,
+                        hideTorrentStats = p2pSettingsUiState.hideTorrentStats,
                     )
                     SettingsPage.Appearance -> appearanceSettingsContent(
                         isTablet = true,

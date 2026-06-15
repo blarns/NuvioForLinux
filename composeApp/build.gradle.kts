@@ -37,6 +37,21 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
         val props = Properties()
         localPropertiesFile.asFile.orNull?.takeIf { it.exists() }?.inputStream()?.use { props.load(it) }
 
+        val supabaseUrl = props.getProperty("SUPABASE_URL", "").trim()
+        val supabaseAnonKey = props.getProperty("SUPABASE_ANON_KEY", "").trim()
+        // An empty URL makes supabase-kt/ktor resolve every auth + REST call to localhost, which silently
+        // breaks login, profile sync and the avatar catalog at runtime. This shipped in 0.1.13–0.1.17 because
+        // local.properties (gitignored) was absent when those debs were built in a clean checkout/worktree.
+        // Fail the build instead of ever producing an empty SupabaseConfig again.
+        if (supabaseUrl.isBlank() || supabaseAnonKey.isBlank()) {
+            error(
+                "SUPABASE_URL / SUPABASE_ANON_KEY are missing from local.properties (not present at build time). " +
+                    "Refusing to generate an empty SupabaseConfig — an empty URL makes every auth/network request " +
+                    "resolve to localhost and breaks login at runtime (exactly what shipped broken in 0.1.13–0.1.17). " +
+                    "Add them to local.properties before building a release."
+            )
+        }
+
         val outDir = outputDir.get().asFile
         outDir.resolve("com/nuvio/app/core/network").apply {
             mkdirs()
@@ -45,8 +60,8 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 |package com.nuvio.app.core.network
                 |
                 |object SupabaseConfig {
-                |    const val URL = "${props.getProperty("SUPABASE_URL", "")}" 
-                |    const val ANON_KEY = "${props.getProperty("SUPABASE_ANON_KEY", "")}" 
+                |    const val URL = "$supabaseUrl"
+                |    const val ANON_KEY = "$supabaseAnonKey"
                 |}
                 """.trimMargin()
             )
@@ -337,7 +352,11 @@ val isAndroidAppBundleBuild = requestedGradleTasks.any { taskName ->
 
 val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generateRuntimeConfigs") {
     outputDir.set(generatedRuntimeConfigDir)
-    localPropertiesFile.set(rootProject.layout.projectDirectory.file("local.properties"))
+    // Only wire the input when it actually exists, so an absent local.properties reaches the task's own
+    // guard (clear error) instead of failing earlier on @InputFile "file doesn't exist" validation.
+    rootProject.layout.projectDirectory.file("local.properties").let { lp ->
+        if (lp.asFile.exists()) localPropertiesFile.set(lp)
+    }
     appVersionName.set(releaseAppVersionName)
     appVersionCode.set(releaseAppVersionCode)
 }

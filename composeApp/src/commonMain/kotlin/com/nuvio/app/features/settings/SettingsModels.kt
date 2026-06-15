@@ -23,6 +23,7 @@ import nuvio.composeapp.generated.resources.compose_settings_page_licenses_attri
 import nuvio.composeapp.generated.resources.compose_settings_page_mdblist_ratings
 import nuvio.composeapp.generated.resources.compose_settings_page_meta_screen
 import nuvio.composeapp.generated.resources.compose_settings_page_notifications
+import nuvio.composeapp.generated.resources.compose_settings_page_p2p
 import nuvio.composeapp.generated.resources.compose_settings_page_playback
 import nuvio.composeapp.generated.resources.compose_settings_page_plugins
 import nuvio.composeapp.generated.resources.compose_settings_page_poster_customization
@@ -91,6 +92,11 @@ internal enum class SettingsPage(
     ),
     Notifications(
         titleRes = Res.string.compose_settings_page_notifications,
+        category = SettingsCategory.General,
+        parentPage = Root,
+    ),
+    P2p(
+        titleRes = Res.string.compose_settings_page_p2p,
         category = SettingsCategory.General,
         parentPage = Root,
     ),

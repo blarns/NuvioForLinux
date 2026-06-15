@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import coil3.compose.AsyncImagePainter
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
 import kotlinx.coroutines.delay
@@ -307,6 +308,8 @@ private fun ProfileAvatarCard(
     val avatarImageUrl = remember(profile.avatarUrl, avatarItem) {
         profileAvatarImageUrl(profile, avatarItem)
     }
+    var avatarImageFailed by remember(avatarImageUrl) { mutableStateOf(false) }
+    val showAvatarImage = avatarImageUrl != null && !avatarImageFailed
 
     val animAlpha = remember { Animatable(0f) }
     val animScale = remember { Animatable(0.85f) }
@@ -345,7 +348,7 @@ private fun ProfileAvatarCard(
             modifier = Modifier.size(110.dp),
             contentAlignment = Alignment.Center,
         ) {
-            if (avatarImageUrl != null) {
+            if (showAvatarImage) {
                 val bgColor = avatarItem?.bgColor?.let { parseHexColor(it) } ?: avatarColor
                 Box(
                     modifier = Modifier
@@ -360,24 +363,27 @@ private fun ProfileAvatarCard(
                     .size(100.dp)
                     .clip(CircleShape)
                     .background(
-                        if (avatarItem != null) {
-                            avatarItem.bgColor?.let { parseHexColor(it) } ?: avatarColor
+                        if (showAvatarImage) {
+                            avatarItem?.bgColor?.let { parseHexColor(it) } ?: avatarColor
                         } else {
                             avatarColor.copy(alpha = 0.15f)
                         },
                     )
                     .then(
-                        if (avatarImageUrl == null) Modifier.border(2.dp, avatarColor.copy(alpha = 0.4f), CircleShape)
+                        if (!showAvatarImage) Modifier.border(2.dp, avatarColor.copy(alpha = 0.4f), CircleShape)
                         else Modifier,
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                if (avatarImageUrl != null) {
+                if (showAvatarImage) {
                     AsyncImage(
                         model = avatarImageUrl,
                         contentDescription = avatarItem?.displayName ?: profile.name,
                         modifier = Modifier.size(100.dp).clip(CircleShape),
                         contentScale = ContentScale.Crop,
+                        onState = { state ->
+                            if (state is AsyncImagePainter.State.Error) avatarImageFailed = true
+                        },
                     )
                 } else if (profile.name.isNotBlank()) {
                     Text(
