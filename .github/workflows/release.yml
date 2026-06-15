@@ -1,9 +1,15 @@
 name: Release
 
+# DISABLED 2026-06-15. This CI path baked an EMPTY Supabase config (`SUPABASE_URL=`) and built with
+# `packageReleaseDeb`, which skips `patchDebRecommends` (TorrServer bundle + `vlc-plugin-base | vlc`).
+# That shipped broken releases (0.1.15.1, 0.1.17): empty URL -> all auth/REST resolve to localhost ->
+# login + avatars + sync fail. Releases are now built LOCALLY and published manually:
+#   ./gradlew :composeApp:packageDeb   (then patchDebRecommends) ; gh release create -R blarns/NuvioForLinux
+# The in-app updater reads the GitHub Releases API, so manual releases still reach users normally.
+# Manual-dispatch only. Do NOT restore the tag trigger until BOTH the real config is injected AND the
+# deb is patched (see [[supabase-config-regression]]).
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write

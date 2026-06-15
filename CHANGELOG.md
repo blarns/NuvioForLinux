@@ -6,6 +6,19 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.19] — 2026-06-15
+
+### Changed
+- **Stream descriptions are easier to read.** The secondary line under each stream result (size,
+  source, quality, etc.) now uses a brighter, higher-contrast text color instead of the dim gray
+  that was hard to read on some themes. Applied in both the results list and the stream-options sheet.
+
+### Internal
+- **Disabled the broken CI release workflow.** The tag-triggered GitHub Actions release built with an
+  empty Supabase config (the root cause of the 0.1.13–0.1.17 login breakage) and skipped the deb
+  patch step. Releases are now built locally and published manually; the in-app updater (GitHub
+  Releases API) is unaffected, so users keep updating normally.
+
 ## [0.1.18] — 2026-06-15
 
 ### Fixed
