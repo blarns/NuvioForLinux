@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Universal AppImage build (x86_64).** Alongside the `.deb`, Nuvio can now be packaged as a portable
+  **AppImage** that runs on any glibc ≥ 2.35 distribution — Ubuntu 22.04 LTS, Debian 12, Fedora, Arch,
+  and newer — with **no VLC installation required**: libVLC 3.0.16 plus its full plugin/codec set are
+  bundled inside. Built by `scripts/build-vlc-bundle.sh` (stages VLC from an Ubuntu 22.04 container so
+  the glibc floor stays low) and `scripts/package-appimage.sh` (jlinks the bundled runtime with
+  Temurin 21, assembles the AppDir, and packs with appimagetool). The `.deb` is unchanged.
 - **Cloud audio file playback (experimental).** The TorBox / Premiumize cloud library now lists and
   plays **audio** files — audiobooks and music — not just video. It recognizes `audio/*` types and
   common audio extensions (mp3, m4a, m4b, flac, opus, ogg, aac, wav, and similar). Playback uses the
