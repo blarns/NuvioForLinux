@@ -6,7 +6,7 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [0.1.20] — 2026-06-17
 
 ### Added
 - **Universal AppImage build (x86_64).** Alongside the `.deb`, Nuvio can now be packaged as a portable
