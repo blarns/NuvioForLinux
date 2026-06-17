@@ -137,9 +137,10 @@ private fun String.pathBasename(): String =
 private fun isPlayablePremiumizeCloudFile(name: String, mimeType: String?): Boolean {
     val normalizedMime = mimeType?.lowercase().orEmpty()
     if (normalizedMime.startsWith("video/")) return true
+    if (normalizedMime.startsWith("audio/")) return true
     val extension = name.substringAfterLast('.', missingDelimiterValue = "")
         .lowercase()
-    return extension in premiumizePlayableVideoExtensions
+    return extension in premiumizePlayableVideoExtensions || extension in premiumizePlayableAudioExtensions
 }
 
 private val premiumizePlayableVideoExtensions = setOf(
@@ -161,4 +162,22 @@ private val premiumizePlayableVideoExtensions = setOf(
     "ts",
     "webm",
     "wmv",
+)
+
+private val premiumizePlayableAudioExtensions = setOf(
+    "aac",
+    "aif",
+    "aiff",
+    "alac",
+    "ape",
+    "flac",
+    "m4a",
+    "m4b",
+    "mka",
+    "mp3",
+    "oga",
+    "ogg",
+    "opus",
+    "wav",
+    "wma",
 )

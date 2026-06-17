@@ -197,9 +197,10 @@ private fun Double.toProgressFraction(): Float {
 private fun isPlayableCloudFile(name: String, mimeType: String?): Boolean {
     val normalizedMime = mimeType?.lowercase().orEmpty()
     if (normalizedMime.startsWith("video/")) return true
+    if (normalizedMime.startsWith("audio/")) return true
     val extension = name.substringAfterLast('.', missingDelimiterValue = "")
         .lowercase()
-    return extension in playableVideoExtensions
+    return extension in playableVideoExtensions || extension in playableAudioExtensions
 }
 
 private val playableVideoExtensions = setOf(
@@ -221,4 +222,22 @@ private val playableVideoExtensions = setOf(
     "ts",
     "webm",
     "wmv",
+)
+
+private val playableAudioExtensions = setOf(
+    "aac",
+    "aif",
+    "aiff",
+    "alac",
+    "ape",
+    "flac",
+    "m4a",
+    "m4b",
+    "mka",
+    "mp3",
+    "oga",
+    "ogg",
+    "opus",
+    "wav",
+    "wma",
 )

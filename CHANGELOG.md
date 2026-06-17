@@ -6,6 +6,16 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+- **Cloud audio file playback (experimental).** The TorBox / Premiumize cloud library now lists and
+  plays **audio** files — audiobooks and music — not just video. It recognizes `audio/*` types and
+  common audio extensions (mp3, m4a, m4b, flac, opus, ogg, aac, wav, and similar). Playback uses the
+  normal player, so progress tracking and resume-to-position work exactly as they do for video.
+  Surfaced only when audio files are already present in your debrid cloud; there is no in-app search
+  for them yet.
+
 ## [0.1.19] — 2026-06-15
 
 ### Changed
