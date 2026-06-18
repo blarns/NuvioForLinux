@@ -18,6 +18,24 @@
 
 </div>
 
+## Screenshots
+
+<div align="center">
+
+<img src="docs/screenshots/player.png" width="85%" alt="Nuvio in-app player on Linux" />
+
+<sub><em>In-app player — libVLC playback with subtitles, transport controls, track/source switching, and resume-from-position.</em></sub>
+
+</div>
+
+| Browse & discover | Title details & episodes |
+|:---:|:---:|
+| <img src="docs/screenshots/browse.png" alt="Browse catalogs" /> | <img src="docs/screenshots/detail.png" alt="Show details, seasons and episodes" /> |
+| **Multi-source stream selection** | **Playback with subtitles** |
+| <img src="docs/screenshots/sources.png" alt="Stream source selection across addons" /> | <img src="docs/screenshots/player-subtitles.png" alt="Player rendering subtitles" /> |
+
+<div align="right"><sub>Running on Linux Mint 22 (Ubuntu 24.04 base) · X11 · built from the universal AppImage · v0.1.20</sub></div>
+
 ## About
 
 This is a fork of [NuvioMedia/NuvioMobile](https://github.com/NuvioMedia/NuvioMobile) with an added **Linux Desktop target** via Kotlin Multiplatform JVM + VLCJ.
@@ -34,9 +52,9 @@ Because the original NuvioTV project was licensed under the **GNU General Public
 
 If you fork, modify, or distribute this code, you **must** also open-source your modifications under the GPL-3.0.
 
-## ⚠️ Disclaimer
-> [!WARNING]
-> This project was largely **vibecoded** (built rapidly with AI assistance/pair programming). While it is functional and packed with features, it may contain unconventional patterns, unoptimized code, or bugs. Pull requests, fixes, and improvements are extremely welcome!
+## Project status
+> [!NOTE]
+> This community fork exists to give Linux desktop a working Nuvio **today** — the official desktop port targets macOS and Windows first. It's built on the upstream [NuvioMobile](https://github.com/NuvioMedia/NuvioMobile) Kotlin Multiplatform / Compose codebase — the same shared `commonMain` that powers the Android and iOS apps — with a Linux/JVM desktop layer added on top: VLCJ playback, MPRIS media keys, hardware-accelerated video, and `.deb` + AppImage packaging. It's actively used and regularly released (see [Releases](https://github.com/blarns/NuvioForLinux/releases)). Development is fast-moving and AI-assisted, so expect the occasional rough edge — issues and pull requests are very welcome.
 
 ## Environment Setup
 
@@ -69,7 +87,22 @@ Download the latest Android build from [NuvioMedia/NuvioMobile Releases](https:/
 persistence, debrid, resume-across-restart, and experimental P2P torrent streaming all
 working. See known issues.
 
-#### Install the `.deb` (recommended)
+#### Option A — Universal AppImage (easiest, no VLC install needed)
+
+Download `Nuvio-<version>-x86_64.AppImage` from the
+[Releases page](https://github.com/blarns/NuvioForLinux/releases/latest). It bundles libVLC and its
+full codec set, so there is **nothing else to install** — it runs on any glibc ≥ 2.35 distribution
+(Ubuntu 22.04 LTS+, Debian 12+, Fedora, Arch, Mint, …):
+
+```bash
+chmod +x Nuvio-*-x86_64.AppImage
+./Nuvio-*-x86_64.AppImage
+```
+
+> Using **AppImageLauncher**? Older versions mishandle modern AppImages — update it to the latest
+> release, or launch from a terminal with `APPIMAGELAUNCHER_DISABLE=1 ./Nuvio-*-x86_64.AppImage`.
+
+#### Option B — Debian / Ubuntu `.deb`
 
 Download the latest `nuvio_<version>_amd64.deb` from the
 [Releases page](https://github.com/blarns/NuvioForLinux/releases/latest), then:
