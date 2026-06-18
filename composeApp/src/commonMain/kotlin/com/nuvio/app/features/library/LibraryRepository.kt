@@ -77,6 +77,7 @@ object LibraryRepository {
 
     private var hasLoaded = false
     private var currentProfileId: Int = 1
+    private var profileGeneration: Long = 0L
     private var itemsById: MutableMap<String, LibraryItem> = mutableMapOf()
     private var isPullingNuvioSyncFromServer = false
     private var hasCompletedInitialNuvioSyncPull = false
@@ -152,6 +153,7 @@ object LibraryRepository {
     fun clearLocalState() {
         hasLoaded = false
         currentProfileId = 1
+        profileGeneration += 1L
         itemsById.clear()
         pushJob?.cancel()
         isPullingNuvioSyncFromServer = false
@@ -163,6 +165,7 @@ object LibraryRepository {
 
     private fun loadFromDisk(profileId: Int) {
         currentProfileId = profileId
+        profileGeneration += 1L
         hasLoaded = true
         itemsById.clear()
 
@@ -178,11 +181,15 @@ object LibraryRepository {
     }
 
     suspend fun pullFromServer(profileId: Int) {
-        currentProfileId = profileId
+        val operationGeneration = activeOperationGeneration(profileId) ?: run {
+            log.d { "Skipping library pull for inactive profile $profileId" }
+            return
+        }
 
         if (isTraktLibrarySourceActive()) {
             runCatching { TraktLibraryRepository.refreshNow() }
                 .onFailure { e -> log.e(e) { "Failed to pull Trakt library" } }
+            if (!isActiveOperation(profileId, operationGeneration)) return
             hasCompletedInitialNuvioSyncPull = true
             publish()
             return
@@ -191,6 +198,7 @@ object LibraryRepository {
         isPullingNuvioSyncFromServer = true
         runCatching {
             val serverItems = pullAllLibrarySyncItems(profileId)
+            if (!isActiveOperation(profileId, operationGeneration)) return@runCatching
             if (serverItems.isEmpty() && itemsById.isNotEmpty()) {
                 log.w { "Remote library is empty while local has ${itemsById.size} entries; preserving local library" }
             } else {
@@ -209,6 +217,19 @@ object LibraryRepository {
             isPullingNuvioSyncFromServer = false
         }
     }
+
+    private fun activeOperationGeneration(profileId: Int): Long? {
+        if (ProfileRepository.activeProfileId != profileId) return null
+        if (!hasLoaded || currentProfileId != profileId) {
+            loadFromDisk(profileId)
+        }
+        return profileGeneration
+    }
+
+    private fun isActiveOperation(profileId: Int, generation: Long): Boolean =
+        currentProfileId == profileId &&
+            profileGeneration == generation &&
+            ProfileRepository.activeProfileId == profileId
 
     fun toggleSaved(item: LibraryItem) {
         ensureLoaded()
@@ -358,10 +379,11 @@ object LibraryRepository {
         if (isPullingNuvioSyncFromServer || !hasCompletedInitialNuvioSyncPull) return
 
         pushJob?.cancel()
+        val profileId = currentProfileId
         pushJob = syncScope.launch {
             delay(500)
+            if (profileId != currentProfileId) return@launch
             runCatching {
-                val profileId = ProfileRepository.activeProfileId
                 val syncItems = itemsById.values.map { it.toSyncItem() }
                 if (syncItems.isEmpty()) return@runCatching
                 val params = buildJsonObject {
