@@ -12,7 +12,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil3.ImageLoader
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.Color
@@ -21,8 +20,6 @@ import androidx.compose.ui.graphics.Color
 actual fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit) {}
 
 actual fun platformExitApp() {}
-
-internal actual fun ImageLoader.Builder.configurePlatformImageLoader(): ImageLoader.Builder = this
 
 internal actual val nuvioPlatformExtraTopPadding: Dp = 0.dp
 internal actual val nuvioPlatformExtraBottomPadding: Dp = 0.dp

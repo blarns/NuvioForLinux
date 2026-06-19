@@ -6,6 +6,22 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.21] — 2026-06-19
+
+### Fixed
+- **Home-screen collection posters no longer reload while scrolling (desktop).** On the Linux
+  desktop build, collection-row posters were loaded outside the shared image cache, so each one
+  was re-downloaded and re-decoded every time it scrolled back into view — appearing to "unload"
+  and flicker. They now go through the same Coil **memory + disk cache** as the rest of the app, so
+  they load instantly after the first fetch and persist across restarts (disk cache lives at
+  `~/.cache/nuvio/images`). Reported in #2.
+
+### Internal
+- **Removed inherited issue/PR auto-management workflows.** Several GitHub Actions carried over
+  from the upstream legacy repo were auto-closing new issues and pull requests (and reaping
+  unlabeled issues on a daily schedule). They have been removed so community issues and PRs stay
+  open.
+
 ## [0.1.20] — 2026-06-17
 
 ### Added
