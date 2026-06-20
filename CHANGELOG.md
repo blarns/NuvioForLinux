@@ -6,6 +6,27 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.22] — 2026-06-20
+
+### Added
+- **Collection "focus" art now animates on hover (desktop).** Home-screen collection cards that have
+  an animated focus image (GIF / animated WebP) now play it when you hover the card with the mouse:
+  the static cover shows at rest and the animation fades in while hovered, and only the hovered card
+  animates. Coil's desktop image decoder only renders the first frame of an animated image (and can't
+  decode some at all), so the focus animation is decoded frame-by-frame with Skia's `Codec`,
+  mirroring how the iOS build hand-rolls animation. Reported in #2.
+- **Horizontal scrolling for card rows (desktop).** Card rows can now be scrolled with **Shift + the
+  mouse wheel** or a **horizontal trackpad swipe**, and each scrollable row shows **floating ◀ / ▶
+  buttons** at its edges (40% opacity, brighter on hover) so you can scroll by clicking. A plain
+  vertical wheel still scrolls the page as before. Previously, a windowed (non-maximized) window could
+  leave overflowing cards unreachable with a mouse.
+
+### Fixed
+- **Blank collection posters (desktop).** Collection tiles whose art is an animated WebP could show up
+  blank, because the desktop decoder couldn't render an animated image at rest. Cards now show the
+  static cover at rest (with the animation on hover, above), so they no longer appear blank. Reported
+  in #2.
+
 ## [0.1.21] — 2026-06-19
 
 ### Fixed

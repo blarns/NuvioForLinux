@@ -15,7 +15,12 @@ internal actual fun CollectionCardRemoteImage(
     modifier: Modifier,
     contentScale: ContentScale,
     animateIfPossible: Boolean,
+    restImageUrl: String?,
+    hoverImageUrl: String?,
+    hovered: Boolean,
 ) {
+    // restImageUrl / hoverImageUrl / hovered drive desktop's mouse hover-to-focus; mobile keeps
+    // showing the single selected image (animated via coil-gif when enabled).
     val context = LocalContext.current
     val request: ImageRequest = remember(context, imageUrl) {
         ImageRequest.Builder(context)
