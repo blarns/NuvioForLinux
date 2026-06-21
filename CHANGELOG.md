@@ -6,6 +6,19 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.23] — 2026-06-21
+
+### Changed
+- **Playback errors now say *why* they failed (desktop).** When a stream wouldn't open, the player
+  previously showed a generic "playback error" with no detail — impossible to tell a dead link from a
+  real bug. The desktop player now does a quick reachability probe of the failed source and reports the
+  actual reason: a rejected/expired link (HTTP 401/403), a removed file (404/410), a server error
+  (5xx), an unreachable host, or — when the source *is* reachable — an unsupported format or codec.
+  This is most useful for plugin/scraper sources, whose links are frequently short-lived signed URLs:
+  a 403 now reads "the link has likely expired or is region-locked — refresh sources and try again"
+  instead of an opaque failure. The probe only runs on failure, so it adds nothing to normal playback,
+  and non-HTTP sources (torrents, local files) keep their existing messages.
+
 ## [0.1.22] — 2026-06-20
 
 ### Added

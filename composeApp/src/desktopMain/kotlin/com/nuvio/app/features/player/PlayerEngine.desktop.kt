@@ -353,6 +353,11 @@ private class VlcjPlayerController(
     // sourceHeaders updates after onControllerReady triggers a PlayerScreen recomposition).
     private var lastLoadedUrl: String? = null
 
+    // The raw source URL of the current media, kept so an error can be diagnosed (a
+    // failed HTTP source is probed to tell an expired/dead link apart from a real bug).
+    @Volatile
+    private var lastSourceUrl: String? = null
+
     private var externalSubtitleUri: String? = null
     private var subtitleDelayMs: Int = 0
 
@@ -425,7 +430,7 @@ private class VlcjPlayerController(
                     println("$TAG: Event -> ERROR triggered by VLCJ!")
                     currentState = currentState.copy(isLoading = false, isPlaying = false, positionMs = bestPositionMs(), durationMs = bestDurationMs())
                     onSnapshot(currentState)
-                    onError(Exception("VLCJ playback error"))
+                    reportPlaybackError()
                 }
             },
         )
@@ -602,6 +607,7 @@ private class VlcjPlayerController(
             return
         }
         lastLoadedUrl = cacheKey
+        lastSourceUrl = sourceUrl
         pendingSeekTargetMs.set(-1L)
         try {
             println("$TAG: loadMedia url=$sourceUrl playWhenReady=$playWhenReady startPositionMs=$startPositionMs audio=${sourceAudioUrl != null}")
@@ -645,6 +651,65 @@ private class VlcjPlayerController(
         } catch (e: Exception) {
             println("$TAG: loadMedia exception: ${e.message}")
             onError(e)
+        }
+    }
+
+    // libVLC only reports a generic "playback error" with no HTTP detail. For an HTTP
+    // source we probe it off the event thread so the user sees WHY it failed — plugin /
+    // scraper links are usually short-lived signed URLs, so a 403/404 means "the link
+    // expired, refresh sources", not "the app is broken". Non-HTTP sources (torrent://,
+    // local files) keep the generic message.
+    private fun reportPlaybackError() {
+        val url = lastSourceUrl
+        if (url == null || !(url.startsWith("http://", true) || url.startsWith("https://", true))) {
+            onError(Exception("VLCJ playback error"))
+            return
+        }
+        Thread(null, {
+            val message = diagnosePlaybackFailure(url)
+            println("$TAG: playback failure diagnosis -> $message")
+            onError(Exception(message))
+        }, "vlc-error-probe", 0).apply {
+            isDaemon = true
+            start()
+        }
+    }
+
+    private fun diagnosePlaybackFailure(url: String): String {
+        val parsed = try {
+            java.net.URI.create(url).toURL()
+        } catch (_: Exception) {
+            return "VLCJ playback error"
+        }
+        return try {
+            val connection = (parsed.openConnection() as java.net.HttpURLConnection).apply {
+                requestMethod = "GET"
+                // Ask for a single byte: we only want the status line, not the file.
+                setRequestProperty("Range", "bytes=0-0")
+                setRequestProperty("User-Agent", "NuvioMobile/1.0")
+                instanceFollowRedirects = true
+                connectTimeout = 4000
+                readTimeout = 4000
+            }
+            val code = try { connection.responseCode } finally { connection.disconnect() }
+            when (code) {
+                in 200..399 ->
+                    "Source opened but could not be played — likely an unsupported format or codec. Try a different source."
+                401, 403 ->
+                    "Source link was rejected (HTTP $code) — it has likely expired or is region-locked. Refresh sources and try again."
+                404, 410 ->
+                    "Source is no longer available (HTTP $code) — the link expired or was removed. Try a different source."
+                in 500..599 ->
+                    "The source server returned an error (HTTP $code). Try a different source."
+                else ->
+                    "Source returned HTTP $code. Refresh sources and try again."
+            }
+        } catch (_: java.net.UnknownHostException) {
+            "Could not reach the source server (host not found). Try a different source."
+        } catch (_: java.net.SocketTimeoutException) {
+            "The source server did not respond in time. Try a different source."
+        } catch (e: Exception) {
+            "Could not reach the source — ${e.message ?: "connection failed"}. Try a different source."
         }
     }
 }
