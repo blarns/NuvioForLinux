@@ -123,6 +123,12 @@ actual fun PlatformPlayerSurface(
     // writing mutableStateOf from a non-Compose thread triggers spurious recompositions.
     val lastFrameMs = remember { java.util.concurrent.atomic.AtomicLong(0L) }
 
+    // When playback ends/stops, libVLC drains a few trailing/black frames as the decoder
+    // flushes; painting them makes the video "blink" at the end of an episode/movie. Once
+    // ended, freeze the last good frame and ignore further callbacks until real playback
+    // resumes (e.g. the next episode), so the end transition stays clean.
+    val frozen = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
+
     val renderCallback = remember {
         object : RenderCallback {
             override fun display(
@@ -130,6 +136,7 @@ actual fun PlatformPlayerSurface(
                 nativeBuffers: Array<out ByteBuffer>,
                 bufferFormat: BufferFormat,
             ) {
+                if (frozen.get()) return   // playback ended — hold the last frame, skip EOS/black frames
                 val now = System.currentTimeMillis()
                 if (now - lastFrameMs.get() < 33L) return   // cap at ~30 fps
                 lastFrameMs.set(now)
@@ -246,7 +253,11 @@ actual fun PlatformPlayerSurface(
 
         val controller = VlcjPlayerController(
             mediaPlayer = mediaPlayer,
-            onSnapshot = latestOnSnapshot.value,
+            onSnapshot = { snap ->
+                // Freeze frame rendering once ended; re-enable when real playback resumes.
+                if (snap.isEnded) frozen.set(true) else if (snap.isPlaying) frozen.set(false)
+                latestOnSnapshot.value(snap)
+            },
             onError = { error ->
                 println("$TAG: PlayerController error: ${error.message}")
                 latestOnError.value(error.message ?: "Unknown error")
