@@ -6,6 +6,25 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.24] — 2026-06-22
+
+### Fixed
+- **End-of-playback "blink" (desktop).** At the end of a movie or episode the video flashed black
+  3–4 times. libVLC drains a few trailing/black frames as the decoder flushes at end-of-stream, and
+  the renderer was painting them; it now freezes the last good frame the moment playback ends (and
+  resumes cleanly for the next episode), so the finish and the return to the previous screen stay clean.
+
+### Changed
+Synced functional fixes from upstream [NuvioMedia/NuvioMobile](https://github.com/NuvioMedia/NuvioMobile)
+(shared `commonMain`, so these apply to the desktop build too):
+- **Collection catalog "show more" routing** now navigates to the correct target.
+- **Continue Watching**: fixed backfill, and fixed local removal when Trakt progress is present.
+- **Subtitles**: addon matching now applies the tv/series alias and singular resource name, so more
+  subtitle addons resolve.
+- **Debrid**: instant streams are resolved before offering download / copy-link.
+- A clear **"torrent not supported"** message in the stream actions sheet where applicable.
+- Softer detail-screen hero bottom gradient.
+
 ## [0.1.23] — 2026-06-21
 
 ### Changed
