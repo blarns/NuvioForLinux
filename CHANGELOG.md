@@ -6,6 +6,16 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.27] — 2026-06-23
+
+### Fixed
+- **AppImage: the "keep the screen awake" fix from 0.1.26 now actually works there.** In the
+  AppImage build the keep-awake helper inherited the bundled VLC libraries via `LD_LIBRARY_PATH`
+  and couldn't start (a glib/PyGObject version clash), so the screensaver still fired during
+  playback. The helper now runs against the system libraries. Also added a guard so the helper can
+  never get stuck restarting if it fails to launch (it gives up cleanly instead). The `.deb` was
+  unaffected — this is mainly an AppImage fix.
+
 ## [0.1.26] — 2026-06-23
 
 ### Fixed

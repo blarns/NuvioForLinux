@@ -81,7 +81,9 @@ private object ScreensaverInhibitor {
     private const val ITAG = "NuvioScreensaver"
     private val lock = Any()
     private var process: Process? = null
-    @Volatile private var unavailable = false   // latched if python3/gi isn't present
+    private var spawnAtMs = 0L
+    private var quickFailures = 0
+    @Volatile private var unavailable = false   // latched once we know the helper can't run here
 
     private val HELPER_SCRIPT = """
         import sys, gi
@@ -103,9 +105,34 @@ private object ScreensaverInhibitor {
     fun inhibit() {
         if (unavailable) return
         synchronized(lock) {
-            if (unavailable || process?.isAlive == true) return
+            if (unavailable) return
+            val existing = process
+            if (existing != null) {
+                if (existing.isAlive) return   // already inhibiting — no-op (hot path, ~10x/sec)
+                // The helper exited on its own. If it died almost immediately after spawning it's
+                // broken here (no python3-gi, or a bundled-vs-system lib clash) — latch off after a
+                // couple of fast failures so onSnapshot's 10x/sec cadence can't turn a broken helper
+                // into a spawn-crash loop. A helper that ran a while then died (e.g. bus restart) is
+                // retried cleanly.
+                if (System.currentTimeMillis() - spawnAtMs < 2_000L) {
+                    if (++quickFailures >= 2) {
+                        unavailable = true
+                        process = null
+                        println("$ITAG: helper keeps exiting immediately; giving up (screensaver not suppressed)")
+                        return
+                    }
+                } else {
+                    quickFailures = 0
+                }
+                process = null
+            }
             process = try {
+                spawnAtMs = System.currentTimeMillis()
                 ProcessBuilder("python3", "-c", HELPER_SCRIPT)
+                    // The child must load the SYSTEM glib/gobject/python3-gi, not the bundled
+                    // Ubuntu-22.04 libs the AppImage's AppRun puts on LD_LIBRARY_PATH — that
+                    // mismatch makes `import gi` fail (undefined glib symbol). Harmless under the .deb.
+                    .apply { environment().remove("LD_LIBRARY_PATH") }
                     .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                     .redirectError(ProcessBuilder.Redirect.DISCARD)
                     .start()
