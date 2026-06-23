@@ -290,7 +290,11 @@ data class StreamRoute(
 data class CatalogRoute(
     val title: String,
     val subtitle: String,
-    val targetKind: CatalogTargetKind,
+    // Stored as the enum *name* (a built-in String NavType) rather than the
+    // CatalogTargetKind enum directly: type-safe nav can't auto-derive a NavType for a
+    // custom enum on the desktop/JVM target (crashes with "could not find NavType ...
+    // typeMap received was {}"), even though it works on Android. See toCatalogTarget().
+    val targetKind: String,
     val contentType: String,
     val supportsPagination: Boolean = false,
     val manifestUrl: String? = null,
@@ -312,7 +316,7 @@ data class CatalogRoute(
             is CatalogTarget.Addon -> CatalogTargetKind.ADDON
             is CatalogTarget.Library -> CatalogTargetKind.LIBRARY
             is CatalogTarget.CollectionSource -> CatalogTargetKind.COLLECTION_SOURCE
-        },
+        }.name,
         contentType = target.contentType,
         supportsPagination = target.supportsPagination,
         manifestUrl = (target as? CatalogTarget.Addon)?.manifestUrl,
@@ -325,7 +329,7 @@ data class CatalogRoute(
     )
 
     fun toCatalogTarget(): CatalogTarget =
-        when (targetKind) {
+        when (CatalogTargetKind.valueOf(targetKind)) {
             CatalogTargetKind.ADDON -> CatalogTarget.Addon(
                 manifestUrl = requireNotNull(manifestUrl),
                 contentType = contentType,
