@@ -6,6 +6,19 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.26] — 2026-06-23
+
+### Fixed
+- **The screen no longer blanks, dims, or locks while a video is playing (desktop).** Because the
+  desktop player renders frames itself (VLCJ buffer-callback) instead of through a native video
+  window, libVLC's built-in screensaver suppression never engaged — so the desktop would hit its
+  normal idle timer and blank/lock mid-movie. Nuvio now holds a session idle inhibitor while
+  playback is actually running and releases it the instant you pause, stop, or leave the player.
+  On GNOME/Cinnamon a single `org.gnome.SessionManager` idle inhibitor covers the screensaver,
+  display power-off **and** auto-suspend; `org.freedesktop.ScreenSaver` is held too as a
+  cross-desktop fallback (KDE/XFCE/etc.). It's crash-safe — the inhibitor is dropped automatically
+  if the app exits, so the screensaver is never left disabled.
+
 ## [0.1.25] — 2026-06-23
 
 ### Fixed

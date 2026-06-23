@@ -63,6 +63,75 @@ private fun getVlcjFactory(): MediaPlayerFactory {
 }
 
 // ---------------------------------------------------------------------------
+// ScreensaverInhibitor — keep the desktop awake while video is playing.
+//
+// VLCJ renders via the buffer-callback API (no native video window), so libVLC's
+// own screensaver suppression never engages and the desktop blanks/locks mid-movie.
+// We hold a D-Bus inhibitor over a tiny python3-gi helper for as long as it runs:
+//   • org.gnome.SessionManager.Inhibit(flags=8 idle) — on GNOME/Cinnamon this one
+//     inhibitor covers the screensaver, display power-off AND auto-suspend (all key
+//     off the session idle state).
+//   • org.freedesktop.ScreenSaver.Inhibit — cross-DE fallback (KDE/XFCE/etc.).
+// The inhibitor auto-releases the moment the helper's bus connection drops, so the
+// helper blocks on stdin: closing it releases gracefully, and if the JVM dies/crashes
+// the pipe closes too (EOF) — the screensaver can never be left suppressed forever.
+// ---------------------------------------------------------------------------
+
+private object ScreensaverInhibitor {
+    private const val ITAG = "NuvioScreensaver"
+    private val lock = Any()
+    private var process: Process? = null
+    @Volatile private var unavailable = false   // latched if python3/gi isn't present
+
+    private val HELPER_SCRIPT = """
+        import sys, gi
+        from gi.repository import Gio, GLib
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        def inhibit(dest, path, iface, sig, args):
+            try:
+                bus.call_sync(dest, path, iface, "Inhibit", GLib.Variant(sig, args),
+                              GLib.VariantType("(u)"), Gio.DBusCallFlags.NONE, -1, None)
+            except Exception:
+                pass
+        inhibit("org.gnome.SessionManager", "/org/gnome/SessionManager", "org.gnome.SessionManager",
+                "(susu)", ("Nuvio", 0, "Playing media", 8))
+        inhibit("org.freedesktop.ScreenSaver", "/org/freedesktop/ScreenSaver", "org.freedesktop.ScreenSaver",
+                "(ss)", ("Nuvio", "Playing media"))
+        sys.stdin.read()
+    """.trimIndent()
+
+    fun inhibit() {
+        if (unavailable) return
+        synchronized(lock) {
+            if (unavailable || process?.isAlive == true) return
+            process = try {
+                ProcessBuilder("python3", "-c", HELPER_SCRIPT)
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start()
+                    .also { println("$ITAG: screensaver inhibited (playing)") }
+            } catch (e: Exception) {
+                unavailable = true
+                println("$ITAG: inhibitor unavailable (${e.message}); screensaver will not be suppressed")
+                null
+            }
+        }
+    }
+
+    fun release() {
+        synchronized(lock) {
+            val p = process ?: return
+            process = null
+            // Close the helper's stdin → EOF → it exits and the bus connection drops,
+            // auto-releasing the inhibitor. destroyForcibly() is a non-blocking backstop.
+            try { p.outputStream.close() } catch (_: Exception) {}
+            try { p.destroyForcibly() } catch (_: Exception) {}
+            println("$ITAG: screensaver released")
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // PlatformPlayerSurface — pure Compose, no AWT/Swing
 //
 // Uses VLCJ's buffer callback API to render each frame into a ByteBuffer,
@@ -256,6 +325,9 @@ actual fun PlatformPlayerSurface(
             onSnapshot = { snap ->
                 // Freeze frame rendering once ended; re-enable when real playback resumes.
                 if (snap.isEnded) frozen.set(true) else if (snap.isPlaying) frozen.set(false)
+                // Keep the desktop awake only while actually playing (idempotent — this
+                // fires ~10x/sec from the poll loop, so it no-ops unless state changed).
+                if (snap.isPlaying) ScreensaverInhibitor.inhibit() else ScreensaverInhibitor.release()
                 latestOnSnapshot.value(snap)
             },
             onError = { error ->
@@ -278,6 +350,9 @@ actual fun PlatformPlayerSurface(
     DisposableEffect(Unit) {
         onDispose {
             println("$TAG: Tearing down media player")
+            // Drop the screensaver inhibitor in case we left mid-playback (navigating
+            // away may not deliver a final paused/stopped snapshot before disposal).
+            ScreensaverInhibitor.release()
             // stop() can block for 500ms–2s while VLC flushes buffers and closes the
             // network connection. Running it on a daemon thread keeps the Compose render
             // thread free so the next screen's buttons remain responsive immediately.
