@@ -38,6 +38,9 @@
 
 ## About
 
+
+This project is nolonger being maintained!!!  I have had to cut back on useage of AI so, unless someone wants to take this over, users will have to wait for the official version in a few months
+
 This is a fork of [NuvioMedia/NuvioMobile](https://github.com/NuvioMedia/NuvioMobile) with an added **Linux Desktop target** via Kotlin Multiplatform JVM + VLCJ.
 
 The upstream project is an unofficial Kotlin Multiplatform rewrite of the original React Native Nuvio app. It delivers a shared Compose UI for Android and iOS while keeping the playback-focused experience, collection tools, watch progress flows, downloads, and Stremio addon ecosystem integration.
