@@ -6,7 +6,17 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [0.1.24] — 2026-06-22
+## [0.1.25] — 2026-06-23
+
+### Fixed
+- **Critical: the app couldn't open the main screen (desktop).** v0.1.24 introduced a navigation
+  crash — the collection/catalog "show more" route carried a custom enum argument that type-safe
+  Compose Navigation can't resolve on the desktop build, which aborted construction of the whole
+  navigation graph and prevented the **main screen from loading at all** (you'd hit it right after
+  entering a profile). Fixed by storing that route argument as a plain string. **v0.1.24 has been
+  withdrawn; this release contains everything from it** (the items below) plus this fix.
+
+## [0.1.24] — 2026-06-22 (withdrawn — see 0.1.25)
 
 ### Fixed
 - **End-of-playback "blink" (desktop).** At the end of a movie or episode the video flashed black
