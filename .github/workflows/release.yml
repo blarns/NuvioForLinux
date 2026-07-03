@@ -1,15 +1,29 @@
 name: Release
 
-# DISABLED 2026-06-15. This CI path baked an EMPTY Supabase config (`SUPABASE_URL=`) and built with
-# `packageReleaseDeb`, which skips `patchDebRecommends` (TorrServer bundle + `vlc-plugin-base | vlc`).
-# That shipped broken releases (0.1.15.1, 0.1.17): empty URL -> all auth/REST resolve to localhost ->
-# login + avatars + sync fail. Releases are now built LOCALLY and published manually:
-#   ./gradlew :composeApp:packageDeb   (then patchDebRecommends) ; gh release create -R blarns/NuvioForLinux
-# The in-app updater reads the GitHub Releases API, so manual releases still reach users normally.
-# Manual-dispatch only. Do NOT restore the tag trigger until BOTH the real config is injected AND the
-# deb is patched (see [[supabase-config-regression]]).
+# Re-enabled 2026-07-03. The 2026-06-15 disable reason ([[supabase-config-regression]]: CI baked an
+# EMPTY Supabase config and used packageReleaseDeb, which skips patchDebRecommends) is structurally
+# fixed:
+#   - builds without local.properties now default to the official Nuvio backend
+#     (https://api.nuvio.tv) in GenerateRuntimeConfigsTask — an empty config can no longer be baked
+#   - this workflow uses packageDeb, which is finalizedBy(patchDebRecommends)
+#
+# Manual dispatch only. Run with dry_run=true first: it builds both artifacts (uploaded as workflow
+# artifacts for inspection) without creating a tag or release. Run with dry_run=false to publish:
+# the release is created in one shot, only after BOTH artifacts built, with target_commitish
+# cmp-rewrite (required — the in-app updater only shows releases whose target_commitish matches
+# its release channel branch).
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, no leading v (e.g. 0.1.28). Must match MARKETING_VERSION."
+        required: true
+        type: string
+      dry_run:
+        description: "Build artifacts only — no tag, no release"
+        required: true
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -17,82 +31,176 @@ permissions:
 jobs:
   build-deb:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
-          cache: 'gradle'
 
-      - name: Install dependencies
+      - name: Install packaging dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libvlc-dev vlc libavcodec-extra fakeroot
+          sudo apt-get install -y fakeroot
 
-      - name: Create local.properties
+      - name: Check version matches MARKETING_VERSION
         run: |
-          echo "SUPABASE_URL=" >> local.properties
-          echo "SUPABASE_ANON_KEY=" >> local.properties
+          marketing="$(sed -n 's/^MARKETING_VERSION=//p' iosApp/Configuration/Version.xcconfig)"
+          if [ "$marketing" != "${{ inputs.version }}" ]; then
+            echo "::error::version input '${{ inputs.version }}' != MARKETING_VERSION '$marketing'"
+            exit 1
+          fi
 
-      - name: Extract version from tag
-        id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
-
-      - name: Build .deb package
+      # No local.properties: the build defaults to the official Nuvio backend.
+      - name: Build .deb (packageDeb runs patchDebRecommends via finalizedBy)
         run: >
-          ./gradlew composeApp:packageReleaseDeb
-          -PpackageVersion=${{ steps.version.outputs.version }}
+          ./gradlew composeApp:packageDeb
+          -PpackageVersion=${{ inputs.version }}
           --no-daemon
 
-      - name: Locate .deb
+      - name: Verify the .deb
         id: deb
-        run: echo "path=$(find composeApp/build/compose/binaries -name '*.deb' | head -1)" >> $GITHUB_OUTPUT
+        run: |
+          deb="$(find composeApp/build/compose/binaries -name '*.deb' | head -1)"
+          [ -n "$deb" ] || { echo "::error::no .deb produced"; exit 1; }
+          recommends="$(dpkg-deb --field "$deb" Recommends || true)"
+          echo "Recommends: $recommends"
+          case "$recommends" in
+            *vlc*) ;;
+            *) echo "::error::patchDebRecommends did not run (Recommends missing vlc)"; exit 1 ;;
+          esac
+          # Assert the baked Supabase config points at the official backend, not localhost/empty.
+          dpkg-deb -x "$deb" /tmp/debx
+          jar="$(find /tmp/debx -path '*lib/app*' -name '*.jar' | xargs -r grep -l 'api\.nuvio\.tv' 2>/dev/null | head -1)"
+          if [ -n "$jar" ]; then
+            echo "Baked backend OK: api.nuvio.tv found in $(basename "$jar")"
+          else
+            echo "::error::api.nuvio.tv not found in any packaged jar — empty/broken SupabaseConfig?"
+            exit 1
+          fi
+          echo "path=$deb" >> "$GITHUB_OUTPUT"
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: ${{ steps.deb.outputs.path }}
+          if-no-files-found: error
+
+  build-appimage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      # package-appimage.sh uses a Temurin JDK staged under appimage-build/jdk/jdk-21* so the
+      # jlinked runtime keeps a low glibc floor (setup-java installs the same Temurin binaries).
+      - name: Stage Temurin JDK for the AppImage build
+        run: |
+          mkdir -p appimage-build/jdk
+          cp -a "$JAVA_HOME" "appimage-build/jdk/jdk-21-temurin"
+
+      - name: Bootstrap AppImage tools
+        run: |
+          mkdir -p appimage-build/tools
+          cd appimage-build/tools
+          curl -fsSL -o excludelist \
+            https://raw.githubusercontent.com/AppImageCommunity/pkg2appimage/master/excludelist
+          curl -fsSL -o appimagetool-x86_64.AppImage \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          ./appimagetool-x86_64.AppImage --appimage-extract >/dev/null
+          mv squashfs-root appimagetool.AppDir
+          curl -fsSL -o runtime-x86_64 \
+            https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64
+          test -x appimagetool.AppDir/usr/bin/appimagetool
+
+      - name: Stage libVLC bundle from Ubuntu 22.04 (glibc 2.35 floor)
+        run: scripts/build-vlc-bundle.sh
+
+      # No local.properties: the build defaults to the official Nuvio backend.
+      - name: Build AppImage
+        run: >
+          scripts/package-appimage.sh
+          --version ${{ inputs.version }}
+          --vlc-bundle appimage-build/vlc-bundle
+
+      - name: Verify and locate AppImage
+        id: appimage
+        run: |
+          img="$(find appimage-build/dist -name '*.AppImage' | head -1)"
+          [ -n "$img" ] || { echo "::error::no AppImage produced"; exit 1; }
+          echo "path=$img" >> "$GITHUB_OUTPUT"
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: appimage
+          path: ${{ steps.appimage.outputs.path }}
+          if-no-files-found: error
+
+  release:
+    # One-shot publish, only when both artifacts built and this is not a dry run.
+    if: ${{ inputs.dry_run == false }}
+    needs: [build-deb, build-appimage]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "NuvioForLinux ${{ github.ref_name }}"
-          files: ${{ steps.deb.outputs.path }}
-          body: |
-            ## NuvioForLinux ${{ github.ref_name }}
-
-            Linux desktop port of NuvioMobile — Stremio addon ecosystem media hub.
-
-            ### Installation
-
-            **Requirements (install before the .deb):**
-            ```bash
-            sudo apt install libvlc-dev vlc libavcodec-extra
-            ```
-
-            **Install:**
-            ```bash
-            sudo apt install ./nuvio_${{ steps.version.outputs.version }}_amd64.deb
-            ```
-
-            The JVM is bundled — no separate Java installation needed.
-
-            ### Optional extras
-            ```bash
-            # Hardware video acceleration (pick your GPU)
-            sudo apt install intel-media-va-driver   # Intel
-            sudo apt install mesa-va-drivers         # AMD
-            sudo apt install nvidia-vaapi-driver     # NVIDIA
-
-            # Desktop notifications
-            sudo apt install libnotify-bin
-            ```
-
-            ### What's included
-            - Hardware video acceleration (VA-API / NVDEC)
-            - MPRIS2 media key integration
-            - Keyboard shortcuts (Space, arrows, M, F, scroll wheel)
-            - Episode release notifications
-            - Audio output selection
-            - App launcher integration
+          tag_name: v${{ inputs.version }}
+          # The in-app updater only surfaces releases whose target_commitish is cmp-rewrite.
+          target_commitish: cmp-rewrite
+          name: "v${{ inputs.version }} — works again after Nuvio's July 1 backend switch"
+          files: dist/*
           draft: false
           prerelease: false
+          body: |
+            ## NuvioForLinux v${{ inputs.version }}
+
+            **This update makes Nuvio work again.** Nuvio's official backend moved to a new
+            server on **July 1, 2026** and the old one was shut down — every earlier build is
+            permanently pointed at the dead backend, which is why login, profiles and sync
+            stopped working and you were logged out.
+
+            ### After installing this update
+            1. Launch Nuvio and **sign in again** (everyone was logged out by the switch).
+            2. Your account data (watch progress, profiles, addons) was **not** wiped — it's
+               waiting on the new backend. Note: changes made *during* the July 1 maintenance
+               window may not have migrated, so double-check your most recent watch progress.
+
+            ### ⬇️ Which file do I download?
+
+            | File | For | Notes |
+            |------|-----|-------|
+            | **`Nuvio-${{ inputs.version }}-x86_64.AppImage`** | Any modern distro | Self-contained, bundles VLC. Needs glibc ≥ 2.35 (Ubuntu 22.04 LTS+, Debian 12+, Fedora, Arch, Mint). |
+            | **`nuvio_${{ inputs.version }}_amd64.deb`** | Debian / Ubuntu / Pop!_OS / Mint | Installs system-wide; uses your system VLC (`vlc-plugin-base \| vlc`). |
+
+            ```bash
+            # AppImage
+            chmod +x Nuvio-${{ inputs.version }}-x86_64.AppImage
+            ./Nuvio-${{ inputs.version }}-x86_64.AppImage
+
+            # .deb
+            sudo apt install ./nuvio_${{ inputs.version }}_amd64.deb
+            ```
+
+            > 💡 Using **AppImageLauncher** and the file disappears or won't start? Run it from a
+            > terminal with `APPIMAGELAUNCHER_DISABLE=1 ./Nuvio-*.AppImage`, or update AppImageLauncher.
+
+            ### Other changes
+            - Building from source no longer requires `local.properties` — builds default to the
+              official Nuvio backend (see README / CHANGELOG for using your own backend).

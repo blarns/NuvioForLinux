@@ -6,6 +6,27 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.28] — 2026-07-03
+
+### Fixed
+- **Accounts, profiles and sync work again after Nuvio's July 1 backend switch.** The official
+  Nuvio backend moved to `https://api.nuvio.tv` on 2026-07-01 (14:27 CEST) and the old hosted
+  Supabase project was decommissioned — every build made before the switch is permanently pointed
+  at the dead backend, so login, profiles and watch-progress sync stopped working and clients were
+  logged out. Builds now target the new backend. **After updating, sign in again** — server-side
+  account data was not wiped. (Client code needed no changes: the fork's sync/auth protocol
+  surface was verified identical to the current official client and validated live against the
+  new backend.)
+
+### Changed
+- **Builds no longer require `local.properties`.** When no Supabase keys are supplied, the build
+  defaults to the official Nuvio backend — the same public client-side values shipped in every
+  official build. Set both `SUPABASE_URL` / `SUPABASE_ANON_KEY` to use your own backend instead;
+  setting only one fails the build (see `local.properties.example`).
+- Release builds can now be produced by the repaired GitHub Actions release workflow (manual
+  dispatch, with a dry-run mode). The empty-credentials regression that forced local-only release
+  builds is structurally fixed by the default-backend fallback.
+
 ## [0.1.27] — 2026-06-23
 
 ### Fixed
