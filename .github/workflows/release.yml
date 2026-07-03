@@ -65,11 +65,13 @@ jobs:
         run: |
           deb="$(find composeApp/build/compose/binaries -name '*.deb' | head -1)"
           [ -n "$deb" ] || { echo "::error::no .deb produced"; exit 1; }
-          recommends="$(dpkg-deb --field "$deb" Recommends || true)"
-          echo "Recommends: $recommends"
-          case "$recommends" in
+          # patchDebRecommends injects "vlc-plugin-base | vlc" into Depends (and sets Recommends
+          # to fonts-noto-color-emoji) — assert the Depends patch took.
+          depends="$(dpkg-deb --field "$deb" Depends || true)"
+          echo "Depends: $depends"
+          case "$depends" in
             *vlc*) ;;
-            *) echo "::error::patchDebRecommends did not run (Recommends missing vlc)"; exit 1 ;;
+            *) echo "::error::patchDebRecommends did not run (Depends missing vlc)"; exit 1 ;;
           esac
           # Assert the baked Supabase config points at the official backend, not localhost/empty.
           dpkg-deb -x "$deb" /tmp/debx
@@ -99,6 +101,11 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
+
+      - name: Install AppImage build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y desktop-file-utils
 
       # package-appimage.sh uses a Temurin JDK staged under appimage-build/jdk/jdk-21* so the
       # jlinked runtime keeps a low glibc floor (setup-java installs the same Temurin binaries).
