@@ -1,0 +1,22 @@
+# Copy this file to local.properties and fill in the values (local.properties is git-ignored).
+#
+# Accounts / sync backend.
+# The official Nuvio backend moved to https://api.nuvio.tv on July 1, 2026 (the old hosted
+# Supabase project was decommissioned — pre-switch builds can no longer log in or sync).
+# The current public API key (anon/publishable) is published in the official Nuvio Cloud API
+# docs; it is a public client-side value shipped in every official build.
+# Alternatively point these at your own Supabase project.
+# Leave both blank to build without account features (addons + playback still work).
+SUPABASE_URL=https://api.nuvio.tv
+SUPABASE_ANON_KEY=
+
+# Optional: Trakt OAuth
+#TRAKT_CLIENT_ID=
+#TRAKT_CLIENT_SECRET=
+#TRAKT_REDIRECT_URI=http://localhost:8080/callback
+
+# Optional: Android release signing (only needed for signed Android builds)
+#NUVIO_RELEASE_STORE_FILE=
+#NUVIO_RELEASE_STORE_PASSWORD=
+#NUVIO_RELEASE_KEY_ALIAS=
+#NUVIO_RELEASE_KEY_PASSWORD=

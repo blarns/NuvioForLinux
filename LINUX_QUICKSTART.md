@@ -28,8 +28,10 @@ git clone <nuvio-repo>
 cd NuvioMobile
 
 # Optional: Set local auth config
+# (official Nuvio backend since July 1, 2026 is https://api.nuvio.tv —
+#  see README "Environment Setup" for where to find the public API key)
 cat > local.properties << EOF
-SUPABASE_URL=https://your-supabase-project.supabase.co
+SUPABASE_URL=https://api.nuvio.tv
 SUPABASE_ANON_KEY=your-anon-key
 TRAKT_CLIENT_ID=your-trakt-client-id
 TRAKT_CLIENT_SECRET=your-trakt-secret

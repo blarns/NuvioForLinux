@@ -61,14 +61,29 @@ If you fork, modify, or distribute this code, you **must** also open-source your
 
 ## Environment Setup
 
+> [!IMPORTANT]
+> **Nuvio backend switch (July 1, 2026):** the official Nuvio backend moved to
+> `https://api.nuvio.tv`. The old hosted Supabase project was decommissioned, so **builds made
+> before the switch can no longer log in or sync** — they were logged out when the switch
+> completed. To recover: rebuild with the new backend URL/key below (or install a release built
+> after the switch), then sign in again. Server-side account data was not wiped.
+
 **Without Supabase keys:** addon browsing and video playback via Stremio addons work fine — you just won't have a user account, profiles, or cross-device sync.
 
-**With Supabase keys:** full account support, watch history sync, and profile features are enabled. To set up your own free Supabase project, go to [supabase.com](https://supabase.com), create a project, then copy the **Project URL** and **anon/public key** from Project Settings → API.
+**With Supabase keys:** full account support, watch history sync, and profile features are enabled. Two options:
 
-Create a file named `local.properties` in the root of the project (this file is git-ignored):
+- **Official Nuvio backend** — use `SUPABASE_URL=https://api.nuvio.tv` with the current public
+  API key published in the official [Nuvio Cloud API docs](https://nuvioapp.space/docs) (the
+  anon/publishable key is a public client-side value shipped in every official build).
+- **Your own backend** — set up a free Supabase project at [supabase.com](https://supabase.com),
+  create a project, then copy the **Project URL** and **anon/public key** from Project
+  Settings → API. (You will need to provision the Nuvio schema yourself; accounts on your own
+  backend are separate from official Nuvio accounts.)
+
+Create a file named `local.properties` in the root of the project (this file is git-ignored), see [`local.properties.example`](local.properties.example):
 
 ```properties
-SUPABASE_URL=https://your-project-id.supabase.co
+SUPABASE_URL=https://api.nuvio.tv
 SUPABASE_ANON_KEY=your-anon-public-key
 ```
 
