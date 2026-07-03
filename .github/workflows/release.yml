@@ -74,10 +74,16 @@ jobs:
             *) echo "::error::patchDebRecommends did not run (Depends missing vlc)"; exit 1 ;;
           esac
           # Assert the baked Supabase config points at the official backend, not localhost/empty.
+          # Jar entries are deflate-compressed, so decompress before searching for the constant.
           dpkg-deb -x "$deb" /tmp/debx
-          jar="$(find /tmp/debx -path '*lib/app*' -name '*.jar' | xargs -r grep -l 'api\.nuvio\.tv' 2>/dev/null | head -1)"
-          if [ -n "$jar" ]; then
-            echo "Baked backend OK: api.nuvio.tv found in $(basename "$jar")"
+          found=""
+          for jar in $(find /tmp/debx -name '*.jar'); do
+            if unzip -p "$jar" 2>/dev/null | strings | grep -q 'api\.nuvio\.tv'; then
+              found="$jar"; break
+            fi
+          done
+          if [ -n "$found" ]; then
+            echo "Baked backend OK: api.nuvio.tv found in $(basename "$found")"
           else
             echo "::error::api.nuvio.tv not found in any packaged jar — empty/broken SupabaseConfig?"
             exit 1
