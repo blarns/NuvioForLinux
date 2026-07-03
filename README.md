@@ -68,26 +68,22 @@ If you fork, modify, or distribute this code, you **must** also open-source your
 > completed. To recover: rebuild with the new backend URL/key below (or install a release built
 > after the switch), then sign in again. Server-side account data was not wiped.
 
-**Without Supabase keys:** addon browsing and video playback via Stremio addons work fine — you just won't have a user account, profiles, or cross-device sync.
+**No configuration is required.** When `local.properties` is absent (or has no Supabase keys),
+builds default to the official Nuvio backend (`https://api.nuvio.tv`, the post-switch backend) —
+accounts, profiles, and cross-device sync work out of the box, same as official builds.
 
-**With Supabase keys:** full account support, watch history sync, and profile features are enabled. Two options:
-
-- **Official Nuvio backend** — use `SUPABASE_URL=https://api.nuvio.tv` with the current public
-  API key published in the official [Nuvio Cloud API docs](https://nuvioapp.space/docs) (the
-  anon/publishable key is a public client-side value shipped in every official build).
-- **Your own backend** — set up a free Supabase project at [supabase.com](https://supabase.com),
-  create a project, then copy the **Project URL** and **anon/public key** from Project
-  Settings → API. (You will need to provision the Nuvio schema yourself; accounts on your own
-  backend are separate from official Nuvio accounts.)
-
-Create a file named `local.properties` in the root of the project (this file is git-ignored), see [`local.properties.example`](local.properties.example):
+**To use your own backend instead:** set up a free Supabase project at
+[supabase.com](https://supabase.com), then copy the **Project URL** and **anon/public key** from
+Project Settings → API into a `local.properties` file in the root of the project (git-ignored,
+see [`local.properties.example`](local.properties.example)):
 
 ```properties
-SUPABASE_URL=https://api.nuvio.tv
+SUPABASE_URL=https://your-project-id.supabase.co
 SUPABASE_ANON_KEY=your-anon-public-key
 ```
 
-Leave the values blank (`SUPABASE_URL=`) to build without account features.
+(You will need to provision the Nuvio schema yourself; accounts on your own backend are separate
+from official Nuvio accounts. Set both keys or neither — a partial override fails the build.)
 
 ## Installation
 

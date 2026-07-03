@@ -27,11 +27,11 @@ pkg-config --modversion libvlc  # Should show 3.0+
 git clone <nuvio-repo>
 cd NuvioMobile
 
-# Optional: Set local auth config
-# (official Nuvio backend since July 1, 2026 is https://api.nuvio.tv —
-#  see README "Environment Setup" for where to find the public API key)
+# Optional: local auth config. Accounts/sync default to the official Nuvio
+# backend (https://api.nuvio.tv) with no configuration at all — only create
+# local.properties to use your own Supabase project or Trakt app:
 cat > local.properties << EOF
-SUPABASE_URL=https://api.nuvio.tv
+SUPABASE_URL=https://your-supabase-project.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
 TRAKT_CLIENT_ID=your-trakt-client-id
 TRAKT_CLIENT_SECRET=your-trakt-secret

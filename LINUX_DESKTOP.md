@@ -85,12 +85,13 @@ Creates a single executable JAR with all dependencies bundled.
 Create `local.properties` in the project root to configure auth providers:
 
 ```properties
-# Required for accounts/sync. Official Nuvio backend since the July 1, 2026
-# backend switch is https://api.nuvio.tv — current public API key is published
-# in the official Nuvio Cloud API docs. Builds made with the pre-switch backend
-# URL can no longer log in or sync; rebuild with the new values and sign in again.
-SUPABASE_URL=https://api.nuvio.tv
-SUPABASE_ANON_KEY=your-anon-key
+# OPTIONAL — accounts/sync default to the official Nuvio backend
+# (https://api.nuvio.tv since the July 1, 2026 backend switch) when these are
+# omitted. Set both only to point at your own Supabase project instead.
+# Builds made with the pre-switch backend URL can no longer log in or sync;
+# rebuild (defaults now apply) and sign in again.
+#SUPABASE_URL=https://your-project.supabase.co
+#SUPABASE_ANON_KEY=your-anon-key
 
 # For Trakt OAuth (optional)
 TRAKT_CLIENT_ID=your-client-id

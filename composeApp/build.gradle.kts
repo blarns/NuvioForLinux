@@ -37,18 +37,27 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
         val props = Properties()
         localPropertiesFile.asFile.orNull?.takeIf { it.exists() }?.inputStream()?.use { props.load(it) }
 
-        val supabaseUrl = props.getProperty("SUPABASE_URL", "").trim()
-        val supabaseAnonKey = props.getProperty("SUPABASE_ANON_KEY", "").trim()
+        var supabaseUrl = props.getProperty("SUPABASE_URL", "").trim()
+        var supabaseAnonKey = props.getProperty("SUPABASE_ANON_KEY", "").trim()
         // An empty URL makes supabase-kt/ktor resolve every auth + REST call to localhost, which silently
         // breaks login, profile sync and the avatar catalog at runtime. This shipped in 0.1.13–0.1.17 because
         // local.properties (gitignored) was absent when those debs were built in a clean checkout/worktree.
-        // Fail the build instead of ever producing an empty SupabaseConfig again.
+        // When no override is supplied, fall back to the official Nuvio backend (post July 1, 2026 switch:
+        // https://api.nuvio.tv). The anon key is Supabase's public client-side credential — it ships inside
+        // every official Nuvio build and is safe to embed. Set both keys in local.properties to override
+        // (e.g. to point at your own Supabase project); partial overrides still fail the build below.
+        if (supabaseUrl.isBlank() && supabaseAnonKey.isBlank()) {
+            supabaseUrl = "https://api.nuvio.tv"
+            supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
+                "eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzgxNTIxMzQ2LCJleHAiOjE5MzkyMDEzNDZ9." +
+                "tmQaj682pwzehpqlgCDMnySOqiUvpgRbrE43T4VJpDI"
+        }
         if (supabaseUrl.isBlank() || supabaseAnonKey.isBlank()) {
             error(
-                "SUPABASE_URL / SUPABASE_ANON_KEY are missing from local.properties (not present at build time). " +
-                    "Refusing to generate an empty SupabaseConfig — an empty URL makes every auth/network request " +
+                "Exactly one of SUPABASE_URL / SUPABASE_ANON_KEY is set in local.properties. " +
+                    "Refusing to generate a partial SupabaseConfig — an empty URL makes every auth/network request " +
                     "resolve to localhost and breaks login at runtime (exactly what shipped broken in 0.1.13–0.1.17). " +
-                    "Add them to local.properties before building a release."
+                    "Set both keys to use a custom backend, or remove both to use the official Nuvio backend."
             )
         }
 
