@@ -165,11 +165,51 @@ jobs:
     needs: [build-deb, build-appimage]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
+
+      # Release notes = this version's CHANGELOG section + a standard install footer.
+      - name: Build release notes from CHANGELOG
+        run: |
+          v="${{ inputs.version }}"
+          awk -v ver="$v" '
+            $0 ~ "^## \\[" ver "\\]" {grab=1; next}
+            grab && /^## \[/ {exit}
+            grab {print}
+          ' CHANGELOG.md > changelog_section.md
+          if ! grep -q '[^[:space:]]' changelog_section.md; then
+            echo "::error::CHANGELOG.md has no section for $v — add one before releasing"
+            exit 1
+          fi
+          {
+            echo "## NuvioForLinux v$v"
+            cat changelog_section.md
+            echo ""
+            echo "### ⬇️ Which file do I download?"
+            echo ""
+            echo "| File | For | Notes |"
+            echo "|------|-----|-------|"
+            echo "| **\`Nuvio-$v-x86_64.AppImage\`** | Any modern distro | Self-contained, bundles VLC. Needs glibc ≥ 2.35 (Ubuntu 22.04 LTS+, Debian 12+, Fedora, Arch, Mint). |"
+            echo "| **\`nuvio_${v}_amd64.deb\`** | Debian / Ubuntu / Pop!_OS / Mint | Installs system-wide; uses your system VLC (\`vlc-plugin-base \\| vlc\`). |"
+            echo ""
+            echo '```bash'
+            echo "# AppImage"
+            echo "chmod +x Nuvio-$v-x86_64.AppImage"
+            echo "./Nuvio-$v-x86_64.AppImage"
+            echo ""
+            echo "# .deb"
+            echo "sudo apt install ./nuvio_${v}_amd64.deb"
+            echo '```'
+            echo ""
+            echo "> 💡 Using **AppImageLauncher** and the file disappears or won't start? Run it from a"
+            echo "> terminal with \`APPIMAGELAUNCHER_DISABLE=1 ./Nuvio-*.AppImage\`, or update AppImageLauncher."
+          } > release_body.md
+          cat release_body.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -177,43 +217,8 @@ jobs:
           tag_name: v${{ inputs.version }}
           # The in-app updater only surfaces releases whose target_commitish is cmp-rewrite.
           target_commitish: cmp-rewrite
-          name: "v${{ inputs.version }} — works again after Nuvio's July 1 backend switch"
+          name: "NuvioForLinux v${{ inputs.version }}"
           files: dist/*
           draft: false
           prerelease: false
-          body: |
-            ## NuvioForLinux v${{ inputs.version }}
-
-            **This update makes Nuvio work again.** Nuvio's official backend moved to a new
-            server on **July 1, 2026** and the old one was shut down — every earlier build is
-            permanently pointed at the dead backend, which is why login, profiles and sync
-            stopped working and you were logged out.
-
-            ### After installing this update
-            1. Launch Nuvio and **sign in again** (everyone was logged out by the switch).
-            2. Your account data (watch progress, profiles, addons) was **not** wiped — it's
-               waiting on the new backend. Note: changes made *during* the July 1 maintenance
-               window may not have migrated, so double-check your most recent watch progress.
-
-            ### ⬇️ Which file do I download?
-
-            | File | For | Notes |
-            |------|-----|-------|
-            | **`Nuvio-${{ inputs.version }}-x86_64.AppImage`** | Any modern distro | Self-contained, bundles VLC. Needs glibc ≥ 2.35 (Ubuntu 22.04 LTS+, Debian 12+, Fedora, Arch, Mint). |
-            | **`nuvio_${{ inputs.version }}_amd64.deb`** | Debian / Ubuntu / Pop!_OS / Mint | Installs system-wide; uses your system VLC (`vlc-plugin-base \| vlc`). |
-
-            ```bash
-            # AppImage
-            chmod +x Nuvio-${{ inputs.version }}-x86_64.AppImage
-            ./Nuvio-${{ inputs.version }}-x86_64.AppImage
-
-            # .deb
-            sudo apt install ./nuvio_${{ inputs.version }}_amd64.deb
-            ```
-
-            > 💡 Using **AppImageLauncher** and the file disappears or won't start? Run it from a
-            > terminal with `APPIMAGELAUNCHER_DISABLE=1 ./Nuvio-*.AppImage`, or update AppImageLauncher.
-
-            ### Other changes
-            - Building from source no longer requires `local.properties` — builds default to the
-              official Nuvio backend (see README / CHANGELOG for using your own backend).
+          body_path: release_body.md
