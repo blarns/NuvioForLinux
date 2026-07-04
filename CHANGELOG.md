@@ -6,6 +6,31 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.29] — 2026-07-04
+
+Upstream sync round 6 — the post-backend-switch sync/accounts stack from
+[NuvioMobile](https://github.com/NuvioMedia/NuvioMobile) 0.2.9–0.2.17, keeping this fork's
+server interactions identical to current official clients.
+
+### Added
+- **Live cross-device sync (realtime invalidation).** The app now subscribes to backend change
+  events, so watch progress, library, and watched-state changes made on your phone/TV show up on
+  the desktop without restarting or manually refreshing (upstream's "Experimental Realtime
+  Syncing"). Each install identifies itself with a stable client id (new desktop storage actual)
+  so self-originated events are ignored instead of causing refresh loops.
+- **Snapshot sync on startup** — a full authoritative refresh of watch progress and watched
+  state on launch, replacing drift-prone incremental catch-up.
+
+### Fixed
+- **Deleted/invalid accounts are handled gracefully**: if the stored session no longer belongs
+  to an active account, local auth is cleared and you land on the sign-in screen instead of the
+  app half-working against a dead session.
+- **Watch progress crash from concurrent updates** (upstream concurrency fix, now guarded with
+  atomicfu synchronization).
+- **Profile-scoped playback sync leaks**: playback sessions now carry their profile id
+  end-to-end, so Trakt scrobbles and watch progress can no longer leak into the wrong profile
+  when switching profiles mid-playback.
+
 ## [0.1.28] — 2026-07-03
 
 ### Fixed
