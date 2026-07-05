@@ -6,6 +6,21 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.30] — 2026-07-04
+
+### Fixed
+- **The end-of-playback "blink" is gone again — this time for good.** The v0.1.24 fix froze the
+  last frame when libVLC reported playback finished, but that relied on the finished event
+  outrunning the decoder's trailing black frames — a race that the CI-built releases started
+  losing. Frames queued before the freeze can no longer paint after it, and during the final two
+  seconds of a video uniformly-black flush frames are dropped on arrival, so no event ordering
+  matters. Mid-video fades and dark scenes are unaffected.
+
+### Changed
+- **The in-player episode panel now shows enough detail to pick the next episode confidently**
+  (no more jumping back to the show page): watched checkmark on the artwork, resume progress bar
+  for partially-watched episodes, air date and runtime, larger thumbnails, and a longer synopsis.
+
 ## [0.1.29] — 2026-07-04
 
 Upstream sync round 6 — the post-backend-switch sync/accounts stack from
