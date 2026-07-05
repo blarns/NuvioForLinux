@@ -223,7 +223,14 @@ actual fun PlatformPlayerSurface(
     // flushes; painting them makes the video "blink" at the end of an episode/movie. Once
     // ended, freeze the last good frame and ignore further callbacks until real playback
     // resumes (e.g. the next episode), so the end transition stays clean.
+    //
+    // frozen alone is racy: the finished event (vlcj event thread) has to beat the flush
+    // frames (render thread) AND any frame conversions already queued on Main. Whether it
+    // wins varies with the libVLC build and thread scheduling — which is how the blink
+    // came back. nearEnd closes the race from the other side: inside the final 2s of the
+    // video, uniformly-black frames are dropped on arrival, no event ordering required.
     val frozen = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
+    val nearEnd = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
 
     val renderCallback = remember {
         object : RenderCallback {
@@ -248,8 +255,17 @@ actual fun PlatformPlayerSurface(
                 buffer.get(bytes)
                 buffer.rewind()
 
+                // In the final seconds of the video, drop the decoder's flush frames
+                // (uniformly black) before they reach the screen. Sampling a sparse
+                // pixel grid keeps this effectively free, and it only runs near the
+                // end, so mid-video fades and dark scenes are never touched.
+                if (nearEnd.get() && isUniformlyBlack(bytes, w, h)) return
+
                 scope.launch(Dispatchers.Main) {
                     try {
+                        // A frame queued before the freeze must not land after it —
+                        // re-check at paint time, not just at capture time.
+                        if (frozen.get()) return@launch
                         // RV32 from VLC is BGRA in memory on little-endian systems
                         val imageInfo = ImageInfo(
                             ColorInfo(ColorType.BGRA_8888, ColorAlphaType.OPAQUE, ColorSpace.sRGB),
@@ -352,6 +368,8 @@ actual fun PlatformPlayerSurface(
             onSnapshot = { snap ->
                 // Freeze frame rendering once ended; re-enable when real playback resumes.
                 if (snap.isEnded) frozen.set(true) else if (snap.isPlaying) frozen.set(false)
+                // Arm black-frame dropping for the final 2s (see nearEnd above).
+                nearEnd.set(snap.durationMs > 0 && snap.positionMs >= snap.durationMs - 2_000)
                 // Keep the desktop awake only while actually playing (idempotent — this
                 // fires ~10x/sec from the poll loop, so it no-ops unless state changed).
                 if (snap.isPlaying) ScreensaverInhibitor.inhibit() else ScreensaverInhibitor.release()
@@ -825,4 +843,27 @@ private class VlcjPlayerController(
             "Could not reach the source — ${e.message ?: "connection failed"}. Try a different source."
         }
     }
+}
+
+// End-of-stream flush frames are pure black across the whole picture. Sample a sparse
+// 5x5 grid (25 pixels) instead of scanning the buffer — cheap enough for the render
+// thread, and only called during the final seconds of playback. BGRA byte order.
+private fun isUniformlyBlack(bytes: ByteArray, w: Int, h: Int): Boolean {
+    if (w <= 1 || h <= 1) return false
+    val steps = 5
+    for (yi in 0 until steps) {
+        val y = (h - 1) * yi / (steps - 1)
+        for (xi in 0 until steps) {
+            val x = (w - 1) * xi / (steps - 1)
+            val i = (y * w + x) * 4
+            if (i + 2 >= bytes.size) return false
+            if ((bytes[i].toInt() and 0xFF) > 16 ||
+                (bytes[i + 1].toInt() and 0xFF) > 16 ||
+                (bytes[i + 2].toInt() and 0xFF) > 16
+            ) {
+                return false
+            }
+        }
+    }
+    return true
 }
