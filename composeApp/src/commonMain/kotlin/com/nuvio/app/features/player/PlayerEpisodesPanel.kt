@@ -32,6 +32,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -55,10 +56,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.format.formatReleaseDateForDisplay
 import com.nuvio.app.core.ui.NuvioTokens
 import com.nuvio.app.core.ui.nuvio
 import com.nuvio.app.features.debrid.DebridSettingsRepository
 import com.nuvio.app.features.details.MetaVideo
+import com.nuvio.app.features.details.formatRuntimeFromMinutes
 import com.nuvio.app.features.streams.StreamItem
 import com.nuvio.app.features.streams.StreamsUiState
 import com.nuvio.app.features.streams.isSelectableForPlayback
@@ -335,6 +338,7 @@ private fun EpisodesListSubView(
                         episode = episode,
                         isCurrent = isCurrent,
                         isWatched = isWatched,
+                        progressEntry = progressByVideoId[episodeVideoId],
                         blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                         onClick = { onEpisodeSelected(episode) },
                     )
@@ -349,11 +353,24 @@ private fun EpisodeRow(
     episode: MetaVideo,
     isCurrent: Boolean,
     isWatched: Boolean,
+    progressEntry: WatchProgressEntry?,
     blurUnwatchedEpisodes: Boolean,
     onClick: () -> Unit,
 ) {
     val tokens = MaterialTheme.nuvio
     val shouldBlurArtwork = blurUnwatchedEpisodes && !isWatched && !isCurrent
+    // Show a resume bar only for genuinely in-progress episodes; the extremes read as
+    // noise (barely started) or contradict the watched checkmark (effectively done).
+    val resumeFraction = progressEntry
+        ?.takeIf { it.isResumable }
+        ?.progressFraction
+        ?.takeIf { it in 0.02f..0.97f }
+    val formattedDate = remember(episode.released) {
+        episode.released?.let { formatReleaseDateForDisplay(it) }?.takeIf { it.isNotBlank() }
+    }
+    val runtimeLabel = remember(episode.runtime) {
+        episode.runtime?.takeIf { it > 0 }?.let(::formatRuntimeFromMinutes)
+    }
 
     Row(
         modifier = Modifier
@@ -374,18 +391,51 @@ private fun EpisodeRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(tokens.spacing.listGap),
     ) {
-        // Thumbnail
+        // Thumbnail with watched badge + resume progress overlay
         if (episode.thumbnail != null) {
-            AsyncImage(
-                model = episode.thumbnail,
-                contentDescription = null,
+            Box(
                 modifier = Modifier
-                    .width(NuvioTokens.Space.s80)
-                    .height(NuvioTokens.Space.s48)
-                    .clip(tokens.shapes.compactCard)
-                    .then(if (shouldBlurArtwork) Modifier.blur(NuvioTokens.Space.s18) else Modifier),
-                contentScale = ContentScale.Crop,
-            )
+                    .width(NuvioTokens.Space.s96)
+                    .height(NuvioTokens.Space.s56)
+                    .clip(tokens.shapes.compactCard),
+            ) {
+                AsyncImage(
+                    model = episode.thumbnail,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(if (shouldBlurArtwork) Modifier.blur(NuvioTokens.Space.s18) else Modifier),
+                    contentScale = ContentScale.Crop,
+                )
+                if (isWatched && !isCurrent) {
+                    Icon(
+                        imageVector = Icons.Rounded.CheckCircle,
+                        contentDescription = stringResource(Res.string.episodes_cd_watched),
+                        tint = tokens.colors.accent,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(NuvioTokens.Space.s4)
+                            .size(tokens.icons.sm)
+                            .background(tokens.colors.overlayScrim, androidx.compose.foundation.shape.CircleShape),
+                    )
+                }
+                resumeFraction?.let { fraction ->
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .fillMaxWidth()
+                            .height(NuvioTokens.Space.s4)
+                            .background(tokens.colors.overlayScrim.copy(alpha = tokens.opacity.medium)),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(fraction)
+                                .height(NuvioTokens.Space.s4)
+                                .background(tokens.colors.accent),
+                        )
+                    }
+                }
+            }
         }
 
         Column(modifier = Modifier.weight(1f)) {
@@ -429,6 +479,17 @@ private fun EpisodeRow(
                         )
                     }
                 }
+                // Air date + runtime — the details the show page has and this panel lacked.
+                val metaLabel = listOfNotNull(formattedDate, runtimeLabel).joinToString(" • ")
+                if (metaLabel.isNotBlank()) {
+                    Text(
+                        text = metaLabel,
+                        color = tokens.colors.textMuted,
+                        fontSize = NuvioTokens.Type.labelXs,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             Text(
                 text = episode.title,
@@ -443,7 +504,7 @@ private fun EpisodeRow(
                     text = overview,
                     color = tokens.colors.textSecondary,
                     fontSize = NuvioTokens.Type.labelXs,
-                    maxLines = 2,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
