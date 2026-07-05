@@ -1106,7 +1106,7 @@ private fun StreamSourceHeader(
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun StreamCard(
+internal fun StreamCard(
     stream: StreamItem,
     enabled: Boolean,
     appendInstantServiceToDefaultName: Boolean,
@@ -1206,7 +1206,7 @@ private fun StreamCard(
 }
 
 @Composable
-private fun StreamCardBadgeRow(
+internal fun StreamCardBadgeRow(
     badgeImages: List<StreamBadge>,
     stream: StreamItem,
     showFileSizeBadges: Boolean,
@@ -1227,7 +1227,7 @@ private fun StreamCardBadgeRow(
 }
 
 @Composable
-private fun StreamNameWithInstantService(
+internal fun StreamNameWithInstantService(
     stream: StreamItem,
     appendInstantServiceToDefaultName: Boolean,
 ) {
