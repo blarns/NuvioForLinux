@@ -256,10 +256,29 @@ actual fun PlatformPlayerSurface(
                 buffer.rewind()
 
                 // In the final seconds of the video, drop the decoder's flush frames
-                // (uniformly black) before they reach the screen. Sampling a sparse
-                // pixel grid keeps this effectively free, and it only runs near the
-                // end, so mid-video fades and dark scenes are never touched.
-                if (nearEnd.get() && isUniformlyBlack(bytes, w, h)) return
+                // before they reach the screen. Depending on the libVLC build these are
+                // pure black OR solid green/grey (uninitialized YUV planes — seen with
+                // the system VLC used by the .deb), so detect any solid-color dark or
+                // green frame, not just black. Sampling a sparse pixel grid keeps this
+                // effectively free, and it only runs near the end, so mid-video fades
+                // and dark scenes are never touched.
+                if (nearEnd.get()) {
+                    val flush = flushFrameSignature(bytes, w, h)
+                    if (flush != null) {
+                        println("$TAG: end-of-stream flush frame dropped ($flush)")
+                        return
+                    }
+                    // Log painted frames too while near the end: if a "blink" is ever
+                    // reported again, the interleaving in this log shows whether stray
+                    // frames slipped through here or the flash comes from the UI layer.
+                    val c = ((h / 2) * w + w / 2) * 4
+                    if (c + 2 < bytes.size) {
+                        val b = bytes[c].toInt() and 0xFF
+                        val g = bytes[c + 1].toInt() and 0xFF
+                        val r = bytes[c + 2].toInt() and 0xFF
+                        println("$TAG: near-end frame painted (center rgb($r,$g,$b), frozen=${frozen.get()})")
+                    }
+                }
 
                 scope.launch(Dispatchers.Main) {
                     try {
@@ -845,25 +864,36 @@ private class VlcjPlayerController(
     }
 }
 
-// End-of-stream flush frames are pure black across the whole picture. Sample a sparse
-// 5x5 grid (25 pixels) instead of scanning the buffer — cheap enough for the render
-// thread, and only called during the final seconds of playback. BGRA byte order.
-private fun isUniformlyBlack(bytes: ByteArray, w: Int, h: Int): Boolean {
-    if (w <= 1 || h <= 1) return false
+// End-of-stream flush frames are a single solid color across the whole picture:
+// black (zeroed RGB), green (zeroed YUV converted to RGB), or dark grey, depending
+// on the libVLC build. Sample a sparse 5x5 grid (25 pixels) instead of scanning the
+// buffer — cheap enough for the render thread, and only called during the final
+// seconds of playback. BGRA byte order. Returns a short signature string for the
+// dropped frame (for debug logs), or null when the frame is real content.
+private fun flushFrameSignature(bytes: ByteArray, w: Int, h: Int): String? {
+    if (w <= 1 || h <= 1) return null
     val steps = 5
+    var minB = 255; var maxB = 0
+    var minG = 255; var maxG = 0
+    var minR = 255; var maxR = 0
     for (yi in 0 until steps) {
         val y = (h - 1) * yi / (steps - 1)
         for (xi in 0 until steps) {
             val x = (w - 1) * xi / (steps - 1)
             val i = (y * w + x) * 4
-            if (i + 2 >= bytes.size) return false
-            if ((bytes[i].toInt() and 0xFF) > 16 ||
-                (bytes[i + 1].toInt() and 0xFF) > 16 ||
-                (bytes[i + 2].toInt() and 0xFF) > 16
-            ) {
-                return false
-            }
+            if (i + 2 >= bytes.size) return null
+            val b = bytes[i].toInt() and 0xFF
+            val g = bytes[i + 1].toInt() and 0xFF
+            val r = bytes[i + 2].toInt() and 0xFF
+            if (b < minB) minB = b; if (b > maxB) maxB = b
+            if (g < minG) minG = g; if (g > maxG) maxG = g
+            if (r < minR) minR = r; if (r > maxR) maxR = r
         }
     }
-    return true
+    // Solid color = negligible spread on every channel across the whole picture.
+    val uniform = (maxB - minB) <= 8 && (maxG - minG) <= 8 && (maxR - minR) <= 8
+    if (!uniform) return null
+    val dark = maxR <= 40 && maxG <= 40 && maxB <= 40
+    val green = maxG >= 60 && maxR <= 40 && maxB <= 40
+    return if (dark || green) "rgb($minR-$maxR,$minG-$maxG,$minB-$maxB)" else null
 }
