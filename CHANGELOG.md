@@ -6,6 +6,21 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.31] — 2026-07-05
+
+### Fixed
+- **End-of-playback blink: now also catches non-black flush frames.** v0.1.30 dropped pure-black
+  end-of-stream frames, but the system VLC used by the `.deb` can flush solid **green** (zeroed
+  YUV planes) or dark grey frames instead — those now get dropped too. If any blink ever
+  survives this, the player now logs every dropped/painted frame in the final seconds
+  (`scripts/nuvio_debug_logs.sh` collects them) so the next report pinpoints the source.
+
+### Changed
+- **The in-player source list now uses the same rich stream cards as the show page.** When
+  picking the next episode from inside the player, each source shows the full release name,
+  codec/audio details, episode range, file-size chip, quality badges, and addon logo — identical
+  to the details screen, instead of a single truncated line.
+
 ## [0.1.30] — 2026-07-04
 
 ### Fixed
