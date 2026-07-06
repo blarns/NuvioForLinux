@@ -417,6 +417,8 @@ internal actual object PlayerSettingsStorage {
 
     actual fun loadHwAccelEnabled(): Boolean? = machineStore.getBoolean("hwAccelEnabled")
     actual fun saveHwAccelEnabled(enabled: Boolean) { machineStore.putBoolean("hwAccelEnabled", enabled) }
+    actual fun loadDiscordRichPresenceEnabled(): Boolean? = machineStore.getBoolean("discordRichPresenceEnabled")
+    actual fun saveDiscordRichPresenceEnabled(enabled: Boolean) { machineStore.putBoolean("discordRichPresenceEnabled", enabled) }
     actual fun loadAudioOutput(): String? = machineStore.getString("audioOutput")
     actual fun saveAudioOutput(module: String) { machineStore.putString("audioOutput", module) }
 }

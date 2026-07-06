@@ -97,6 +97,7 @@ internal fun LazyListScope.playbackSettingsContent(
     mapDV7ToHevc: Boolean,
     tunnelingEnabled: Boolean,
     hwAccelEnabled: Boolean,
+    discordRichPresenceEnabled: Boolean,
     audioOutput: String,
     useLibass: Boolean,
     libassRenderType: String,
@@ -117,6 +118,7 @@ internal fun LazyListScope.playbackSettingsContent(
             mapDV7ToHevc = mapDV7ToHevc,
             tunnelingEnabled = tunnelingEnabled,
             hwAccelEnabled = hwAccelEnabled,
+            discordRichPresenceEnabled = discordRichPresenceEnabled,
             audioOutput = audioOutput,
             useLibass = useLibass,
             libassRenderType = libassRenderType,
@@ -253,6 +255,7 @@ private fun PlaybackSettingsSection(
     mapDV7ToHevc: Boolean,
     tunnelingEnabled: Boolean,
     hwAccelEnabled: Boolean,
+    discordRichPresenceEnabled: Boolean,
     audioOutput: String,
     useLibass: Boolean,
     libassRenderType: String,
@@ -761,6 +764,14 @@ private fun PlaybackSettingsSection(
                         checked = hwAccelEnabled,
                         isTablet = isTablet,
                         onCheckedChange = PlayerSettingsRepository::setHwAccelEnabled,
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsSwitchRow(
+                        title = "Discord Rich Presence",
+                        description = "Show what you're watching in your Discord status. Requires Discord running. Applies from the next played video.",
+                        checked = discordRichPresenceEnabled,
+                        isTablet = isTablet,
+                        onCheckedChange = PlayerSettingsRepository::setDiscordRichPresenceEnabled,
                     )
                     SettingsGroupDivider(isTablet = isTablet)
                     val audioOutputLabel = when (audioOutput) {

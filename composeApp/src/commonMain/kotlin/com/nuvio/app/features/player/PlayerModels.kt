@@ -45,10 +45,14 @@ object PlayerLaunchStore {
     private val _currentTitle = MutableStateFlow<String?>(null)
     val currentTitle: StateFlow<String?> = _currentTitle.asStateFlow()
 
+    private val _currentLaunch = MutableStateFlow<PlayerLaunch?>(null)
+    val currentLaunch: StateFlow<PlayerLaunch?> = _currentLaunch.asStateFlow()
+
     fun put(launch: PlayerLaunch): Long {
         val launchId = nextLaunchId++
         launches[launchId] = launch
         _currentTitle.value = launch.title
+        _currentLaunch.value = launch
         return launchId
     }
 
@@ -58,6 +62,7 @@ object PlayerLaunchStore {
         launches.remove(launchId)
         if (launches.isEmpty()) {
             _currentTitle.value = null
+            _currentLaunch.value = null
         }
     }
 
@@ -65,6 +70,7 @@ object PlayerLaunchStore {
         nextLaunchId = 1L
         launches.clear()
         _currentTitle.value = null
+        _currentLaunch.value = null
     }
 }
 

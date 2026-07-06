@@ -51,6 +51,7 @@ data class PlayerSettingsUiState(
     val mapDV7ToHevc: Boolean = false,
     val tunnelingEnabled: Boolean = false,
     val hwAccelEnabled: Boolean = true,
+    val discordRichPresenceEnabled: Boolean = false,
     val audioOutput: String = "",
     val streamAutoPlayMode: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL,
     val streamAutoPlaySource: StreamAutoPlaySource = StreamAutoPlaySource.ALL_SOURCES,
@@ -111,6 +112,7 @@ object PlayerSettingsRepository {
     private var mapDV7ToHevc = false
     private var tunnelingEnabled = false
     private var hwAccelEnabled = true
+    private var discordRichPresenceEnabled = false
     private var audioOutput = ""
     private var streamAutoPlayMode = StreamAutoPlayMode.MANUAL
     private var streamAutoPlaySource = StreamAutoPlaySource.ALL_SOURCES
@@ -264,6 +266,7 @@ object PlayerSettingsRepository {
         mapDV7ToHevc = PlayerSettingsStorage.loadMapDV7ToHevc() ?: false
         tunnelingEnabled = PlayerSettingsStorage.loadTunnelingEnabled() ?: false
         hwAccelEnabled = PlayerSettingsStorage.loadHwAccelEnabled() ?: true
+        discordRichPresenceEnabled = PlayerSettingsStorage.loadDiscordRichPresenceEnabled() ?: false
         audioOutput = PlayerSettingsStorage.loadAudioOutput() ?: ""
         streamAutoPlayMode = PlayerSettingsStorage.loadStreamAutoPlayMode()
             ?.let { runCatching { StreamAutoPlayMode.valueOf(it) }.getOrNull() }
@@ -509,6 +512,14 @@ object PlayerSettingsRepository {
         hwAccelEnabled = enabled
         publish()
         PlayerSettingsStorage.saveHwAccelEnabled(enabled)
+    }
+
+    fun setDiscordRichPresenceEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (discordRichPresenceEnabled == enabled) return
+        discordRichPresenceEnabled = enabled
+        publish()
+        PlayerSettingsStorage.saveDiscordRichPresenceEnabled(enabled)
     }
 
     fun setAudioOutput(module: String) {
@@ -852,6 +863,7 @@ object PlayerSettingsRepository {
             mapDV7ToHevc = mapDV7ToHevc,
             tunnelingEnabled = tunnelingEnabled,
             hwAccelEnabled = hwAccelEnabled,
+            discordRichPresenceEnabled = discordRichPresenceEnabled,
             audioOutput = audioOutput,
             streamAutoPlayMode = streamAutoPlayMode,
             streamAutoPlaySource = streamAutoPlaySource,

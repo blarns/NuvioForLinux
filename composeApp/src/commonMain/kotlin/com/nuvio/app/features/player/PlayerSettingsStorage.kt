@@ -59,6 +59,8 @@ internal expect object PlayerSettingsStorage {
     fun saveTunnelingEnabled(enabled: Boolean)
     fun loadHwAccelEnabled(): Boolean?
     fun saveHwAccelEnabled(enabled: Boolean)
+    fun loadDiscordRichPresenceEnabled(): Boolean?
+    fun saveDiscordRichPresenceEnabled(enabled: Boolean)
     fun loadAudioOutput(): String?
     fun saveAudioOutput(module: String)
     fun loadStreamAutoPlayMode(): String?

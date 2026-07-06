@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import com.nuvio.app.features.discord.DiscordRichPresence
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -392,6 +393,11 @@ actual fun PlatformPlayerSurface(
                 // Keep the desktop awake only while actually playing (idempotent — this
                 // fires ~10x/sec from the poll loop, so it no-ops unless state changed).
                 if (snap.isPlaying) ScreensaverInhibitor.inhibit() else ScreensaverInhibitor.release()
+                // Mirror the now-playing status to Discord (opt-in). update() is cheap and
+                // debounced internally, so calling it at the poll's ~10Hz is fine.
+                if (PlayerSettingsStorage.loadDiscordRichPresenceEnabled() == true) {
+                    DiscordRichPresence.update(snap)
+                }
                 latestOnSnapshot.value(snap)
             },
             onError = { error ->
@@ -407,6 +413,7 @@ actual fun PlatformPlayerSurface(
             playerController = null
             PlayerControlBridge.controller = null
             PlayerControlBridge.isPlaying = false
+            DiscordRichPresence.clear()
         }
     }
 
@@ -417,6 +424,8 @@ actual fun PlatformPlayerSurface(
             // Drop the screensaver inhibitor in case we left mid-playback (navigating
             // away may not deliver a final paused/stopped snapshot before disposal).
             ScreensaverInhibitor.release()
+            // Clear the Discord presence for the same reason.
+            DiscordRichPresence.clear()
             // stop() can block for 500ms–2s while VLC flushes buffers and closes the
             // network connection. Running it on a daemon thread keeps the Compose render
             // thread free so the next screen's buttons remain responsive immediately.

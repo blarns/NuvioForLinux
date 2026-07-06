@@ -484,6 +484,8 @@ actual object PlayerSettingsStorage {
 
     actual fun loadHwAccelEnabled(): Boolean? = null
     actual fun saveHwAccelEnabled(enabled: Boolean) {}
+    actual fun loadDiscordRichPresenceEnabled(): Boolean? = null
+    actual fun saveDiscordRichPresenceEnabled(enabled: Boolean) {}
     actual fun loadAudioOutput(): String? = null
     actual fun saveAudioOutput(module: String) {}
 

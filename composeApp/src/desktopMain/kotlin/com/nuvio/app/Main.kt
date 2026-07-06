@@ -62,6 +62,8 @@ fun main() {
                 it.isDaemon = true
                 it.start()
             }
+            // Clear and disconnect the Discord presence (no-op when the feature was inert).
+            com.nuvio.app.features.discord.DiscordRichPresence.shutdown()
             windowStore.putFloat("width", windowState.size.width.value)
             windowStore.putFloat("height", windowState.size.height.value)
             exitApplication()

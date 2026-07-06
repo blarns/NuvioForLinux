@@ -133,6 +133,19 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
             )
         }
 
+        outDir.resolve("com/nuvio/app/features/discord").apply {
+            mkdirs()
+            resolve("DiscordConfig.kt").writeText(
+                """
+                |package com.nuvio.app.features.discord
+                |
+                |object DiscordConfig {
+                |    const val CLIENT_ID = "${props.getProperty("DISCORD_CLIENT_ID", "")}"
+                |}
+                """.trimMargin()
+            )
+        }
+
         outDir.resolve("com/nuvio/app/core/build").apply {
             mkdirs()
             resolve("AppVersionConfig.kt").writeText(
