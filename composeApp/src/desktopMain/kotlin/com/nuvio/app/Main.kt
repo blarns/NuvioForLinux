@@ -16,6 +16,7 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.nuvio.app.core.storage.DesktopStorage
 import com.nuvio.app.desktop.DesktopLegacyPrefsMigration
+import com.nuvio.app.features.player.DesktopScreenshot
 import com.nuvio.app.features.player.PlayerControlBridge
 import com.nuvio.app.features.player.PlayerLaunchStore
 import com.nuvio.app.features.settings.AppLanguage
@@ -79,6 +80,7 @@ fun main() {
                 Key.DirectionDown  -> { ctrl.currentVolume()?.let { ctrl.setVolume((it.fraction - 0.05f).coerceAtLeast(0f)) }; true }
                 Key.M -> { ctrl.currentVolume()?.let { ctrl.setVolume(if (it.isMuted) 0.5f else 0f) }; true }
                 Key.F -> { DesktopWindowState.toggleFullscreen?.invoke(); true }
+                Key.S -> { DesktopScreenshot.capture(); true }
                 else -> false
             }
         },

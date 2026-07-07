@@ -298,6 +298,10 @@ actual fun PlatformPlayerSurface(
                         println("$TAG: Frame conversion error: ${e.message}")
                     }
                 }
+                // Hand the just-captured frame to the screenshot store (same ByteArray
+                // reference, no extra copy). Skip while frozen so the "S" hotkey never
+                // grabs an end-of-stream black/green flush frame.
+                if (!frozen.get()) LastFrameStore.update(bytes, w, h)
             }
         }
     }
@@ -426,6 +430,9 @@ actual fun PlatformPlayerSurface(
             ScreensaverInhibitor.release()
             // Clear the Discord presence for the same reason.
             DiscordRichPresence.clear()
+            // Drop the last captured frame so the screenshot hotkey can't grab a stale
+            // frame from a video we already left.
+            LastFrameStore.clear()
             // stop() can block for 500ms–2s while VLC flushes buffers and closes the
             // network connection. Running it on a daemon thread keeps the Compose render
             // thread free so the next screen's buttons remain responsive immediately.
