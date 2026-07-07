@@ -483,7 +483,11 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
         )
         if (shouldShow && !showNextEpisodeCard) {
             showNextEpisodeCard = true
-            if (playerSettingsUiState.streamAutoPlayNextEpisodeEnabled && nextEpisodeInfo?.hasAired == true) {
+            // Suppress pre-emptive autoplay while the sleep timer is set to stop after
+            // this episode (the timer is consumed at the true end below).
+            if (playerSettingsUiState.streamAutoPlayNextEpisodeEnabled && nextEpisodeInfo?.hasAired == true &&
+                !SleepTimerController.isAfterEpisodeArmed()
+            ) {
                 playNextEpisode()
             }
         } else if (!shouldShow) {
@@ -494,7 +498,10 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
     LaunchedEffect(playbackSnapshot.isEnded, nextEpisodeInfo) {
         if (playbackSnapshot.isEnded && nextEpisodeInfo != null && !showNextEpisodeCard) {
             showNextEpisodeCard = true
-            if (playerSettingsUiState.streamAutoPlayNextEpisodeEnabled && nextEpisodeInfo?.hasAired == true) {
+            // "Stop after this episode" wins over autoplay-next.
+            if (SleepTimerController.consumeAfterEpisodeIfArmed()) {
+                // stopped by the sleep timer — do not advance
+            } else if (playerSettingsUiState.streamAutoPlayNextEpisodeEnabled && nextEpisodeInfo?.hasAired == true) {
                 playNextEpisode()
             }
         }

@@ -10,10 +10,12 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.loadImageBitmap
 import androidx.compose.ui.res.useResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.MenuBar
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import com.nuvio.app.features.player.SleepTimerController
 import com.nuvio.app.core.storage.DesktopStorage
 import com.nuvio.app.desktop.DesktopLegacyPrefsMigration
 import com.nuvio.app.features.player.DesktopScreenshot
@@ -53,6 +55,9 @@ fun main() {
             onStop  = { PlayerControlBridge.controller?.pause() },
         )
     }.getOrNull()
+    // Let the sleep timer pause the active player.
+    SleepTimerController.pauseAction = { PlayerControlBridge.controller?.pause() }
+    val sleepTimerState by SleepTimerController.state.collectAsState()
     Window(
         onCloseRequest = {
             PlayerControlBridge.flushProgress?.invoke()
@@ -88,6 +93,29 @@ fun main() {
         icon = appIcon,
         state = windowState,
     ) {
+        MenuBar {
+            Menu("Playback", mnemonic = 'P') {
+                Menu("Sleep timer") {
+                    RadioButtonItem(
+                        text = "Off",
+                        selected = sleepTimerState is SleepTimerController.State.Off,
+                        onClick = { SleepTimerController.cancel() },
+                    )
+                    SleepTimerController.presetMinutes.forEach { minutes ->
+                        RadioButtonItem(
+                            text = "$minutes minutes",
+                            selected = (sleepTimerState as? SleepTimerController.State.Minutes)?.minutes == minutes,
+                            onClick = { SleepTimerController.startMinutes(minutes) },
+                        )
+                    }
+                    RadioButtonItem(
+                        text = "After this episode",
+                        selected = sleepTimerState is SleepTimerController.State.AfterEpisode,
+                        onClick = { SleepTimerController.startAfterEpisode() },
+                    )
+                }
+            }
+        }
         App()
     }
     }
