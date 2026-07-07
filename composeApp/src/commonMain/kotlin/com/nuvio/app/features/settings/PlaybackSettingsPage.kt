@@ -800,6 +800,14 @@ private fun PlaybackSettingsSection(
                         isTablet = isTablet,
                         onClick = { showSubtitleDialog = true },
                     )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsSwitchRow(
+                        title = "System tray icon",
+                        description = "Show a Nuvio icon in the system tray with show/play-pause/quit. Requires app restart. Needs a tray host (Cinnamon, KDE, XFCE, or GNOME with an app-indicator extension).",
+                        checked = playerSettings.trayIconEnabled,
+                        isTablet = isTablet,
+                        onCheckedChange = PlayerSettingsRepository::setTrayIconEnabled,
+                    )
                 }
             }
             if (showSubtitleDialog) {

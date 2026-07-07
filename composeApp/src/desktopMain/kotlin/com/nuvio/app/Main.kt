@@ -1,5 +1,6 @@
 package com.nuvio.app
 
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.painter.BitmapPainter
@@ -22,6 +23,7 @@ import com.nuvio.app.desktop.DesktopLegacyPrefsMigration
 import com.nuvio.app.features.player.DesktopScreenshot
 import com.nuvio.app.features.player.PlayerControlBridge
 import com.nuvio.app.features.player.PlayerLaunchStore
+import com.nuvio.app.features.player.PlayerSettingsStorage
 import com.nuvio.app.features.settings.AppLanguage
 import com.nuvio.app.features.settings.ThemeSettingsStorage
 
@@ -63,6 +65,11 @@ fun main(args: Array<String>) {
     // Let the sleep timer pause the active player.
     SleepTimerController.pauseAction = { PlayerControlBridge.controller?.pause() }
     val sleepTimerState by SleepTimerController.state.collectAsState()
+    // System tray (opt-in, applied at startup). Tray actions route through DesktopWindowState.
+    DesktopWindowState.requestExit = { exitApplication() }
+    LaunchedEffect(Unit) {
+        if (PlayerSettingsStorage.loadTrayIconEnabled() == true) DesktopTray.install()
+    }
     Window(
         onCloseRequest = {
             PlayerControlBridge.flushProgress?.invoke()
@@ -75,6 +82,7 @@ fun main(args: Array<String>) {
             }
             // Clear and disconnect the Discord presence (no-op when the feature was inert).
             com.nuvio.app.features.discord.DiscordRichPresence.shutdown()
+            DesktopTray.remove()
             windowStore.putFloat("width", windowState.size.width.value)
             windowStore.putFloat("height", windowState.size.height.value)
             exitApplication()
@@ -98,6 +106,12 @@ fun main(args: Array<String>) {
         icon = appIcon,
         state = windowState,
     ) {
+        // Bring-to-front for the tray "Show" action (window is the ComposeWindow/AWT frame).
+        DesktopWindowState.bringToFront = {
+            window.extendedState = window.extendedState and java.awt.Frame.ICONIFIED.inv()
+            window.toFront()
+            window.requestFocus()
+        }
         MenuBar {
             Menu("Playback", mnemonic = 'P') {
                 Menu("Sleep timer") {

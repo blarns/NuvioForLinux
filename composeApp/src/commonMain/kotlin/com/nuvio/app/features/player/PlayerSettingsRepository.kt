@@ -52,6 +52,7 @@ data class PlayerSettingsUiState(
     val tunnelingEnabled: Boolean = false,
     val hwAccelEnabled: Boolean = true,
     val discordRichPresenceEnabled: Boolean = false,
+    val trayIconEnabled: Boolean = false,
     val audioOutput: String = "",
     val subtitleFontSize: Int = 16,
     val subtitleColor: Int = 0xFFFFFF,
@@ -117,6 +118,7 @@ object PlayerSettingsRepository {
     private var tunnelingEnabled = false
     private var hwAccelEnabled = true
     private var discordRichPresenceEnabled = false
+    private var trayIconEnabled = false
     private var audioOutput = ""
     private var subtitleFontSize = 16
     private var subtitleColor = 0xFFFFFF
@@ -275,6 +277,7 @@ object PlayerSettingsRepository {
         tunnelingEnabled = PlayerSettingsStorage.loadTunnelingEnabled() ?: false
         hwAccelEnabled = PlayerSettingsStorage.loadHwAccelEnabled() ?: true
         discordRichPresenceEnabled = PlayerSettingsStorage.loadDiscordRichPresenceEnabled() ?: false
+        trayIconEnabled = PlayerSettingsStorage.loadTrayIconEnabled() ?: false
         audioOutput = PlayerSettingsStorage.loadAudioOutput() ?: ""
         subtitleFontSize = PlayerSettingsStorage.loadSubtitleFontSize() ?: 16
         subtitleColor = PlayerSettingsStorage.loadSubtitleColor() ?: 0xFFFFFF
@@ -532,6 +535,14 @@ object PlayerSettingsRepository {
         discordRichPresenceEnabled = enabled
         publish()
         PlayerSettingsStorage.saveDiscordRichPresenceEnabled(enabled)
+    }
+
+    fun setTrayIconEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (trayIconEnabled == enabled) return
+        trayIconEnabled = enabled
+        publish()
+        PlayerSettingsStorage.saveTrayIconEnabled(enabled)
     }
 
     fun setAudioOutput(module: String) {
@@ -912,6 +923,7 @@ object PlayerSettingsRepository {
             tunnelingEnabled = tunnelingEnabled,
             hwAccelEnabled = hwAccelEnabled,
             discordRichPresenceEnabled = discordRichPresenceEnabled,
+            trayIconEnabled = trayIconEnabled,
             audioOutput = audioOutput,
             subtitleFontSize = subtitleFontSize,
             subtitleColor = subtitleColor,

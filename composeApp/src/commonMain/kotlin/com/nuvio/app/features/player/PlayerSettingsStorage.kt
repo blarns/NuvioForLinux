@@ -61,6 +61,8 @@ internal expect object PlayerSettingsStorage {
     fun saveHwAccelEnabled(enabled: Boolean)
     fun loadDiscordRichPresenceEnabled(): Boolean?
     fun saveDiscordRichPresenceEnabled(enabled: Boolean)
+    fun loadTrayIconEnabled(): Boolean?
+    fun saveTrayIconEnabled(enabled: Boolean)
     fun loadAudioOutput(): String?
     fun saveAudioOutput(module: String)
     // Subtitle appearance (desktop/VLCJ freetype). Ints are the raw libVLC values.
