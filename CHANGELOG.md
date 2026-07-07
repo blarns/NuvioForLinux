@@ -6,6 +6,30 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.0] — 2026-07-07
+
+A desktop feature drop. Everything here is Linux-desktop only and opt-in where it could be
+intrusive; none of it changes playback or sync behaviour.
+
+### Added
+- **Discord Rich Presence** (opt-in, off by default). Shows "Watching <title>" with the
+  episode/movie, poster art and elapsed time in your Discord status while playing. Requires the
+  Discord client running and a Discord application client id (set `DISCORD_CLIENT_ID` at build
+  time, env `NUVIO_DISCORD_CLIENT_ID`, or `~/.config/nuvio/discord-client-id`); inert without one.
+- **Rich MPRIS media controls.** GNOME/KDE/Cinnamon media widgets and the lock screen now show the
+  real title (+ SxEy), poster art and duration, reflect play/paused/stopped, and can seek.
+- **Screenshot hotkey.** Press **S** during playback to save the current frame as a PNG to
+  `~/Pictures/Nuvio`.
+- **Sleep timer.** A Playback → Sleep timer menu (15 / 30 / 60 / 90 min or "after this episode")
+  that pauses playback or stops after the current episode.
+- **Subtitle appearance settings.** Text size, color, background and outline presets for the
+  desktop player (Settings → Playback → Linux desktop), applied to the next played video.
+- **System tray icon** (opt-in). A tray icon with Show / Play-Pause / Quit, for tray hosts like
+  Cinnamon, KDE, XFCE, or GNOME with an app-indicator extension.
+- **Open URLs from the browser / command line.** `nuvio <http-url>` plays a direct stream in-app;
+  magnet links are recognised and registered as a handler (full P2P playback still runs through
+  the experimental P2P streaming setting).
+
 ## [0.1.31] — 2026-07-05
 
 ### Fixed
