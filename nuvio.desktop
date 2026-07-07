@@ -9,4 +9,4 @@ Categories=AudioVideo;Video;Player;TV;
 Keywords=video;media;streaming;stremio;
 StartupNotify=true
 Terminal=false
-MimeType=video/x-matroska;video/mp4;video/x-msvideo;video/webm;video/quicktime;video/x-flv;video/mpeg;
+MimeType=video/x-matroska;video/mp4;video/x-msvideo;video/webm;video/quicktime;video/x-flv;video/mpeg;x-scheme-handler/magnet;application/x-bittorrent;

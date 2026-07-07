@@ -15,6 +15,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import com.nuvio.app.features.player.ExternalOpenRequestStore
 import com.nuvio.app.features.player.SleepTimerController
 import com.nuvio.app.core.storage.DesktopStorage
 import com.nuvio.app.desktop.DesktopLegacyPrefsMigration
@@ -24,7 +25,11 @@ import com.nuvio.app.features.player.PlayerLaunchStore
 import com.nuvio.app.features.settings.AppLanguage
 import com.nuvio.app.features.settings.ThemeSettingsStorage
 
-fun main() {
+fun main(args: Array<String>) {
+    // A magnet: or http(s): URL passed on the command line (also how the browser / file
+    // manager hands off via the x-scheme-handler association) is stashed for the UI to
+    // open once a profile is active.
+    args.firstOrNull()?.let { parseExternalOpenArg(it) }?.let { ExternalOpenRequestStore.set(it) }
     // One-time legacy java.util.prefs → ~/.config/nuvio migration. MUST stay the first
     // statement: nothing may read a DesktopStorage store before this runs.
     DesktopLegacyPrefsMigration.runIfNeeded()
@@ -118,5 +123,40 @@ fun main() {
         }
         App()
     }
+    }
+}
+
+private fun decodeUrlComponent(value: String): String =
+    runCatching { java.net.URLDecoder.decode(value, "UTF-8") }.getOrDefault(value)
+
+/** Parse a CLI/browser-handoff argument into an open request, or null if unsupported. */
+private fun parseExternalOpenArg(arg: String): ExternalOpenRequestStore.Request? {
+    val trimmed = arg.trim()
+    return when {
+        trimmed.startsWith("magnet:", ignoreCase = true) -> {
+            val params = trimmed.substringAfter('?', "").split('&')
+            val infoHash = params.firstOrNull { it.startsWith("xt=urn:btih:", ignoreCase = true) }
+                ?.substringAfter("xt=urn:btih:", "")?.trim()?.lowercase()
+            val name = params.firstOrNull { it.startsWith("dn=", ignoreCase = true) }
+                ?.substringAfter("dn=", "")?.let { decodeUrlComponent(it) }?.takeIf { it.isNotBlank() }
+            if (infoHash.isNullOrBlank()) null
+            else ExternalOpenRequestStore.Request(
+                kind = ExternalOpenRequestStore.Kind.MAGNET,
+                url = trimmed,
+                title = name ?: "Torrent",
+                infoHash = infoHash,
+            )
+        }
+        trimmed.startsWith("http://", ignoreCase = true) ||
+            trimmed.startsWith("https://", ignoreCase = true) -> {
+            val name = trimmed.substringAfterLast('/', "").substringBefore('?')
+                .let { decodeUrlComponent(it) }.takeIf { it.isNotBlank() } ?: "Stream"
+            ExternalOpenRequestStore.Request(
+                kind = ExternalOpenRequestStore.Kind.HTTP,
+                url = trimmed,
+                title = name,
+            )
+        }
+        else -> null
     }
 }

@@ -132,11 +132,12 @@ cat > "$APPDIR/nuvio.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Nuvio
-Exec=nuvio
+Exec=nuvio %u
 Icon=nuvio
 Categories=AudioVideo;Video;Player;
 Comment=Modern media hub with Stremio addon ecosystem support
 Terminal=false
+MimeType=x-scheme-handler/magnet;application/x-bittorrent;
 EOF
 desktop-file-validate "$APPDIR/nuvio.desktop" 2>/dev/null || true
 
