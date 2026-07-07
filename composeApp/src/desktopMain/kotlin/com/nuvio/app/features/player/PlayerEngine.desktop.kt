@@ -402,6 +402,16 @@ actual fun PlatformPlayerSurface(
                 if (PlayerSettingsStorage.loadDiscordRichPresenceEnabled() == true) {
                     DiscordRichPresence.update(snap)
                 }
+                // Feed live position/duration to MPRIS and nudge it to re-emit metadata
+                // only when playing-state or duration actually changes (Position is polled
+                // by clients, so it is intentionally NOT signalled every tick).
+                val statusOrDurationChanged =
+                    PlayerControlBridge.isPlaying != snap.isPlaying ||
+                        PlayerControlBridge.durationMs != snap.durationMs
+                PlayerControlBridge.positionMs = snap.positionMs
+                PlayerControlBridge.durationMs = snap.durationMs
+                PlayerControlBridge.hasMedia = !snap.isEnded
+                if (statusOrDurationChanged) PlayerControlBridge.onNowPlayingChanged?.invoke()
                 latestOnSnapshot.value(snap)
             },
             onError = { error ->
