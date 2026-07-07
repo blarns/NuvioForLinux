@@ -562,6 +562,15 @@ actual object PlayerSettingsStorage {
     actual fun saveDiscordRichPresenceEnabled(enabled: Boolean) {}
     actual fun loadAudioOutput(): String? = null
     actual fun saveAudioOutput(module: String) {}
+    actual fun loadSubtitleFontSize(): Int? = null
+    actual fun saveSubtitleFontSize(relSize: Int) {}
+    actual fun loadSubtitleColor(): Int? = null
+    actual fun saveSubtitleColor(rgb: Int) {}
+    actual fun loadSubtitleBackgroundOpacity(): Int? = null
+    actual fun saveSubtitleBackgroundOpacity(opacity: Int) {}
+    actual fun loadSubtitleOutline(): Int? = null
+    actual fun saveSubtitleOutline(thickness: Int) {}
+    actual fun invalidatePlayerEngineConfig() {}
 
     actual fun loadStreamAutoPlayMode(): String? =
         preferences?.getString(ProfileScopedKey.of(streamAutoPlayModeKey), null)

@@ -53,14 +53,31 @@ private fun getVlcjFactory(): MediaPlayerFactory {
     return vlcjFactory ?: run {
         val hwAccel = PlayerSettingsStorage.loadHwAccelEnabled() ?: true
         val audioOutput = PlayerSettingsStorage.loadAudioOutput()
+        // Subtitle appearance (libVLC freetype module). Values are the raw VLC options;
+        // rel-fontsize is inverse (smaller = larger text). Only add non-defaults.
+        val subFontSize = PlayerSettingsStorage.loadSubtitleFontSize() ?: 16
+        val subColor = PlayerSettingsStorage.loadSubtitleColor() ?: 0xFFFFFF
+        val subBgOpacity = PlayerSettingsStorage.loadSubtitleBackgroundOpacity() ?: 0
+        val subOutline = PlayerSettingsStorage.loadSubtitleOutline() ?: 2
         val args = buildList {
             if (hwAccel) add("--avcodec-hw=any")
             if (!audioOutput.isNullOrBlank()) add("--aout=$audioOutput")
+            add("--freetype-rel-fontsize=$subFontSize")
+            add("--freetype-color=$subColor")
+            add("--freetype-background-opacity=$subBgOpacity")
+            add("--freetype-outline-thickness=$subOutline")
         }.toTypedArray()
         val factory = MediaPlayerFactory(*args)
         vlcjFactory = factory
         factory
     }
+}
+
+// Drop the cached factory so the next player build reflects changed engine options
+// (subtitle appearance). The active player keeps the factory it was created with; a new
+// video builds a fresh one. Called from PlayerSettingsStorage.invalidatePlayerEngineConfig().
+internal fun invalidateVlcjFactory() {
+    vlcjFactory = null
 }
 
 // ---------------------------------------------------------------------------

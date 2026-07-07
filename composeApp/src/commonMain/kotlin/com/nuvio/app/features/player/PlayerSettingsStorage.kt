@@ -63,6 +63,18 @@ internal expect object PlayerSettingsStorage {
     fun saveDiscordRichPresenceEnabled(enabled: Boolean)
     fun loadAudioOutput(): String?
     fun saveAudioOutput(module: String)
+    // Subtitle appearance (desktop/VLCJ freetype). Ints are the raw libVLC values.
+    fun loadSubtitleFontSize(): Int?
+    fun saveSubtitleFontSize(relSize: Int)
+    fun loadSubtitleColor(): Int?
+    fun saveSubtitleColor(rgb: Int)
+    fun loadSubtitleBackgroundOpacity(): Int?
+    fun saveSubtitleBackgroundOpacity(opacity: Int)
+    fun loadSubtitleOutline(): Int?
+    fun saveSubtitleOutline(thickness: Int)
+    // Desktop hook: drop any cached VLCJ factory so the next player build picks up
+    // changed engine options (subtitle appearance). No-op on mobile.
+    fun invalidatePlayerEngineConfig()
     fun loadStreamAutoPlayMode(): String?
     fun saveStreamAutoPlayMode(mode: String)
     fun loadStreamAutoPlaySource(): String?

@@ -421,4 +421,13 @@ internal actual object PlayerSettingsStorage {
     actual fun saveDiscordRichPresenceEnabled(enabled: Boolean) { machineStore.putBoolean("discordRichPresenceEnabled", enabled) }
     actual fun loadAudioOutput(): String? = machineStore.getString("audioOutput")
     actual fun saveAudioOutput(module: String) { machineStore.putString("audioOutput", module) }
+    actual fun loadSubtitleFontSize(): Int? = machineStore.getInt("subtitleFontSize")
+    actual fun saveSubtitleFontSize(relSize: Int) { machineStore.putInt("subtitleFontSize", relSize) }
+    actual fun loadSubtitleColor(): Int? = machineStore.getInt("subtitleColor")
+    actual fun saveSubtitleColor(rgb: Int) { machineStore.putInt("subtitleColor", rgb) }
+    actual fun loadSubtitleBackgroundOpacity(): Int? = machineStore.getInt("subtitleBackgroundOpacity")
+    actual fun saveSubtitleBackgroundOpacity(opacity: Int) { machineStore.putInt("subtitleBackgroundOpacity", opacity) }
+    actual fun loadSubtitleOutline(): Int? = machineStore.getInt("subtitleOutline")
+    actual fun saveSubtitleOutline(thickness: Int) { machineStore.putInt("subtitleOutline", thickness) }
+    actual fun invalidatePlayerEngineConfig() { invalidateVlcjFactory() }
 }

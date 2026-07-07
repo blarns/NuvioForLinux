@@ -3,6 +3,8 @@ package com.nuvio.app.features.settings
 import com.nuvio.app.core.build.AppFeaturePolicy
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -63,6 +65,7 @@ import com.nuvio.app.features.player.IosHardwareDecoderMode
 import com.nuvio.app.features.player.IosTargetPrimaries
 import com.nuvio.app.features.player.IosTargetTransfer
 import com.nuvio.app.features.player.PlayerSettingsRepository
+import com.nuvio.app.features.player.PlayerSettingsUiState
 import com.nuvio.app.features.player.STREAM_AUTO_PLAY_TIMEOUT_VALUES
 import com.nuvio.app.features.player.SubtitleBackgroundColorSwatches
 import com.nuvio.app.features.player.SubtitleColorSwatches
@@ -753,6 +756,10 @@ private fun PlaybackSettingsSection(
 
         if (isDesktop) {
             var showAudioOutputDialog by remember { mutableStateOf(false) }
+            var showSubtitleDialog by remember { mutableStateOf(false) }
+            // Live subtitle-appearance values, read directly from the repository so the
+            // desktop-only rows don't have to be threaded through the whole settings graph.
+            val playerSettings by PlayerSettingsRepository.uiState.collectAsStateWithLifecycle()
             SettingsSection(
                 title = "Linux desktop",
                 isTablet = isTablet,
@@ -786,7 +793,20 @@ private fun PlaybackSettingsSection(
                         isTablet = isTablet,
                         onClick = { showAudioOutputDialog = true },
                     )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsNavigationRow(
+                        title = "Subtitle appearance",
+                        description = subtitleAppearanceSummary(playerSettings),
+                        isTablet = isTablet,
+                        onClick = { showSubtitleDialog = true },
+                    )
                 }
+            }
+            if (showSubtitleDialog) {
+                SubtitleAppearanceDialog(
+                    settings = playerSettings,
+                    onDismiss = { showSubtitleDialog = false },
+                )
             }
             if (showAudioOutputDialog) {
                 AudioOutputDialog(
@@ -3162,6 +3182,122 @@ private fun StreamAutoPlaySource.labelRes(pluginsEnabled: Boolean): StringResour
         else Res.string.settings_playback_source_scope_all_addons
     StreamAutoPlaySource.INSTALLED_ADDONS_ONLY -> Res.string.settings_playback_source_scope_installed_addons_only
     StreamAutoPlaySource.ENABLED_PLUGINS_ONLY -> Res.string.settings_playback_source_scope_enabled_plugins_only
+}
+
+// ── Subtitle appearance (Linux desktop / VLCJ freetype) ──────────────────────
+// Preset value tables. Ints are the raw libVLC option values. rel-fontsize is inverse
+// (smaller number = larger on-screen text).
+private val subtitleFontSizeOptions = listOf(20 to "Small", 16 to "Normal", 12 to "Large", 8 to "Extra large")
+private val subtitleColorOptions = listOf(0xFFFFFF to "White", 0xFFFF00 to "Yellow", 0x00FFFF to "Cyan", 0x00FF00 to "Green")
+private val subtitleBackgroundOptions = listOf(0 to "Off", 80 to "Light", 160 to "Strong")
+private val subtitleOutlineOptions = listOf(0 to "None", 2 to "Thin", 4 to "Thick")
+
+private fun <T> optionLabel(options: List<Pair<T, String>>, value: T, fallback: String): String =
+    options.firstOrNull { it.first == value }?.second ?: fallback
+
+private fun subtitleAppearanceSummary(s: PlayerSettingsUiState): String {
+    val color = optionLabel(subtitleColorOptions, s.subtitleColor, "Custom")
+    val size = optionLabel(subtitleFontSizeOptions, s.subtitleFontSize, "Custom")
+    val bg = if (s.subtitleBackgroundOpacity > 0) "background on" else "no background"
+    return "$color · $size · $bg · applies to next video"
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun SubtitleAppearanceDialog(
+    settings: PlayerSettingsUiState,
+    onDismiss: () -> Unit,
+) {
+    BasicAlertDialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    text = "Subtitle appearance",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = "Applies to the next played video.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                SubtitleOptionGroup("Text size", subtitleFontSizeOptions, settings.subtitleFontSize) {
+                    PlayerSettingsRepository.setSubtitleFontSize(it)
+                }
+                SubtitleOptionGroup("Text color", subtitleColorOptions, settings.subtitleColor) {
+                    PlayerSettingsRepository.setSubtitleColor(it)
+                }
+                SubtitleOptionGroup("Background", subtitleBackgroundOptions, settings.subtitleBackgroundOpacity) {
+                    PlayerSettingsRepository.setSubtitleBackgroundOpacity(it)
+                }
+                SubtitleOptionGroup("Outline", subtitleOutlineOptions, settings.subtitleOutline) {
+                    PlayerSettingsRepository.setSubtitleOutline(it)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SubtitleOptionGroup(
+    title: String,
+    options: List<Pair<Int, String>>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        options.forEach { (value, label) ->
+            val isSelected = value == selected
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSelect(value) },
+                shape = RoundedCornerShape(12.dp),
+                color = if (isSelected) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                },
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (isSelected) {
+                        Icon(
+                            imageVector = Icons.Rounded.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

@@ -53,6 +53,10 @@ data class PlayerSettingsUiState(
     val hwAccelEnabled: Boolean = true,
     val discordRichPresenceEnabled: Boolean = false,
     val audioOutput: String = "",
+    val subtitleFontSize: Int = 16,
+    val subtitleColor: Int = 0xFFFFFF,
+    val subtitleBackgroundOpacity: Int = 0,
+    val subtitleOutline: Int = 2,
     val streamAutoPlayMode: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL,
     val streamAutoPlaySource: StreamAutoPlaySource = StreamAutoPlaySource.ALL_SOURCES,
     val streamAutoPlaySelectedAddons: Set<String> = emptySet(),
@@ -114,6 +118,10 @@ object PlayerSettingsRepository {
     private var hwAccelEnabled = true
     private var discordRichPresenceEnabled = false
     private var audioOutput = ""
+    private var subtitleFontSize = 16
+    private var subtitleColor = 0xFFFFFF
+    private var subtitleBackgroundOpacity = 0
+    private var subtitleOutline = 2
     private var streamAutoPlayMode = StreamAutoPlayMode.MANUAL
     private var streamAutoPlaySource = StreamAutoPlaySource.ALL_SOURCES
     private var streamAutoPlaySelectedAddons: Set<String> = emptySet()
@@ -268,6 +276,10 @@ object PlayerSettingsRepository {
         hwAccelEnabled = PlayerSettingsStorage.loadHwAccelEnabled() ?: true
         discordRichPresenceEnabled = PlayerSettingsStorage.loadDiscordRichPresenceEnabled() ?: false
         audioOutput = PlayerSettingsStorage.loadAudioOutput() ?: ""
+        subtitleFontSize = PlayerSettingsStorage.loadSubtitleFontSize() ?: 16
+        subtitleColor = PlayerSettingsStorage.loadSubtitleColor() ?: 0xFFFFFF
+        subtitleBackgroundOpacity = PlayerSettingsStorage.loadSubtitleBackgroundOpacity() ?: 0
+        subtitleOutline = PlayerSettingsStorage.loadSubtitleOutline() ?: 2
         streamAutoPlayMode = PlayerSettingsStorage.loadStreamAutoPlayMode()
             ?.let { runCatching { StreamAutoPlayMode.valueOf(it) }.getOrNull() }
             ?: StreamAutoPlayMode.MANUAL
@@ -528,6 +540,42 @@ object PlayerSettingsRepository {
         audioOutput = module
         publish()
         PlayerSettingsStorage.saveAudioOutput(module)
+    }
+
+    fun setSubtitleFontSize(relSize: Int) {
+        ensureLoaded()
+        if (subtitleFontSize == relSize) return
+        subtitleFontSize = relSize
+        publish()
+        PlayerSettingsStorage.saveSubtitleFontSize(relSize)
+        PlayerSettingsStorage.invalidatePlayerEngineConfig()
+    }
+
+    fun setSubtitleColor(rgb: Int) {
+        ensureLoaded()
+        if (subtitleColor == rgb) return
+        subtitleColor = rgb
+        publish()
+        PlayerSettingsStorage.saveSubtitleColor(rgb)
+        PlayerSettingsStorage.invalidatePlayerEngineConfig()
+    }
+
+    fun setSubtitleBackgroundOpacity(opacity: Int) {
+        ensureLoaded()
+        if (subtitleBackgroundOpacity == opacity) return
+        subtitleBackgroundOpacity = opacity
+        publish()
+        PlayerSettingsStorage.saveSubtitleBackgroundOpacity(opacity)
+        PlayerSettingsStorage.invalidatePlayerEngineConfig()
+    }
+
+    fun setSubtitleOutline(thickness: Int) {
+        ensureLoaded()
+        if (subtitleOutline == thickness) return
+        subtitleOutline = thickness
+        publish()
+        PlayerSettingsStorage.saveSubtitleOutline(thickness)
+        PlayerSettingsStorage.invalidatePlayerEngineConfig()
     }
 
     fun setStreamAutoPlayMode(mode: StreamAutoPlayMode) {
@@ -865,6 +913,10 @@ object PlayerSettingsRepository {
             hwAccelEnabled = hwAccelEnabled,
             discordRichPresenceEnabled = discordRichPresenceEnabled,
             audioOutput = audioOutput,
+            subtitleFontSize = subtitleFontSize,
+            subtitleColor = subtitleColor,
+            subtitleBackgroundOpacity = subtitleBackgroundOpacity,
+            subtitleOutline = subtitleOutline,
             streamAutoPlayMode = streamAutoPlayMode,
             streamAutoPlaySource = streamAutoPlaySource,
             streamAutoPlaySelectedAddons = streamAutoPlaySelectedAddons,
