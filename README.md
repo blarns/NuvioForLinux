@@ -38,8 +38,8 @@
 
 ## About
 
-[EDIT] :Update as of 7/3/2026:
-This project is now in maintenence only mode. I will be working towards keeping it working untill the official version is released. The goal right now is to make it so that once the official version is released users can simply update from my fork to the offcial repo's version.
+[EDIT] :Update as of 7/18/2026:
+I am considering taking this out of maintenence and back into active developement AND I will be working towards keeping it working untill the official version is released. The goal right now is to make it so that once the official version is released users can simply update from my fork to the offcial repo's version.
 
 This is a fork of [NuvioMedia/NuvioMobile](https://github.com/NuvioMedia/NuvioMobile) with an added **Linux Desktop target** via Kotlin Multiplatform JVM + VLCJ.
 
