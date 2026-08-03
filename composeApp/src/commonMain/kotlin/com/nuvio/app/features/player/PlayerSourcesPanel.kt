@@ -194,6 +194,11 @@ fun PlayerSourcesPanel(
                             }
 
                             streamsUiState.allStreams.isEmpty() -> {
+                                // Prefer a source's own error (a timeout, an addon that 500'd) over
+                                // the generic message — "no streams found" reads as "nothing exists"
+                                // when the truth is that a source failed.
+                                val error = streamsUiState.filteredGroups
+                                    .firstOrNull { !it.error.isNullOrBlank() }?.error
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -201,7 +206,8 @@ fun PlayerSourcesPanel(
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     Text(
-                                        text = stringResource(Res.string.compose_player_no_streams_found),
+                                        text = error
+                                            ?: stringResource(Res.string.compose_player_no_streams_found),
                                         color = tokens.colors.textMuted,
                                         style = MaterialTheme.typography.bodyMedium,
                                     )
@@ -232,6 +238,24 @@ fun PlayerSourcesPanel(
                                             badgePlacement = streamBadgeSettings.badgePlacement,
                                             onClick = { onStreamSelected(stream) },
                                         )
+                                    }
+                                    // Slower sources are still reporting — say so, otherwise the
+                                    // first addon's results look like the complete list.
+                                    if (streamsUiState.isAnyLoading) {
+                                        item {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = NuvioTokens.Space.s16),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                CircularProgressIndicator(
+                                                    color = tokens.colors.accent,
+                                                    strokeWidth = tokens.borders.medium,
+                                                    modifier = Modifier.size(tokens.icons.md),
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
