@@ -1,0 +1,21 @@
+# Copy this file to local.properties and fill in the values (local.properties is git-ignored).
+#
+# Accounts / sync backend — OPTIONAL.
+# When both keys are omitted, builds default to the official Nuvio backend
+# (https://api.nuvio.tv since the July 1, 2026 backend switch; the old hosted Supabase
+# project was decommissioned — pre-switch builds can no longer log in or sync).
+# Set BOTH keys only to point at your own Supabase project instead (partial overrides
+# fail the build).
+#SUPABASE_URL=https://your-project-id.supabase.co
+#SUPABASE_ANON_KEY=your-anon-public-key
+
+# Optional: Trakt OAuth
+#TRAKT_CLIENT_ID=
+#TRAKT_CLIENT_SECRET=
+#TRAKT_REDIRECT_URI=http://localhost:8080/callback
+
+# Optional: Android release signing (only needed for signed Android builds)
+#NUVIO_RELEASE_STORE_FILE=
+#NUVIO_RELEASE_STORE_PASSWORD=
+#NUVIO_RELEASE_KEY_ALIAS=
+#NUVIO_RELEASE_KEY_PASSWORD=

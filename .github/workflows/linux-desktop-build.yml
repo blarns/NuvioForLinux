@@ -1,0 +1,65 @@
+name: Linux Desktop Build & Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build-linux-desktop:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Install VLC dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvlc-dev vlc libavcodec-extra
+
+      - name: Create local.properties
+        run: |
+          touch local.properties
+          echo "SUPABASE_URL=" >> local.properties
+          echo "SUPABASE_ANON_KEY=" >> local.properties
+
+      - name: Build JVM target
+        run: ./gradlew composeApp:compileKotlinJvm --no-daemon 2>&1
+
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Install VLC dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvlc-dev vlc libavcodec-extra
+
+      - name: Create local.properties
+        run: |
+          touch local.properties
+          echo "SUPABASE_URL=" >> local.properties
+          echo "SUPABASE_ANON_KEY=" >> local.properties
+
+      - name: Run JVM tests
+        run: ./gradlew composeApp:jvmTest --no-daemon 2>&1

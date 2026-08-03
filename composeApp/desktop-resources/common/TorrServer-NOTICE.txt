@@ -1,0 +1,30 @@
+Third-party component: TorrServer
+=================================
+
+This application bundles the TorrServer binary to provide optional
+peer-to-peer (P2P) torrent streaming on Linux.
+
+  Project:  TorrServer
+  Upstream: https://github.com/YouROK/TorrServer
+  Version:  MatriX.141.5
+  License:  GNU General Public License v3.0 (see TorrServer-LICENSE.txt)
+
+TorrServer is bundled UNMODIFIED as a separate, standalone executable. Nuvio
+does not link against it: it is launched as a local child process and driven
+over localhost HTTP. This constitutes "mere aggregation" under the GPL, so the
+GPL does not extend to Nuvio's own code.
+
+Written offer for source code
+-----------------------------
+The complete corresponding source code for the bundled TorrServer binary,
+version MatriX.141.5, is available from the upstream project at:
+
+  https://github.com/YouROK/TorrServer/tree/MatriX.141.5
+
+The exact binary bundled here is the official "TorrServer-linux-amd64" release
+asset for that tag:
+
+  https://github.com/YouROK/TorrServer/releases/tag/MatriX.141.5
+
+A full copy of the GNU General Public License v3.0 governing this component
+accompanies this notice as TorrServer-LICENSE.txt.
