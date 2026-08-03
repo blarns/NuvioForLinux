@@ -135,12 +135,18 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
 
         outDir.resolve("com/nuvio/app/features/discord").apply {
             mkdirs()
+            // A Discord application id is a public identifier (it is visible in every RPC
+            // handshake), so the NuvioForLinux one is baked in as the default. Without it,
+            // release builds — which have no local.properties — shipped an empty id and the
+            // Rich Presence setting silently did nothing.
+            val discordClientId = props.getProperty("DISCORD_CLIENT_ID", "")
+                .ifBlank { "1533716415117398118" }
             resolve("DiscordConfig.kt").writeText(
                 """
                 |package com.nuvio.app.features.discord
                 |
                 |object DiscordConfig {
-                |    const val CLIENT_ID = "${props.getProperty("DISCORD_CLIENT_ID", "")}"
+                |    const val CLIENT_ID = "$discordClientId"
                 |}
                 """.trimMargin()
             )

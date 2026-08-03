@@ -34,9 +34,11 @@ showing scraper results; the rest is fallout from the 0.2.0 feature drop.
 - Play/pause (spacebar, tray, MPRIS) after a video ends no longer acts on stale state.
 - MPRIS `Position` advances while playing, and `GetAll` returns the real property set, so
   `playerctl`, waybar and other proxy-based clients see Nuvio's state instead of nothing.
-- Discord Rich Presence no longer gives up for the whole session after a run of failures
-  (starting Nuvio before Discord used to kill it until restart), and the settings row now says
-  when no application id is built in rather than appearing to work while doing nothing.
+- **Discord Rich Presence now works in release builds.** No application id was baked in, so
+  every shipped `.deb`/AppImage had the feature silently inert. It also no longer gives up for
+  the whole session after a run of failures (starting Nuvio before Discord used to kill it
+  until restart), and the settings row reports an unconfigured id instead of appearing to work
+  while doing nothing.
 - The libVLC factory is released when it is retired, instead of leaking a native instance on
   every subtitle-appearance change.
 
