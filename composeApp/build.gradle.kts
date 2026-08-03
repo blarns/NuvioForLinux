@@ -1,12 +1,19 @@
+import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputDirectory
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
+import org.gradle.process.ExecOperations
+import javax.inject.Inject
+import java.net.URI
+import java.security.MessageDigest
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import java.util.Properties
@@ -147,6 +154,25 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
             )
         }
 
+        outDir.resolve("com/nuvio/app/features/discord").apply {
+            mkdirs()
+            // A Discord application id is a public identifier (it is visible in every RPC
+            // handshake), so the NuvioForLinux one is baked in as the default. Without it,
+            // release builds — which have no local.properties — shipped an empty id and the
+            // Rich Presence setting silently did nothing.
+            val discordClientId = props.getProperty("DISCORD_CLIENT_ID", "")
+                .ifBlank { "1533716415117398118" }
+            resolve("DiscordConfig.kt").writeText(
+                """
+                |package com.nuvio.app.features.discord
+                |
+                |object DiscordConfig {
+                |    const val CLIENT_ID = "$discordClientId"
+                |}
+                """.trimMargin()
+            )
+        }
+
         outDir.resolve("com/nuvio/app/core/build").apply {
             mkdirs()
             resolve("AppVersionConfig.kt").writeText(
@@ -178,6 +204,134 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
     }
 }
 
+// jpackage doesn't let the Compose plugin declare extra package relationships, so
+// repack the deb to (1) add a hard runtime dependency on libVLC — VLCJ dlopen's the
+// system libvlc.so, so a fresh .deb install has NO playback without it — and (2) add a
+// Recommends on the emoji font (stream lists are full of emoji-formatted addon text
+// that renders as tofu without one installed).
+abstract class PatchDebRecommendsTask : DefaultTask() {
+    @get:Inject
+    abstract val execOperations: ExecOperations
+
+    @get:InputDirectory
+    abstract val debDirectory: DirectoryProperty
+
+    @get:Input
+    abstract val recommends: Property<String>
+
+    @get:Input
+    abstract val extraDepends: Property<String>
+
+    // Files (by name) inside the deb that must be marked executable. jpackage/dpkg can
+    // drop the exec bit on bundled app resources, and the installed copy is root-owned so
+    // the app can't chmod it at runtime — so we fix it in the package itself.
+    @get:Input
+    @get:Optional
+    abstract val executables: Property<String>
+
+    @TaskAction
+    fun patch() {
+        val debs = debDirectory.get().asFile.listFiles { file -> file.extension == "deb" }.orEmpty()
+        val dep = extraDepends.get().takeIf { it.isNotBlank() }
+        val rec = recommends.get().takeIf { it.isNotBlank() }
+        val execNames = executables.orNull?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() }.orEmpty()
+        debs.forEach { deb ->
+            val workDir = File(temporaryDir, deb.nameWithoutExtension)
+            workDir.deleteRecursively()
+            execOperations.exec {
+                commandLine("dpkg-deb", "-R", deb.absolutePath, workDir.absolutePath)
+            }
+            val control = workDir.resolve("DEBIAN/control")
+            var lines = control.readLines().filterNot { it.isBlank() }
+            var changed = false
+
+            // Ensure bundled binaries are executable inside the package.
+            if (execNames.isNotEmpty()) {
+                workDir.walkTopDown()
+                    .filter { it.isFile && it.name in execNames }
+                    .forEach { bin ->
+                        if (!bin.canExecute()) {
+                            bin.setExecutable(true, false)
+                            changed = true
+                        }
+                    }
+            }
+
+            // Append the runtime dependency onto the existing Depends: field (or add one).
+            if (dep != null && lines.none { it.contains(dep) }) {
+                lines = if (lines.any { it.startsWith("Depends:") }) {
+                    lines.map { if (it.startsWith("Depends:")) "$it, $dep" else it }
+                } else {
+                    lines + "Depends: $dep"
+                }
+                changed = true
+            }
+
+            // Add the Recommends: field if absent.
+            if (rec != null && lines.none { it.startsWith("Recommends:") }) {
+                lines = lines + "Recommends: $rec"
+                changed = true
+            }
+
+            if (changed) {
+                control.writeText(lines.joinToString("\n") + "\n")
+                execOperations.exec {
+                    commandLine("dpkg-deb", "-b", "--root-owner-group", workDir.absolutePath, deb.absolutePath)
+                }
+            }
+            workDir.deleteRecursively()
+        }
+    }
+}
+
+// Downloads the TorrServer Linux binary (P2P engine) into the app-resources dir at build
+// time, so the ~74 MB binary stays out of git. Pinned + SHA-256 verified for reproducibility.
+abstract class FetchTorrServerTask : DefaultTask() {
+    @get:Input
+    abstract val downloadUrl: Property<String>
+
+    @get:Input
+    abstract val sha256: Property<String>
+
+    @get:OutputFile
+    abstract val target: RegularFileProperty
+
+    @TaskAction
+    fun fetch() {
+        val out = target.get().asFile
+        val expected = sha256.get().lowercase()
+        if (out.exists() && sha256Of(out) == expected) {
+            logger.lifecycle("TorrServer binary already present and verified: ${out.absolutePath}")
+            return
+        }
+        out.parentFile.mkdirs()
+        val url = downloadUrl.get()
+        logger.lifecycle("Downloading TorrServer from $url")
+        URI(url).toURL().openStream().use { input ->
+            out.outputStream().use { output -> input.copyTo(output) }
+        }
+        val actual = sha256Of(out)
+        check(actual == expected) {
+            "TorrServer checksum mismatch.\n  expected: $expected\n  actual:   $actual\n  file:     ${out.absolutePath}"
+        }
+        out.setExecutable(true, false)
+        logger.lifecycle("TorrServer downloaded and verified (${out.length()} bytes)")
+    }
+
+    private fun sha256Of(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { stream ->
+            val buf = ByteArray(1 shl 16)
+            while (true) {
+                val n = stream.read(buf)
+                if (n < 0) break
+                digest.update(buf, 0, n)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+}
+
 fun readXcconfigValue(file: File, key: String): String? {
     if (!file.exists()) return null
     return file.readLines()
@@ -204,6 +358,11 @@ val supabaseProps = Properties().apply {
     val propsFile = rootProject.file("local.properties")
     if (propsFile.exists()) propsFile.inputStream().use { load(it) }
 }
+val releaseStoreFile = supabaseProps.getProperty("NUVIO_RELEASE_STORE_FILE")?.takeIf { it.isNotBlank() }
+val releaseStorePassword = supabaseProps.getProperty("NUVIO_RELEASE_STORE_PASSWORD")?.takeIf { it.isNotBlank() }
+val releaseKeyAlias = supabaseProps.getProperty("NUVIO_RELEASE_KEY_ALIAS")?.takeIf { it.isNotBlank() }
+val releaseKeyPassword = supabaseProps.getProperty("NUVIO_RELEASE_KEY_PASSWORD")?.takeIf { it.isNotBlank() }
+val releaseKeystore = releaseStoreFile?.let(rootProject::file)
 val appVersionConfigFile = rootProject.file("iosApp/Configuration/Version.xcconfig")
 val releaseAppVersionName = readXcconfigValue(appVersionConfigFile, "MARKETING_VERSION")
     ?: error("MARKETING_VERSION is missing from ${appVersionConfigFile.path}")
@@ -227,6 +386,7 @@ val iosDistributionSourceDir = if (iosDistribution == "full") {
 val iosFrameworkBundleId = "com.nuvio.media"
 val nuvioEngineAppleFramework = rootProject.file("../nuvio-engine/platform/apple/NuvioEngine.xcframework")
 val fullCommonSourceDir = project.file("src/fullCommonMain/kotlin")
+val fullPluginSourceDir = fullCommonSourceDir.resolve("com/nuvio/app/features/plugins")
 val generatedRuntimeConfigDir = layout.buildDirectory.dir("generated/runtime-config/kotlin")
 val requestedGradleTasks = gradle.startParameter.taskNames.map { taskName ->
     taskName.substringAfterLast(':').lowercase()
@@ -285,11 +445,24 @@ fun runtimeConfigBoolean(key: String, default: Boolean): Boolean =
 
 val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generateRuntimeConfigs") {
     outputDir.set(generatedRuntimeConfigDir)
-    localPropertiesFile.set(rootProject.layout.projectDirectory.file("local.properties"))
+    rootProject.layout.projectDirectory.file("local.properties").let { lp ->
+        if (lp.asFile.exists()) localPropertiesFile.set(lp)
+    }
     appVersionName.set(releaseAppVersionName)
     appVersionCode.set(releaseAppVersionCode)
-    supabaseUrl.set(runtimeConfigValue("NUVIO_SUPABASE_URL"))
-    supabaseAnonKey.set(runtimeConfigValue("NUVIO_SUPABASE_ANON_KEY"))
+    // Fork builds have neither local.properties nor the upstream CI secrets, and an empty URL
+    // makes supabase-kt resolve every auth/REST call to localhost — which silently broke login in
+    // 0.1.13–0.1.17. Default to the official Nuvio backend; the anon key is Supabase's public
+    // client-side credential and ships in every official build.
+    supabaseUrl.set(runtimeConfigValue("NUVIO_SUPABASE_URL", fallback = "https://api.nuvio.tv"))
+    supabaseAnonKey.set(
+        runtimeConfigValue(
+            "NUVIO_SUPABASE_ANON_KEY",
+            fallback = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
+                "eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzgxNTIxMzQ2LCJleHAiOjE5MzkyMDEzNDZ9." +
+                "tmQaj682pwzehpqlgCDMnySOqiUvpgRbrE43T4VJpDI",
+        )
+    )
     supabaseFallbackUrl.set(runtimeConfigValue("NUVIO_SUPABASE_FALLBACK_URL"))
     sentryDsn.set(runtimeConfigValue("SENTRY_DSN"))
     sentryEnvironment.set(
@@ -379,10 +552,36 @@ kotlin {
             }
         }
     }
-    
+    jvm {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_11)
+        }
+    }
+
     sourceSets {
         val commonMain by getting {
             kotlin.srcDir(generatedRuntimeConfigDir)
+        }
+        val jvmMain by getting {
+            dependsOn(commonMain)
+            kotlin.srcDir("src/desktopMain/kotlin")
+            kotlin.srcDir(fullPluginSourceDir)
+            dependencies {
+                implementation(compose.desktop.currentOs)
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.8.1")
+                implementation(libs.ktor.client.java)
+                // Plugin runtime (JS scrapers) — same deps upstream's desktop target uses
+                implementation(libs.quickjs.kt)
+                implementation(libs.ksoup)
+                // VLCJ for cross-platform video playback on desktop
+                implementation("uk.co.caprica:vlcj:4.8.2")
+                // Ktor server for OAuth localhost redirect handler
+                implementation(libs.ktor.server.core)
+                implementation(libs.ktor.server.netty)
+                // MPRIS2 / D-Bus media key integration
+                implementation("com.github.hypfvieh:dbus-java-core:4.3.1")
+                implementation("com.github.hypfvieh:dbus-java-transport-native-unixsocket:4.3.1")
+            }
         }
         androidMain {
             kotlin.srcDir(project.file(androidDistributionSourceDir))
@@ -467,4 +666,68 @@ configurations.matching { it.name == "iosMainImplementation" }.configureEach {
 configurations.all {
     exclude(group = "androidx.media3", module = "media3-exoplayer")
     exclude(group = "androidx.media3", module = "media3-ui")
+}
+
+compose.desktop {
+    application {
+        mainClass = "com.nuvio.app.MainKt"
+        // VLCJ's ByteBufferFactory uses sun.misc.Unsafe for native video buffer allocation.
+        // --add-opens alone isn't enough; jdk.unsupported must be included so the module
+        // system exports sun.misc (including Unsafe) to unnamed modules.
+        jvmArgs("--add-opens=java.base/sun.misc=ALL-UNNAMED")
+        nativeDistributions {
+            targetFormats(TargetFormat.Deb)
+            // Bundles desktop-resources/<os-arch>/* into the app image; at runtime the
+            // bundled files live under the dir named by the compose.application.resources.dir
+            // system property (how P2pStreamingEngine.desktop locates the torrserver binary).
+            appResourcesRootDir.set(project.layout.projectDirectory.dir("desktop-resources"))
+            packageName = "nuvio"
+            packageVersion = project.findProperty("packageVersion") as String? ?: releaseAppVersionName
+            description = "Modern media hub with Stremio addon ecosystem support"
+            copyright = "GPL-3.0"
+            vendor = "NuvioForLinux"
+            modules("java.net.http", "jdk.crypto.ec", "java.naming", "java.prefs", "jdk.unsupported")
+            linux {
+                iconFile.set(rootProject.file("nuvio-icon.png"))
+                packageName = "nuvio"
+                debMaintainer = "blarns"
+                menuGroup = "AudioVideo"
+                appCategory = "AudioVideo"
+                shortcut = true
+            }
+        }
+        buildTypes.release.proguard {
+            isEnabled.set(false)
+        }
+    }
+}
+
+// Pinned TorrServer release (YouROK/TorrServer) bundled for the desktop P2P engine.
+val torrServerVersion = "MatriX.141.5"
+val torrServerSha256 = "770233787f6020fc5a8ad225626e3102fada71a48522e9131de17033d1bbe8f1"
+
+val fetchTorrServer = tasks.register<FetchTorrServerTask>("fetchTorrServer") {
+    description = "Downloads the pinned TorrServer Linux binary into desktop-resources."
+    downloadUrl.set(
+        "https://github.com/YouROK/TorrServer/releases/download/$torrServerVersion/TorrServer-linux-amd64"
+    )
+    sha256.set(torrServerSha256)
+    target.set(layout.projectDirectory.file("desktop-resources/linux-x64/torrserver"))
+}
+
+// Compose's prepareAppResources copies appResourcesRootDir into the app image; ensure the
+// binary is present (and verified) before that runs.
+tasks.matching { it.name == "prepareAppResources" }.configureEach {
+    dependsOn(fetchTorrServer)
+}
+
+val patchDebRecommends = tasks.register<PatchDebRecommendsTask>("patchDebRecommends") {
+    debDirectory.set(layout.buildDirectory.dir("compose/binaries/main/deb"))
+    recommends.set("fonts-noto-color-emoji")
+    extraDepends.set("vlc-plugin-base | vlc")
+    executables.set("torrserver")
+}
+
+tasks.matching { it.name == "packageDeb" }.configureEach {
+    finalizedBy(patchDebRecommends)
 }
