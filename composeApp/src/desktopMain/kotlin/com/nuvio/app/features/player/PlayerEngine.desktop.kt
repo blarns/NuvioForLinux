@@ -73,11 +73,52 @@ private fun getVlcjFactory(): MediaPlayerFactory {
     }
 }
 
+// Live player count per factory. A retired factory must outlive the player built from it,
+// so it can only be released once that player is gone — hence the refcount rather than a
+// release() at invalidation time.
+private val factoryLock = Any()
+private val factoryUsers = HashMap<MediaPlayerFactory, Int>()
+
+private fun retainFactory(factory: MediaPlayerFactory) {
+    synchronized(factoryLock) {
+        factoryUsers[factory] = (factoryUsers[factory] ?: 0) + 1
+    }
+}
+
+private fun releaseFactory(factory: MediaPlayerFactory) {
+    val shouldRelease = synchronized(factoryLock) {
+        val remaining = (factoryUsers[factory] ?: 0) - 1
+        if (remaining > 0) {
+            factoryUsers[factory] = remaining
+            false
+        } else {
+            factoryUsers.remove(factory)
+            // Still the cached factory — keep it, the next video will reuse it.
+            factory !== vlcjFactory
+        }
+    }
+    if (shouldRelease) {
+        try { factory.release() } catch (_: Exception) {}
+    }
+}
+
 // Drop the cached factory so the next player build reflects changed engine options
 // (subtitle appearance). The active player keeps the factory it was created with; a new
 // video builds a fresh one. Called from PlayerSettingsStorage.invalidatePlayerEngineConfig().
 internal fun invalidateVlcjFactory() {
-    vlcjFactory = null
+    val retired = vlcjFactory ?: return
+    // Nothing is using it (no video open) — release now. Otherwise the last player to be
+    // torn down releases it. Without this, every subtitle-setting change leaked a native
+    // libVLC instance for the lifetime of the process.
+    val shouldRelease = synchronized(factoryLock) {
+        vlcjFactory = null
+        val inUse = (factoryUsers[retired] ?: 0) > 0
+        if (!inUse) factoryUsers.remove(retired)
+        !inUse
+    }
+    if (shouldRelease) {
+        try { retired.release() } catch (_: Exception) {}
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -250,6 +291,38 @@ actual fun PlatformPlayerSurface(
     val frozen = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
     val nearEnd = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
 
+    // Side effects that must run on EVERY snapshot. Hoisted out of the controller so the
+    // 10Hz poll below runs them too: it used to call latestOnSnapshot directly, so all of
+    // this only ever ran on discrete libVLC events and MPRIS position sat frozen between
+    // them (and the nearEnd black-frame filter above was never armed).
+    val handleSnapshot = remember<(PlayerPlaybackSnapshot) -> Unit> {
+        { snap ->
+            // Freeze frame rendering once ended; re-enable when real playback resumes.
+            if (snap.isEnded) frozen.set(true) else if (snap.isPlaying) frozen.set(false)
+            // Arm black-frame dropping for the final 2s (see nearEnd below).
+            nearEnd.set(snap.durationMs > 0 && snap.positionMs >= snap.durationMs - 2_000)
+            // Keep the desktop awake only while actually playing (idempotent — this fires
+            // ~10x/sec from the poll loop, so it no-ops unless state changed).
+            if (snap.isPlaying) ScreensaverInhibitor.inhibit() else ScreensaverInhibitor.release()
+            // Mirror the now-playing status to Discord (opt-in). update() is cheap and
+            // debounced internally, so calling it at the poll's ~10Hz is fine.
+            if (PlayerSettingsStorage.loadDiscordRichPresenceEnabled() == true) {
+                DiscordRichPresence.update(snap)
+            }
+            // Feed live position/duration to MPRIS and nudge it to re-emit metadata only
+            // when playing-state or duration actually changes (Position is polled by
+            // clients, so it is intentionally NOT signalled every tick).
+            val statusOrDurationChanged =
+                PlayerControlBridge.isPlaying != snap.isPlaying ||
+                    PlayerControlBridge.durationMs != snap.durationMs
+            PlayerControlBridge.positionMs = snap.positionMs
+            PlayerControlBridge.durationMs = snap.durationMs
+            PlayerControlBridge.hasMedia = !snap.isEnded
+            if (statusOrDurationChanged) PlayerControlBridge.onNowPlayingChanged?.invoke()
+            latestOnSnapshot.value(snap)
+        }
+    }
+
     val renderCallback = remember {
         object : RenderCallback {
             override fun display(
@@ -323,11 +396,11 @@ actual fun PlatformPlayerSurface(
         }
     }
 
+    val playerFactory = remember { getVlcjFactory().also { retainFactory(it) } }
     val mediaPlayer = remember {
         println("$TAG: Creating EmbeddedMediaPlayer with buffer callbacks")
-        val factory = getVlcjFactory()
-        val player = factory.mediaPlayers().newEmbeddedMediaPlayer()
-        val videoSurface = factory.videoSurfaces().newVideoSurface(
+        val player = playerFactory.mediaPlayers().newEmbeddedMediaPlayer()
+        val videoSurface = playerFactory.videoSurfaces().newVideoSurface(
             bufferFormatCallback,
             renderCallback,
             /* lockBuffers = */ true,
@@ -406,31 +479,7 @@ actual fun PlatformPlayerSurface(
 
         val controller = VlcjPlayerController(
             mediaPlayer = mediaPlayer,
-            onSnapshot = { snap ->
-                // Freeze frame rendering once ended; re-enable when real playback resumes.
-                if (snap.isEnded) frozen.set(true) else if (snap.isPlaying) frozen.set(false)
-                // Arm black-frame dropping for the final 2s (see nearEnd above).
-                nearEnd.set(snap.durationMs > 0 && snap.positionMs >= snap.durationMs - 2_000)
-                // Keep the desktop awake only while actually playing (idempotent — this
-                // fires ~10x/sec from the poll loop, so it no-ops unless state changed).
-                if (snap.isPlaying) ScreensaverInhibitor.inhibit() else ScreensaverInhibitor.release()
-                // Mirror the now-playing status to Discord (opt-in). update() is cheap and
-                // debounced internally, so calling it at the poll's ~10Hz is fine.
-                if (PlayerSettingsStorage.loadDiscordRichPresenceEnabled() == true) {
-                    DiscordRichPresence.update(snap)
-                }
-                // Feed live position/duration to MPRIS and nudge it to re-emit metadata
-                // only when playing-state or duration actually changes (Position is polled
-                // by clients, so it is intentionally NOT signalled every tick).
-                val statusOrDurationChanged =
-                    PlayerControlBridge.isPlaying != snap.isPlaying ||
-                        PlayerControlBridge.durationMs != snap.durationMs
-                PlayerControlBridge.positionMs = snap.positionMs
-                PlayerControlBridge.durationMs = snap.durationMs
-                PlayerControlBridge.hasMedia = !snap.isEnded
-                if (statusOrDurationChanged) PlayerControlBridge.onNowPlayingChanged?.invoke()
-                latestOnSnapshot.value(snap)
-            },
+            onSnapshot = handleSnapshot,
             onError = { error ->
                 println("$TAG: PlayerController error: ${error.message}")
                 latestOnError.value(error.message ?: "Unknown error")
@@ -466,9 +515,13 @@ actual fun PlatformPlayerSurface(
             // release() must follow stop() or the native player (and its video surface)
             // leaks on every playback session.
             val mp = mediaPlayer
+            val factory = playerFactory
             Thread(null, {
                 try { mp.controls().stop() } catch (_: Exception) {}
                 try { mp.release() } catch (_: Exception) {}
+                // Frees the factory too if a settings change retired it while this player
+                // was still using it.
+                releaseFactory(factory)
             }, "vlc-stop", 0).also {
                 it.isDaemon = true
                 it.start()
@@ -493,7 +546,7 @@ actual fun PlatformPlayerSurface(
         snapshotUpdateJob = launch {
             while (true) {
                 delay(100)
-                playerController?.let { latestOnSnapshot.value(it.currentSnapshot()) }
+                playerController?.let { handleSnapshot(it.currentSnapshot()) }
             }
         }
     }
@@ -608,6 +661,7 @@ private class VlcjPlayerController(
                 override fun finished(mediaPlayer: MediaPlayer?) {
                     currentState = currentState.copy(isEnded = true, isPlaying = false, positionMs = bestPositionMs(), durationMs = bestDurationMs())
                     onSnapshot(currentState)
+                    PlayerControlBridge.isPlaying = false
                 }
 
                 override fun timeChanged(mediaPlayer: MediaPlayer?, newTime: Long) {
@@ -660,7 +714,10 @@ private class VlcjPlayerController(
 
     override fun play() { mediaPlayer.controls().play() }
 
-    override fun pause() { mediaPlayer.controls().pause() }
+    // setPause(true), not controls().pause(): the latter is libVLC's *toggle*, so calling it
+    // on an already-paused video resumes it. Callers here (sleep timer, MPRIS Pause, tray)
+    // all mean "pause", and must be idempotent.
+    override fun pause() { mediaPlayer.controls().setPause(true) }
 
     override fun seekTo(positionMs: Long) {
         val target = positionMs.coerceAtLeast(0L)
@@ -676,7 +733,7 @@ private class VlcjPlayerController(
             // misfired pause() here would freeze playback with no auto-recovery.
             mediaPlayer.controls().play()
             mediaPlayer.controls().setTime(target)
-            mediaPlayer.controls().pause()
+            mediaPlayer.controls().setPause(true)
         } else {
             mediaPlayer.controls().setTime(target)
         }

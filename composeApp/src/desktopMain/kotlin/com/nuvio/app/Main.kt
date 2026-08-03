@@ -65,28 +65,33 @@ fun main(args: Array<String>) {
     // Let the sleep timer pause the active player.
     SleepTimerController.pauseAction = { PlayerControlBridge.controller?.pause() }
     val sleepTimerState by SleepTimerController.state.collectAsState()
+    // Full shutdown: flush watch progress, tear down MPRIS/Discord/tray, persist geometry.
+    // Both the window close button and the tray's Quit item go through this — the tray used
+    // to call exitApplication() directly, which skipped all of it and lost the position of
+    // whatever was playing.
+    val shutdownAndExit: () -> Unit = {
+        PlayerControlBridge.flushProgress?.invoke()
+        // D-Bus teardown can block for seconds; run it on a daemon thread so the
+        // AWT EDT (and thus the window close) is never blocked by MPRIS cleanup.
+        val m = mpris
+        if (m != null) Thread(null, { try { m.close() } catch (_: Exception) {} }, "mpris-close", 0).also {
+            it.isDaemon = true
+            it.start()
+        }
+        // Clear and disconnect the Discord presence (no-op when the feature was inert).
+        com.nuvio.app.features.discord.DiscordRichPresence.shutdown()
+        DesktopTray.remove()
+        windowStore.putFloat("width", windowState.size.width.value)
+        windowStore.putFloat("height", windowState.size.height.value)
+        exitApplication()
+    }
     // System tray (opt-in, applied at startup). Tray actions route through DesktopWindowState.
-    DesktopWindowState.requestExit = { exitApplication() }
+    DesktopWindowState.requestExit = shutdownAndExit
     LaunchedEffect(Unit) {
         if (PlayerSettingsStorage.loadTrayIconEnabled() == true) DesktopTray.install()
     }
     Window(
-        onCloseRequest = {
-            PlayerControlBridge.flushProgress?.invoke()
-            // D-Bus teardown can block for seconds; run it on a daemon thread so the
-            // AWT EDT (and thus the window close) is never blocked by MPRIS cleanup.
-            val m = mpris
-            if (m != null) Thread(null, { try { m.close() } catch (_: Exception) {} }, "mpris-close", 0).also {
-                it.isDaemon = true
-                it.start()
-            }
-            // Clear and disconnect the Discord presence (no-op when the feature was inert).
-            com.nuvio.app.features.discord.DiscordRichPresence.shutdown()
-            DesktopTray.remove()
-            windowStore.putFloat("width", windowState.size.width.value)
-            windowStore.putFloat("height", windowState.size.height.value)
-            exitApplication()
-        },
+        onCloseRequest = shutdownAndExit,
         onKeyEvent = { keyEvent ->
             if (keyEvent.type != KeyEventType.KeyDown) return@Window false
             val ctrl = PlayerControlBridge.controller ?: return@Window false

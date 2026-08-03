@@ -419,6 +419,13 @@ internal actual object PlayerSettingsStorage {
     actual fun saveHwAccelEnabled(enabled: Boolean) { machineStore.putBoolean("hwAccelEnabled", enabled) }
     actual fun loadDiscordRichPresenceEnabled(): Boolean? = machineStore.getBoolean("discordRichPresenceEnabled")
     actual fun saveDiscordRichPresenceEnabled(enabled: Boolean) { machineStore.putBoolean("discordRichPresenceEnabled", enabled) }
+    actual fun discordRichPresenceUnavailableReason(): String? =
+        if (com.nuvio.app.features.discord.DiscordRichPresence.isConfigured()) {
+            null
+        } else {
+            "No Discord application id is built into this release, so this setting has no effect. " +
+                "Set NUVIO_DISCORD_CLIENT_ID, or put the id in ~/.config/nuvio/discord-client-id, then restart Nuvio."
+        }
     actual fun loadTrayIconEnabled(): Boolean? = machineStore.getBoolean("trayIconEnabled")
     actual fun saveTrayIconEnabled(enabled: Boolean) { machineStore.putBoolean("trayIconEnabled", enabled) }
     actual fun loadAudioOutput(): String? = machineStore.getString("audioOutput")

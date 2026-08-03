@@ -496,14 +496,19 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
     }
 
     LaunchedEffect(playbackSnapshot.isEnded, nextEpisodeInfo) {
-        if (playbackSnapshot.isEnded && nextEpisodeInfo != null && !showNextEpisodeCard) {
-            showNextEpisodeCard = true
-            // "Stop after this episode" wins over autoplay-next.
-            if (SleepTimerController.consumeAfterEpisodeIfArmed()) {
-                // stopped by the sleep timer — do not advance
-            } else if (playerSettingsUiState.streamAutoPlayNextEpisodeEnabled && nextEpisodeInfo?.hasAired == true) {
-                playNextEpisode()
-            }
+        if (!playbackSnapshot.isEnded || nextEpisodeInfo == null) return@LaunchedEffect
+        // Consume the sleep timer before the card guard below. By the true end the card is
+        // normally already showing (it is armed at the threshold above), so this used to be
+        // unreachable: "after this episode" never disarmed and went on silently suppressing
+        // autoplay — with no toast — for the rest of the session.
+        val stoppedBySleepTimer = SleepTimerController.consumeAfterEpisodeIfArmed()
+        // The card already being up means autoplay was handled at the threshold; don't
+        // restart the search here.
+        if (showNextEpisodeCard) return@LaunchedEffect
+        showNextEpisodeCard = true
+        if (stoppedBySleepTimer) return@LaunchedEffect
+        if (playerSettingsUiState.streamAutoPlayNextEpisodeEnabled && nextEpisodeInfo?.hasAired == true) {
+            playNextEpisode()
         }
     }
 }

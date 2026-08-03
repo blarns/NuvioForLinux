@@ -36,14 +36,16 @@ import kotlin.math.abs
 
 internal object DiscordRichPresence {
     private const val ITAG = "NuvioDiscordRPC"
-    private const val MAX_FAILURES = 10          // give up for the session after this many I/O failures
+    private const val MAX_FAILURES = 10          // back off after this many consecutive I/O failures
+    private const val RETRY_COOLDOWN_MS = 60_000L
     private const val SEEK_RESEND_THRESHOLD_S = 5L
 
     private val lock = Any()
     private val pid: Long = runCatching { ProcessHandle.current().pid() }.getOrDefault(0L)
 
-    @Volatile private var unavailable = false    // latched once we know we can't present here
+    @Volatile private var unavailable = false    // latched only when this platform can never present
     @Volatile private var started = false        // true once the worker thread has been engaged
+    @Volatile private var retryAfterMs = 0L      // transient back-off after a run of I/O failures
 
     // Resolved lazily, once. null means "no client id configured" → feature inert.
     @Volatile private var clientIdResolved = false
@@ -69,6 +71,10 @@ internal object DiscordRichPresence {
             unavailable = true   // nothing configured — stay inert for the session
             return
         }
+        if (retryAfterMs != 0L) {
+            if (System.currentTimeMillis() < retryAfterMs) return
+            retryAfterMs = 0L
+        }
         val launch = PlayerLaunchStore.currentLaunch.value ?: return
         val desired = buildPresence(launch, snap) ?: return
         synchronized(lock) {
@@ -79,6 +85,13 @@ internal object DiscordRichPresence {
         started = true
         submit { sendActivity(desired) }
     }
+
+    /**
+     * True when a Discord application id is available. Release builds ship without one, so the
+     * feature would otherwise appear to be on while doing nothing at all — the settings screen
+     * uses this to say so instead.
+     */
+    fun isConfigured(): Boolean = resolveClientId() != null
 
     /** Clear the presence (playback stopped / surface torn down). Safe to call anytime. */
     fun clear() {
@@ -210,10 +223,14 @@ internal object DiscordRichPresence {
         }
     }
 
+    // A run of failures usually just means Discord isn't running *yet*. Backing off for a
+    // while and trying again is right; latching off for the whole session is not — starting
+    // Nuvio before Discord used to kill presence until the app was restarted.
     private fun noteFailure() {
         if (++failures >= MAX_FAILURES) {
-            unavailable = true
-            println("$ITAG: giving up after $failures failures (is Discord running?)")
+            failures = 0
+            retryAfterMs = System.currentTimeMillis() + RETRY_COOLDOWN_MS
+            println("$ITAG: backing off for ${RETRY_COOLDOWN_MS / 1000}s (is Discord running?)")
         }
     }
 

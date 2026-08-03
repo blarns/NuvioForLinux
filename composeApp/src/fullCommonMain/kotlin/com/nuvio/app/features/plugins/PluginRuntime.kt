@@ -8,8 +8,8 @@ import com.fleeksoft.ksoup.Ksoup
 import com.fleeksoft.ksoup.nodes.Document
 import com.fleeksoft.ksoup.nodes.Element
 import com.fleeksoft.ksoup.select.Elements
+import com.nuvio.app.core.concurrency.NuvioBlockingDispatcher
 import com.nuvio.app.features.addons.httpRequestRaw
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -25,6 +25,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlin.random.Random
 
 private const val PLUGIN_TIMEOUT_MS = 60_000L
+private const val PLUGIN_FETCH_TIMEOUT_MS = 20_000L
 private const val MAX_FETCH_BODY_CHARS = 256 * 1024
 private const val MAX_FETCH_HEADER_VALUE_CHARS = 8 * 1024
 private const val FETCH_TRUNCATION_SUFFIX = "\n...[truncated]"
@@ -45,7 +46,7 @@ internal object PluginRuntime {
         episode: Int?,
         scraperId: String,
         scraperSettings: Map<String, Any> = emptyMap(),
-    ): List<PluginRuntimeResult> = withContext(Dispatchers.Default) {
+    ): List<PluginRuntimeResult> = withContext(NuvioBlockingDispatcher) {
         withTimeout(PLUGIN_TIMEOUT_MS) {
             executePluginInternal(
                 code = code,
@@ -74,7 +75,7 @@ internal object PluginRuntime {
         var resultJson = "[]"
 
         try {
-            quickJs(Dispatchers.Default) {
+            quickJs(NuvioBlockingDispatcher) {
                 define("console") {
                     function("log") { args ->
                         log.d { "Plugin:$scraperId ${args.joinToString(" ") { it?.toString() ?: "null" }}" }
@@ -324,14 +325,20 @@ internal object PluginRuntime {
                 headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             }
 
+            // The JS `fetch` binding is synchronous, so this blocks its thread for the whole
+            // request. PLUGIN_TIMEOUT_MS cannot rescue a blocked thread — cancellation is only
+            // observed at a suspension point — so the wait needs its own deadline, otherwise one
+            // unresponsive host wedges the scraper (and the panel that is waiting on it) forever.
             val response = runBlocking {
-                httpRequestRaw(
-                    method = method,
-                    url = url,
-                    headers = headers,
-                    body = body,
-                    followRedirects = followRedirects,
-                )
+                withTimeout(PLUGIN_FETCH_TIMEOUT_MS) {
+                    httpRequestRaw(
+                        method = method,
+                        url = url,
+                        headers = headers,
+                        body = body,
+                        followRedirects = followRedirects,
+                    )
+                }
             }
 
             val responseHeaders = response.headers.mapValues { (_, value) ->

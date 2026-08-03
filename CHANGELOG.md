@@ -6,6 +6,40 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.1] — 2026-08-03
+
+A bug-fix release. The headline fix is the source list that would spin forever instead of
+showing scraper results; the rest is fallout from the 0.2.0 feature drop.
+
+### Fixed
+- **Source/episode lists no longer hang forever.** Scraper plugins run the JS engine — and
+  block a thread for the whole of every HTTP request their code makes — on the CPU-sized
+  `Dispatchers.Default` pool, which the player's stream fan-out also used. With several
+  scrapers running at once (most likely at the end of an episode, when the auto-play search
+  and a manually opened panel overlap) they could occupy every thread in that pool, including
+  the one needed to publish results, and the panel span forever with nothing to show. Plugin
+  execution and the player's stream loading now run on an elastic I/O pool instead.
+- Plugin HTTP requests have a 20s deadline. The existing 60s plugin timeout could never fire
+  during a blocking fetch, because a blocked thread never reaches a cancellation point.
+- A single failing addon or scraper can no longer wedge the whole stream panel: sources are
+  isolated from each other, each has a 45s deadline, and failures surface as an error on that
+  source instead of leaving every other source stuck on "loading".
+- **The sleep timer no longer resumes playback.** `pause()` was libVLC's *toggle*, so a timer
+  firing on an already-paused video started it playing again.
+- **"After this episode" now actually disarms.** It was consumed behind a condition that was
+  never true by the time the episode ended, so it stayed armed and silently suppressed
+  auto-play-next — with no toast — for the rest of the session.
+- **Quitting from the tray no longer loses your place.** It called `exitApplication()`
+  directly, skipping the watch-progress flush, MPRIS/Discord teardown and window-geometry save.
+- Play/pause (spacebar, tray, MPRIS) after a video ends no longer acts on stale state.
+- MPRIS `Position` advances while playing, and `GetAll` returns the real property set, so
+  `playerctl`, waybar and other proxy-based clients see Nuvio's state instead of nothing.
+- Discord Rich Presence no longer gives up for the whole session after a run of failures
+  (starting Nuvio before Discord used to kill it until restart), and the settings row now says
+  when no application id is built in rather than appearing to work while doing nothing.
+- The libVLC factory is released when it is retired, instead of leaking a native instance on
+  every subtitle-appearance change.
+
 ## [0.2.0] — 2026-07-07
 
 A desktop feature drop. Everything here is Linux-desktop only and opt-in where it could be

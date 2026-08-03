@@ -61,6 +61,11 @@ internal expect object PlayerSettingsStorage {
     fun saveHwAccelEnabled(enabled: Boolean)
     fun loadDiscordRichPresenceEnabled(): Boolean?
     fun saveDiscordRichPresenceEnabled(enabled: Boolean)
+    /**
+     * Null when Discord presence can actually work; otherwise a short reason the setting is
+     * having no effect, shown under the toggle. Always null where the feature doesn't exist.
+     */
+    fun discordRichPresenceUnavailableReason(): String?
     fun loadTrayIconEnabled(): Boolean?
     fun saveTrayIconEnabled(enabled: Boolean)
     fun loadAudioOutput(): String?

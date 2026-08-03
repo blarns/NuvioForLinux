@@ -30,6 +30,7 @@ interface MediaPlayer2Player : DBusInterface {
 
 private const val MPRIS_PATH = "/org/mpris/MediaPlayer2"
 private const val PLAYER_IFACE = "org.mpris.MediaPlayer2.Player"
+private const val ROOT_IFACE = "org.mpris.MediaPlayer2"
 private const val TRACK_PATH = "/org/nuvio/app/track/0"
 
 class NuvioMpris2(
@@ -133,7 +134,26 @@ class NuvioMpris2(
         "Shuffle" -> Variant(false) as A
         else -> throw IllegalArgumentException("Unknown property: $propertyName")
     }
-    override fun GetAll(interfaceName: String): Map<String, Variant<*>> = emptyMap()
+    // playerctl, waybar and any client that goes through a properties proxy read the whole
+    // interface in one call rather than property-by-property. Returning an empty map made
+    // Nuvio look like it exposed nothing at all to those clients.
+    override fun GetAll(interfaceName: String): Map<String, Variant<*>> {
+        val names = when (interfaceName) {
+            PLAYER_IFACE -> listOf(
+                "PlaybackStatus", "LoopStatus", "Rate", "Shuffle", "Metadata", "Volume",
+                "Position", "MinimumRate", "MaximumRate", "CanGoNext", "CanGoPrevious",
+                "CanPlay", "CanPause", "CanSeek", "CanControl",
+            )
+            ROOT_IFACE -> listOf(
+                "CanQuit", "CanRaise", "HasTrackList", "Identity", "DesktopEntry",
+                "SupportedUriSchemes", "SupportedMimeTypes",
+            )
+            else -> emptyList()
+        }
+        return names.mapNotNull { name ->
+            runCatching { name to Get<Variant<*>>(interfaceName, name) }.getOrNull()
+        }.toMap()
+    }
     override fun <A> Set(interfaceName: String, propertyName: String, value: A) {}
     override fun isRemote() = false
 }

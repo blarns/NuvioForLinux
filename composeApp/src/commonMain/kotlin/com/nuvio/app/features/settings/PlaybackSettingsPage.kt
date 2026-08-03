@@ -65,6 +65,7 @@ import com.nuvio.app.features.player.IosHardwareDecoderMode
 import com.nuvio.app.features.player.IosTargetPrimaries
 import com.nuvio.app.features.player.IosTargetTransfer
 import com.nuvio.app.features.player.PlayerSettingsRepository
+import com.nuvio.app.features.player.PlayerSettingsStorage
 import com.nuvio.app.features.player.PlayerSettingsUiState
 import com.nuvio.app.features.player.STREAM_AUTO_PLAY_TIMEOUT_VALUES
 import com.nuvio.app.features.player.SubtitleBackgroundColorSwatches
@@ -773,9 +774,13 @@ private fun PlaybackSettingsSection(
                         onCheckedChange = PlayerSettingsRepository::setHwAccelEnabled,
                     )
                     SettingsGroupDivider(isTablet = isTablet)
+                    val discordUnavailableReason = remember {
+                        PlayerSettingsStorage.discordRichPresenceUnavailableReason()
+                    }
                     SettingsSwitchRow(
                         title = "Discord Rich Presence",
-                        description = "Show what you're watching in your Discord status. Requires Discord running. Applies from the next played video.",
+                        description = discordUnavailableReason
+                            ?: "Show what you're watching in your Discord status. Requires Discord running. Applies from the next played video.",
                         checked = discordRichPresenceEnabled,
                         isTablet = isTablet,
                         onCheckedChange = PlayerSettingsRepository::setDiscordRichPresenceEnabled,
