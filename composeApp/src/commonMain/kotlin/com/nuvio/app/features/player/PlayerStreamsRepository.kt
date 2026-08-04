@@ -29,6 +29,7 @@ import com.nuvio.app.features.streams.streamAddonInstanceId
 import com.nuvio.app.features.streams.toEmptyStateReason
 import com.nuvio.app.features.streams.toPluginProviderGroups
 import com.nuvio.app.features.streams.toStreamItem
+import com.nuvio.app.core.concurrency.NuvioBlockingDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -48,7 +49,9 @@ import org.jetbrains.compose.resources.getString
  */
 object PlayerStreamsRepository {
     private val log = Logger.withTag("PlayerStreamsRepo")
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // Not Dispatchers.Default: scraper plugins block a thread per in-flight request, and this
+    // fan-out must keep a thread free to publish results while they do.
+    private val scope = CoroutineScope(SupervisorJob() + NuvioBlockingDispatcher)
 
     // source panel
     private val _sourceState = MutableStateFlow(StreamsUiState())

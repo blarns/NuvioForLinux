@@ -14,6 +14,7 @@ import com.nuvio.app.features.plugins.runtime.network.UrlBridge
 import com.nuvio.app.features.plugins.runtime.wasm.WasmBridge
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import com.nuvio.app.core.concurrency.NuvioBlockingDispatcher
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -42,7 +43,7 @@ internal object PluginRuntime {
         season: Int?,
         episode: Int?,
         scraperId: String,
-    ): List<PluginRuntimeResult> = withContext(Dispatchers.Default) {
+    ): List<PluginRuntimeResult> = withContext(NuvioBlockingDispatcher) {
         val scraperSettingsJson = PluginStorage.loadScraperSettings(scraperId) ?: "{}"
         val scraperSettingsMap = runCatching {
             json.decodeFromString<Map<String, JsonElement>>(scraperSettingsJson)
@@ -64,7 +65,7 @@ internal object PluginRuntime {
     suspend fun getPluginSettingsLayout(
         code: String,
         scraperId: String,
-    ): String? = withContext(Dispatchers.Default) {
+    ): String? = withContext(NuvioBlockingDispatcher) {
         withTimeout(PLUGIN_TIMEOUT_MS) {
             val jsRuntime = JsRuntime()
             val deferred = CompletableDeferred<String?>()

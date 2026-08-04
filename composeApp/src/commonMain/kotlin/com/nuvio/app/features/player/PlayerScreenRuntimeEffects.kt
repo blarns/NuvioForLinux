@@ -481,7 +481,11 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
         )
         if (shouldShow && !showNextEpisodeCard) {
             showNextEpisodeCard = true
-            if (playerSettingsUiState.streamAutoPlayNextEpisodeEnabled && nextEpisodeInfo?.hasAired == true) {
+            // Suppress pre-emptive autoplay while the sleep timer is set to stop after this
+            // episode (the timer is consumed at the true end, below).
+            if (playerSettingsUiState.streamAutoPlayNextEpisodeEnabled && nextEpisodeInfo?.hasAired == true &&
+                !SleepTimerController.isAfterEpisodeArmed()
+            ) {
                 playNextEpisode()
             }
         } else if (!shouldShow) {
@@ -490,11 +494,18 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
     }
 
     LaunchedEffect(playbackSnapshot.isEnded, nextEpisodeInfo) {
-        if (playbackSnapshot.isEnded && nextEpisodeInfo != null && !showNextEpisodeCard) {
-            showNextEpisodeCard = true
-            if (playerSettingsUiState.streamAutoPlayNextEpisodeEnabled && nextEpisodeInfo?.hasAired == true) {
-                playNextEpisode()
-            }
+        if (!playbackSnapshot.isEnded || nextEpisodeInfo == null) return@LaunchedEffect
+        // Consume the sleep timer before the card guard below. By the true end the card is
+        // normally already showing (armed at the threshold above), so putting this behind that
+        // guard leaves "after this episode" armed — silently suppressing autoplay, with no
+        // toast, for the rest of the session.
+        val stoppedBySleepTimer = SleepTimerController.consumeAfterEpisodeIfArmed()
+        // Card already up means autoplay was handled at the threshold; don't restart the search.
+        if (showNextEpisodeCard) return@LaunchedEffect
+        showNextEpisodeCard = true
+        if (stoppedBySleepTimer) return@LaunchedEffect
+        if (playerSettingsUiState.streamAutoPlayNextEpisodeEnabled && nextEpisodeInfo?.hasAired == true) {
+            playNextEpisode()
         }
     }
 }

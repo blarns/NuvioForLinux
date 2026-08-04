@@ -6,12 +6,14 @@ import com.dokar.quickjs.binding.function
 import com.nuvio.app.features.addons.httpRequestRaw
 import com.nuvio.app.features.plugins.runtime.host.HostModule
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
+private const val PLUGIN_FETCH_TIMEOUT_MS = 20_000L
 private const val MAX_FETCH_HEADER_VALUE_CHARS = 8 * 1024
 private const val FETCH_TRUNCATION_SUFFIX = "\n...[truncated]"
 
@@ -56,14 +58,20 @@ internal class FetchBridge : HostModule {
             headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         }
 
+        // The JS `fetch` binding is synchronous, so this blocks its thread for the whole
+        // request. PLUGIN_TIMEOUT_MS cannot rescue a blocked thread — cancellation is only
+        // observed at a suspension point — so the wait needs its own deadline, otherwise one
+        // unresponsive host wedges the scraper (and the panel waiting on it) forever.
         val response = runBlocking {
-            httpRequestRaw(
-                method = method,
-                url = url,
-                headers = headers,
-                body = body,
-                followRedirects = followRedirects,
-            )
+            withTimeout(PLUGIN_FETCH_TIMEOUT_MS) {
+                httpRequestRaw(
+                    method = method,
+                    url = url,
+                    headers = headers,
+                    body = body,
+                    followRedirects = followRedirects,
+                )
+            }
         }
 
         val responseHeaders = response.headers.mapKeys { (key, _) -> key.lowercase() }
