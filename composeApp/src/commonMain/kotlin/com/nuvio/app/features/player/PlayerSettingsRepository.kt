@@ -53,6 +53,7 @@ data class PlayerSettingsUiState(
     val hwAccelEnabled: Boolean = true,
     val discordRichPresenceEnabled: Boolean = false,
     val trayIconEnabled: Boolean = false,
+    val menuBarEnabled: Boolean = true,
     val audioOutput: String = "",
     val subtitleFontSize: Int = 16,
     val subtitleColor: Int = 0xFFFFFF,
@@ -119,6 +120,7 @@ object PlayerSettingsRepository {
     private var hwAccelEnabled = true
     private var discordRichPresenceEnabled = false
     private var trayIconEnabled = false
+    private var menuBarEnabled = true
     private var audioOutput = ""
     private var subtitleFontSize = 16
     private var subtitleColor = 0xFFFFFF
@@ -278,6 +280,7 @@ object PlayerSettingsRepository {
         hwAccelEnabled = PlayerSettingsStorage.loadHwAccelEnabled() ?: true
         discordRichPresenceEnabled = PlayerSettingsStorage.loadDiscordRichPresenceEnabled() ?: false
         trayIconEnabled = PlayerSettingsStorage.loadTrayIconEnabled() ?: false
+        menuBarEnabled = PlayerSettingsStorage.loadMenuBarEnabled() ?: true
         audioOutput = PlayerSettingsStorage.loadAudioOutput() ?: ""
         subtitleFontSize = PlayerSettingsStorage.loadSubtitleFontSize() ?: 16
         subtitleColor = PlayerSettingsStorage.loadSubtitleColor() ?: 0xFFFFFF
@@ -543,6 +546,14 @@ object PlayerSettingsRepository {
         trayIconEnabled = enabled
         publish()
         PlayerSettingsStorage.saveTrayIconEnabled(enabled)
+    }
+
+    fun setMenuBarEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (menuBarEnabled == enabled) return
+        menuBarEnabled = enabled
+        publish()
+        PlayerSettingsStorage.saveMenuBarEnabled(enabled)
     }
 
     fun setAudioOutput(module: String) {
@@ -924,6 +935,7 @@ object PlayerSettingsRepository {
             hwAccelEnabled = hwAccelEnabled,
             discordRichPresenceEnabled = discordRichPresenceEnabled,
             trayIconEnabled = trayIconEnabled,
+            menuBarEnabled = menuBarEnabled,
             audioOutput = audioOutput,
             subtitleFontSize = subtitleFontSize,
             subtitleColor = subtitleColor,

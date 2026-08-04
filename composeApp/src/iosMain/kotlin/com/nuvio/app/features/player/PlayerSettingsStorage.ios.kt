@@ -489,6 +489,8 @@ actual object PlayerSettingsStorage {
     actual fun discordRichPresenceUnavailableReason(): String? = null
     actual fun loadTrayIconEnabled(): Boolean? = null
     actual fun saveTrayIconEnabled(enabled: Boolean) {}
+    actual fun loadMenuBarEnabled(): Boolean? = null
+    actual fun saveMenuBarEnabled(enabled: Boolean) {}
     actual fun loadAudioOutput(): String? = null
     actual fun saveAudioOutput(module: String) {}
     actual fun loadSubtitleFontSize(): Int? = null

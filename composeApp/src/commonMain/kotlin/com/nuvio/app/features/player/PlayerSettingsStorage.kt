@@ -68,6 +68,8 @@ internal expect object PlayerSettingsStorage {
     fun discordRichPresenceUnavailableReason(): String?
     fun loadTrayIconEnabled(): Boolean?
     fun saveTrayIconEnabled(enabled: Boolean)
+    fun loadMenuBarEnabled(): Boolean?
+    fun saveMenuBarEnabled(enabled: Boolean)
     fun loadAudioOutput(): String?
     fun saveAudioOutput(module: String)
     // Subtitle appearance (desktop/VLCJ freetype). Ints are the raw libVLC values.

@@ -102,6 +102,7 @@ internal fun LazyListScope.playbackSettingsContent(
     tunnelingEnabled: Boolean,
     hwAccelEnabled: Boolean,
     discordRichPresenceEnabled: Boolean,
+    menuBarEnabled: Boolean,
     audioOutput: String,
     useLibass: Boolean,
     libassRenderType: String,
@@ -123,6 +124,7 @@ internal fun LazyListScope.playbackSettingsContent(
             tunnelingEnabled = tunnelingEnabled,
             hwAccelEnabled = hwAccelEnabled,
             discordRichPresenceEnabled = discordRichPresenceEnabled,
+            menuBarEnabled = menuBarEnabled,
             audioOutput = audioOutput,
             useLibass = useLibass,
             libassRenderType = libassRenderType,
@@ -260,6 +262,7 @@ private fun PlaybackSettingsSection(
     tunnelingEnabled: Boolean,
     hwAccelEnabled: Boolean,
     discordRichPresenceEnabled: Boolean,
+    menuBarEnabled: Boolean,
     audioOutput: String,
     useLibass: Boolean,
     libassRenderType: String,
@@ -772,6 +775,15 @@ private fun PlaybackSettingsSection(
                         checked = hwAccelEnabled,
                         isTablet = isTablet,
                         onCheckedChange = PlayerSettingsRepository::setHwAccelEnabled,
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsSwitchRow(
+                        title = "Show menu bar",
+                        description = "Show the window menu bar (Playback \u2192 Sleep timer). " +
+                            "It uses your system theme rather than Nuvio's, and is always hidden in fullscreen.",
+                        checked = menuBarEnabled,
+                        isTablet = isTablet,
+                        onCheckedChange = PlayerSettingsRepository::setMenuBarEnabled,
                     )
                     SettingsGroupDivider(isTablet = isTablet)
                     val discordUnavailableReason = remember {

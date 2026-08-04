@@ -428,6 +428,8 @@ internal actual object PlayerSettingsStorage {
         }
     actual fun loadTrayIconEnabled(): Boolean? = machineStore.getBoolean("trayIconEnabled")
     actual fun saveTrayIconEnabled(enabled: Boolean) { machineStore.putBoolean("trayIconEnabled", enabled) }
+    actual fun loadMenuBarEnabled(): Boolean? = machineStore.getBoolean("menuBarEnabled")
+    actual fun saveMenuBarEnabled(enabled: Boolean) { machineStore.putBoolean("menuBarEnabled", enabled) }
     actual fun loadAudioOutput(): String? = machineStore.getString("audioOutput")
     actual fun saveAudioOutput(module: String) { machineStore.putString("audioOutput", module) }
     actual fun loadSubtitleFontSize(): Int? = machineStore.getInt("subtitleFontSize")

@@ -2,6 +2,8 @@ package com.nuvio.app
 
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import com.nuvio.app.features.player.PlayerSettingsRepository
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.input.key.Key
@@ -65,6 +67,10 @@ fun main(args: Array<String>) {
     // Let the sleep timer pause the active player.
     SleepTimerController.pauseAction = { PlayerControlBridge.controller?.pause() }
     val sleepTimerState by SleepTimerController.state.collectAsState()
+    val playerSettingsUiState by remember {
+        PlayerSettingsRepository.ensureLoaded()
+        PlayerSettingsRepository.uiState
+    }.collectAsState()
     // Full shutdown: flush watch progress, tear down MPRIS/Discord/tray, persist geometry.
     // Both the window close button and the tray's Quit item go through this — the tray used
     // to call exitApplication() directly, which skipped all of it and lost the position of
@@ -117,6 +123,13 @@ fun main(args: Array<String>) {
             window.toFront()
             window.requestFocus()
         }
+        // The menu bar is native window chrome: it renders in the system theme (a white strip
+        // against Nuvio's dark UI on most setups) and stayed on screen in fullscreen, over the
+        // video, with no way to dismiss it — github.com/blarns/NuvioForLinux/issues/3.
+        // It is now hidden whenever the window is fullscreen, and can be turned off entirely.
+        val showMenuBar = playerSettingsUiState.menuBarEnabled &&
+            windowState.placement != WindowPlacement.Fullscreen
+        if (showMenuBar) {
         MenuBar {
             Menu("Playback", mnemonic = 'P') {
                 Menu("Sleep timer") {
@@ -139,6 +152,7 @@ fun main(args: Array<String>) {
                     )
                 }
             }
+        }
         }
         App()
     }
