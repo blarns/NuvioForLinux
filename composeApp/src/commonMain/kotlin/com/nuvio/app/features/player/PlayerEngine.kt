@@ -11,6 +11,9 @@ interface PlayerEngineController {
     fun retry()
     fun setPlaybackSpeed(speed: Float)
     fun setMuted(muted: Boolean) {}
+    // Desktop fork: volume keys / MPRIS need read-back, which setMuted alone can't provide.
+    fun currentVolume(): PlayerAudioLevel? = null
+    fun setVolume(level: Float): PlayerAudioLevel? = null
     fun getAudioTracks(): List<AudioTrack>
     fun getSubtitleTracks(): List<SubtitleTrack>
     fun selectAudioTrack(index: Int)

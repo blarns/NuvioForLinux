@@ -140,6 +140,34 @@ internal expect object PlayerSettingsStorage {
     fun saveIosSaturation(value: Int)
     fun loadIosGamma(): Int?
     fun saveIosGamma(value: Int)
+    // ── Linux desktop fork ────────────────────────────────────────────────
+    // No-ops on mobile; see the desktop actual for behaviour.
+    fun loadHwAccelEnabled(): Boolean?
+    fun saveHwAccelEnabled(enabled: Boolean)
+    fun loadDiscordRichPresenceEnabled(): Boolean?
+    fun saveDiscordRichPresenceEnabled(enabled: Boolean)
+    /**
+     * Null when Discord presence can actually work; otherwise a short reason the setting is
+     * having no effect, shown under the toggle. Always null where the feature doesn't exist.
+     */
+    fun discordRichPresenceUnavailableReason(): String?
+    fun loadTrayIconEnabled(): Boolean?
+    fun saveTrayIconEnabled(enabled: Boolean)
+    fun loadAudioOutput(): String?
+    fun saveAudioOutput(module: String)
+    // Subtitle appearance (desktop/VLCJ freetype). Ints are the raw libVLC values.
+    fun loadSubtitleFontSize(): Int?
+    fun saveSubtitleFontSize(relSize: Int)
+    fun loadSubtitleColor(): Int?
+    fun saveSubtitleColor(rgb: Int)
+    fun loadSubtitleBackgroundOpacity(): Int?
+    fun saveSubtitleBackgroundOpacity(opacity: Int)
+    fun loadSubtitleOutline(): Int?
+    fun saveSubtitleOutline(thickness: Int)
+    // Desktop hook: drop any cached VLCJ factory so the next player build picks up
+    // changed engine options (subtitle appearance). No-op on mobile.
+    fun invalidatePlayerEngineConfig()
+
     fun exportToSyncPayload(): JsonObject
     fun replaceFromSyncPayload(payload: JsonObject)
 }

@@ -1036,4 +1036,24 @@ actual object PlayerSettingsStorage {
         payload.decodeSyncInt(iosSaturationKey)?.let(::saveIosSaturation)
         payload.decodeSyncInt(iosGammaKey)?.let(::saveIosGamma)
     }
+
+    // ── Linux desktop fork settings: inert here ──────────────────────────
+    actual fun loadHwAccelEnabled(): Boolean? = null
+    actual fun saveHwAccelEnabled(enabled: Boolean) {}
+    actual fun loadDiscordRichPresenceEnabled(): Boolean? = null
+    actual fun saveDiscordRichPresenceEnabled(enabled: Boolean) {}
+    actual fun discordRichPresenceUnavailableReason(): String? = null
+    actual fun loadTrayIconEnabled(): Boolean? = null
+    actual fun saveTrayIconEnabled(enabled: Boolean) {}
+    actual fun loadAudioOutput(): String? = null
+    actual fun saveAudioOutput(module: String) {}
+    actual fun loadSubtitleFontSize(): Int? = null
+    actual fun saveSubtitleFontSize(relSize: Int) {}
+    actual fun loadSubtitleColor(): Int? = null
+    actual fun saveSubtitleColor(rgb: Int) {}
+    actual fun loadSubtitleBackgroundOpacity(): Int? = null
+    actual fun saveSubtitleBackgroundOpacity(opacity: Int) {}
+    actual fun loadSubtitleOutline(): Int? = null
+    actual fun saveSubtitleOutline(thickness: Int) {}
+    actual fun invalidatePlayerEngineConfig() {}
 }

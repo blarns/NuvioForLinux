@@ -1,5 +1,9 @@
 package com.nuvio.app.features.player
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
 import androidx.compose.runtime.Composable
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.player_ios_hardware_decoder_off
@@ -52,9 +56,19 @@ object PlayerLaunchStore {
     private var nextLaunchId = 1L
     private val launches = mutableMapOf<Long, PlayerLaunch>()
 
+    // Desktop fork: the window title, MPRIS metadata and Discord presence all need to know what
+    // is playing without being wired through the player composable.
+    private val _currentTitle = MutableStateFlow<String?>(null)
+    val currentTitle: StateFlow<String?> = _currentTitle.asStateFlow()
+
+    private val _currentLaunch = MutableStateFlow<PlayerLaunch?>(null)
+    val currentLaunch: StateFlow<PlayerLaunch?> = _currentLaunch.asStateFlow()
+
     fun put(launch: PlayerLaunch): Long {
         val launchId = nextLaunchId++
         launches[launchId] = launch
+        _currentTitle.value = launch.title
+        _currentLaunch.value = launch
         return launchId
     }
 
@@ -62,11 +76,17 @@ object PlayerLaunchStore {
 
     fun remove(launchId: Long) {
         launches.remove(launchId)
+        if (launches.isEmpty()) {
+            _currentTitle.value = null
+            _currentLaunch.value = null
+        }
     }
 
     fun clear() {
         nextLaunchId = 1L
         launches.clear()
+        _currentTitle.value = null
+        _currentLaunch.value = null
     }
 }
 
