@@ -6,6 +6,21 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.2] — 2026-08-04
+
+### Fixed
+- **The window menu bar no longer sits over fullscreen video** ([#3](https://github.com/blarns/NuvioForLinux/issues/3)).
+  The menu bar added in 0.2.0 is native window chrome, so it renders in the system theme — a white
+  strip against Nuvio's dark UI on most setups — and it stayed on screen in fullscreen, over the
+  video, with no way to dismiss it. It is now hidden automatically whenever the window is
+  fullscreen, and there is a **Settings → Playback → Show menu bar** toggle to remove it entirely.
+
+### Changed
+- A source that fails or times out now shows its own error in the player's stream list instead of
+  the generic "no streams found", and the list keeps a spinner at the end while slower sources are
+  still reporting (partial port of upstream `f5b75adc`).
+- Player source state fixes picked up from upstream (`d9eaca52`).
+
 ## [0.2.1] — 2026-08-03
 
 A bug-fix release. The headline fix is the source list that would spin forever instead of

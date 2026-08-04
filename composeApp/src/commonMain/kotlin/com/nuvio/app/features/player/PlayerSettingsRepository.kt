@@ -57,6 +57,15 @@ data class PlayerSettingsUiState(
     val decoderPriority: Int = 1,
     val mapDV7ToHevc: Boolean = false,
     val tunnelingEnabled: Boolean = false,
+    val hwAccelEnabled: Boolean = true,
+    val discordRichPresenceEnabled: Boolean = false,
+    val trayIconEnabled: Boolean = false,
+    val menuBarEnabled: Boolean = true,
+    val audioOutput: String = "",
+    val subtitleFontSize: Int = 16,
+    val subtitleColor: Int = 0xFFFFFF,
+    val subtitleBackgroundOpacity: Int = 0,
+    val subtitleOutline: Int = 2,
     val streamAutoPlayMode: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL,
     val streamAutoPlaySource: StreamAutoPlaySource = StreamAutoPlaySource.ALL_SOURCES,
     val streamAutoPlaySelectedAddons: Set<String> = emptySet(),
@@ -123,6 +132,15 @@ object PlayerSettingsRepository {
     private var decoderPriority = 1
     private var mapDV7ToHevc = false
     private var tunnelingEnabled = false
+    private var hwAccelEnabled = true
+    private var discordRichPresenceEnabled = false
+    private var trayIconEnabled = false
+    private var menuBarEnabled = true
+    private var audioOutput = ""
+    private var subtitleFontSize = 16
+    private var subtitleColor = 0xFFFFFF
+    private var subtitleBackgroundOpacity = 0
+    private var subtitleOutline = 2
     private var streamAutoPlayMode = StreamAutoPlayMode.MANUAL
     private var streamAutoPlaySource = StreamAutoPlaySource.ALL_SOURCES
     private var streamAutoPlaySelectedAddons: Set<String> = emptySet()
@@ -294,6 +312,15 @@ object PlayerSettingsRepository {
         decoderPriority = PlayerSettingsStorage.loadDecoderPriority() ?: 1
         mapDV7ToHevc = PlayerSettingsStorage.loadMapDV7ToHevc() ?: false
         tunnelingEnabled = PlayerSettingsStorage.loadTunnelingEnabled() ?: false
+        hwAccelEnabled = PlayerSettingsStorage.loadHwAccelEnabled() ?: true
+        discordRichPresenceEnabled = PlayerSettingsStorage.loadDiscordRichPresenceEnabled() ?: false
+        trayIconEnabled = PlayerSettingsStorage.loadTrayIconEnabled() ?: false
+        menuBarEnabled = PlayerSettingsStorage.loadMenuBarEnabled() ?: true
+        audioOutput = PlayerSettingsStorage.loadAudioOutput() ?: ""
+        subtitleFontSize = PlayerSettingsStorage.loadSubtitleFontSize() ?: 16
+        subtitleColor = PlayerSettingsStorage.loadSubtitleColor() ?: 0xFFFFFF
+        subtitleBackgroundOpacity = PlayerSettingsStorage.loadSubtitleBackgroundOpacity() ?: 0
+        subtitleOutline = PlayerSettingsStorage.loadSubtitleOutline() ?: 2
         streamAutoPlayMode = PlayerSettingsStorage.loadStreamAutoPlayMode()
             ?.let { runCatching { StreamAutoPlayMode.valueOf(it) }.getOrNull() }
             ?: StreamAutoPlayMode.MANUAL
@@ -587,6 +614,82 @@ object PlayerSettingsRepository {
         tunnelingEnabled = enabled
         publish()
         PlayerSettingsStorage.saveTunnelingEnabled(enabled)
+    }
+
+    fun setHwAccelEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (hwAccelEnabled == enabled) return
+        hwAccelEnabled = enabled
+        publish()
+        PlayerSettingsStorage.saveHwAccelEnabled(enabled)
+    }
+
+    fun setDiscordRichPresenceEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (discordRichPresenceEnabled == enabled) return
+        discordRichPresenceEnabled = enabled
+        publish()
+        PlayerSettingsStorage.saveDiscordRichPresenceEnabled(enabled)
+    }
+
+    fun setTrayIconEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (trayIconEnabled == enabled) return
+        trayIconEnabled = enabled
+        publish()
+        PlayerSettingsStorage.saveTrayIconEnabled(enabled)
+    }
+
+    fun setMenuBarEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (menuBarEnabled == enabled) return
+        menuBarEnabled = enabled
+        publish()
+        PlayerSettingsStorage.saveMenuBarEnabled(enabled)
+    }
+
+    fun setAudioOutput(module: String) {
+        ensureLoaded()
+        if (audioOutput == module) return
+        audioOutput = module
+        publish()
+        PlayerSettingsStorage.saveAudioOutput(module)
+    }
+
+    fun setSubtitleFontSize(relSize: Int) {
+        ensureLoaded()
+        if (subtitleFontSize == relSize) return
+        subtitleFontSize = relSize
+        publish()
+        PlayerSettingsStorage.saveSubtitleFontSize(relSize)
+        PlayerSettingsStorage.invalidatePlayerEngineConfig()
+    }
+
+    fun setSubtitleColor(rgb: Int) {
+        ensureLoaded()
+        if (subtitleColor == rgb) return
+        subtitleColor = rgb
+        publish()
+        PlayerSettingsStorage.saveSubtitleColor(rgb)
+        PlayerSettingsStorage.invalidatePlayerEngineConfig()
+    }
+
+    fun setSubtitleBackgroundOpacity(opacity: Int) {
+        ensureLoaded()
+        if (subtitleBackgroundOpacity == opacity) return
+        subtitleBackgroundOpacity = opacity
+        publish()
+        PlayerSettingsStorage.saveSubtitleBackgroundOpacity(opacity)
+        PlayerSettingsStorage.invalidatePlayerEngineConfig()
+    }
+
+    fun setSubtitleOutline(thickness: Int) {
+        ensureLoaded()
+        if (subtitleOutline == thickness) return
+        subtitleOutline = thickness
+        publish()
+        PlayerSettingsStorage.saveSubtitleOutline(thickness)
+        PlayerSettingsStorage.invalidatePlayerEngineConfig()
     }
 
     fun setStreamAutoPlayMode(mode: StreamAutoPlayMode) {
@@ -935,6 +1038,15 @@ object PlayerSettingsRepository {
             decoderPriority = decoderPriority,
             mapDV7ToHevc = mapDV7ToHevc,
             tunnelingEnabled = tunnelingEnabled,
+            hwAccelEnabled = hwAccelEnabled,
+            discordRichPresenceEnabled = discordRichPresenceEnabled,
+            trayIconEnabled = trayIconEnabled,
+            menuBarEnabled = menuBarEnabled,
+            audioOutput = audioOutput,
+            subtitleFontSize = subtitleFontSize,
+            subtitleColor = subtitleColor,
+            subtitleBackgroundOpacity = subtitleBackgroundOpacity,
+            subtitleOutline = subtitleOutline,
             streamAutoPlayMode = streamAutoPlayMode,
             streamAutoPlaySource = streamAutoPlaySource,
             streamAutoPlaySelectedAddons = streamAutoPlaySelectedAddons,

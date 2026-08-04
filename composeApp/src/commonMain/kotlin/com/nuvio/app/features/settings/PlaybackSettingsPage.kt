@@ -112,6 +112,10 @@ internal fun LazyListScope.playbackSettingsContent(
     decoderPriority: Int,
     mapDV7ToHevc: Boolean,
     tunnelingEnabled: Boolean,
+    hwAccelEnabled: Boolean,
+    discordRichPresenceEnabled: Boolean,
+    menuBarEnabled: Boolean,
+    audioOutput: String,
     useLibass: Boolean,
     libassRenderType: String,
 ) {
@@ -135,6 +139,10 @@ internal fun LazyListScope.playbackSettingsContent(
             decoderPriority = decoderPriority,
             mapDV7ToHevc = mapDV7ToHevc,
             tunnelingEnabled = tunnelingEnabled,
+            hwAccelEnabled = hwAccelEnabled,
+            discordRichPresenceEnabled = discordRichPresenceEnabled,
+            menuBarEnabled = menuBarEnabled,
+            audioOutput = audioOutput,
             useLibass = useLibass,
             libassRenderType = libassRenderType,
         )
@@ -299,6 +307,10 @@ private fun PlaybackSettingsSection(
     decoderPriority: Int,
     mapDV7ToHevc: Boolean,
     tunnelingEnabled: Boolean,
+    hwAccelEnabled: Boolean,
+    discordRichPresenceEnabled: Boolean,
+    menuBarEnabled: Boolean,
+    audioOutput: String,
     useLibass: Boolean,
     libassRenderType: String,
 ) {
@@ -961,6 +973,41 @@ private fun PlaybackSettingsSection(
                 isTablet = isTablet,
             ) {
                 SettingsGroup(isTablet = isTablet) {
+                    SettingsSwitchRow(
+                        title = "Hardware video acceleration (VA-API)",
+                        description = "Use GPU hardware decoding via VA-API. Reduces CPU usage for H.264/H.265 content. Requires app restart to take effect.",
+                        checked = hwAccelEnabled,
+                        isTablet = isTablet,
+                        onCheckedChange = PlayerSettingsRepository::setHwAccelEnabled,
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsSwitchRow(
+                        title = "Show menu bar",
+                        description = "Show the window menu bar (Playback \u2192 Sleep timer). " +
+                            "It uses your system theme rather than Nuvio's, and is always hidden in fullscreen.",
+                        checked = menuBarEnabled,
+                        isTablet = isTablet,
+                        onCheckedChange = PlayerSettingsRepository::setMenuBarEnabled,
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    val discordUnavailableReason = remember {
+                        PlayerSettingsStorage.discordRichPresenceUnavailableReason()
+                    }
+                    SettingsSwitchRow(
+                        title = "Discord Rich Presence",
+                        description = discordUnavailableReason
+                            ?: "Show what you're watching in your Discord status. Requires Discord running. Applies from the next played video.",
+                        checked = discordRichPresenceEnabled,
+                        isTablet = isTablet,
+                        onCheckedChange = PlayerSettingsRepository::setDiscordRichPresenceEnabled,
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    val audioOutputLabel = when (audioOutput) {
+                        "pulse" -> "PulseAudio"
+                        "alsa" -> "ALSA"
+                        "jack" -> "JACK"
+                        else -> "Auto (default)"
+                    }
                     SettingsNavigationRow(
                         title = stringResource(Res.string.settings_playback_ios_audio_output),
                         description = autoPlayPlayerSettings.iosAudioOutputMode.label,
