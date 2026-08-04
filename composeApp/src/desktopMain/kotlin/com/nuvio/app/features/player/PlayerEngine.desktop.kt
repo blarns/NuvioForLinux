@@ -231,16 +231,26 @@ actual fun PlatformPlayerSurface(
     sourceAudioUrl: String?,
     sourceHeaders: Map<String, String>,
     sourceResponseHeaders: Map<String, String>,
+    externalSubtitles: List<com.nuvio.app.features.streams.StreamSubtitle>,
+    streamType: String?,
     useYoutubeChunkedPlayback: Boolean,
     modifier: Modifier,
     playWhenReady: Boolean,
+    initialPositionMs: Long?,
+    initialPositionRequestKey: String?,
     resizeMode: PlayerResizeMode,
     useNativeController: Boolean,
-    startPositionMs: Long,
+    onInitialPositionHandled: (key: String, handled: Boolean) -> Unit,
     onControllerReady: (PlayerEngineController) -> Unit,
     onSnapshot: (PlayerPlaybackSnapshot) -> Unit,
     onError: (String?) -> Unit,
 ) {
+    // libVLC applies the resume point via a :start-time media option at load, so the request is
+    // satisfied at loadMedia() time rather than by a post-prepare seek like the Media3 path.
+    val startPositionMs = initialPositionMs ?: 0L
+    LaunchedEffect(initialPositionRequestKey, sourceUrl) {
+        initialPositionRequestKey?.let { key -> onInitialPositionHandled(key, initialPositionMs != null) }
+    }
     val latestOnSnapshot = rememberUpdatedState(onSnapshot)
     val latestOnError = rememberUpdatedState(onError)
     val scope = rememberCoroutineScope()
