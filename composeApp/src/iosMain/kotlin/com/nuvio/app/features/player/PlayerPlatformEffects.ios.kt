@@ -111,3 +111,6 @@ private class IOSPlayerGestureController : PlayerGestureController {
         UIScreen.mainScreen.brightness = originalBrightness
     }
 }
+
+// Touch platforms: surface taps are the primary control gesture.
+actual val suppressSurfaceTapGestures: Boolean = false

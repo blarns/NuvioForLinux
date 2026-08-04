@@ -111,4 +111,7 @@ internal actual object TmdbSettingsStorage {
         payload.decodeSyncBoolean(useMoreLikeThisKey)?.let(::saveUseMoreLikeThis)
         payload.decodeSyncBoolean(useCollectionsKey)?.let(::saveUseCollections)
     }
+    private const val useReleaseDatesKey = "tmdb_use_release_dates"
+    actual fun loadUseReleaseDates(): Boolean? = loadBoolean(useReleaseDatesKey)
+    actual fun saveUseReleaseDates(enabled: Boolean) = saveBoolean(useReleaseDatesKey, enabled)
 }

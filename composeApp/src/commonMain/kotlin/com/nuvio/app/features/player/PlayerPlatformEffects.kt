@@ -32,3 +32,6 @@ expect fun rememberIsInPictureInPicture(): Boolean
 
 @Composable
 expect fun rememberPlayerGestureController(): PlayerGestureController?
+
+// Desktop fork: mouse clicks on the video surface must not fire the touch tap gestures.
+expect val suppressSurfaceTapGestures: Boolean

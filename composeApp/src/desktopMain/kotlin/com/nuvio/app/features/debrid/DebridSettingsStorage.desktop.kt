@@ -135,4 +135,14 @@ internal actual object DebridSettingsStorage {
             else -> "debrid_${normalized}_api_key"
         }
     }
+
+    private fun pendingDeviceAuthKey(providerId: String) = "debrid_pending_device_auth_$providerId"
+    actual fun loadPendingDeviceAuthorization(providerId: String): String? =
+        store.getString(pendingDeviceAuthKey(providerId))
+    actual fun savePendingDeviceAuthorization(providerId: String, payload: String) {
+        store.putString(pendingDeviceAuthKey(providerId), payload)
+    }
+    actual fun clearPendingDeviceAuthorization(providerId: String) {
+        store.putString(pendingDeviceAuthKey(providerId), null)
+    }
 }

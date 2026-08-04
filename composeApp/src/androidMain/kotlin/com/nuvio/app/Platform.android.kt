@@ -9,3 +9,9 @@ class AndroidPlatform : Platform {
 actual fun getPlatform(): Platform = AndroidPlatform()
 
 internal actual val isIos: Boolean = false
+
+internal actual val isDesktop: Boolean = false
+
+// Desktop-only: the JVM app flushes watch progress on window close. No-op here.
+internal actual fun registerPlaybackFlushCallback(fn: () -> Unit) {}
+internal actual fun unregisterPlaybackFlushCallback() {}

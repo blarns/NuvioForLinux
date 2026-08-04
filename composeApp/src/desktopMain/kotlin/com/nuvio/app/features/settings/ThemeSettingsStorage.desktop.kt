@@ -82,4 +82,9 @@ internal actual object ThemeSettingsStorage {
         payload.decodeSyncString(desktopNavigationLayoutKey)?.let(::saveDesktopNavigationLayout)
         applySelectedAppLanguage(loadSelectedAppLanguage() ?: AppLanguage.ENGLISH.code)
     }
+    private const val navBarStyleKey = "nav_bar_style"
+    actual fun loadNavBarStyle(): String? = store.getString(ProfileScopedKey.of(navBarStyleKey))
+    actual fun saveNavBarStyle(styleKey: String) {
+        store.putString(ProfileScopedKey.of(navBarStyleKey), styleKey)
+    }
 }

@@ -70,6 +70,9 @@ internal actual fun CollectionCardRemoteImage(
     modifier: Modifier,
     contentScale: ContentScale,
     animateIfPossible: Boolean,
+    @Suppress("UNUSED_PARAMETER") restImageUrl: String?,
+    @Suppress("UNUSED_PARAMETER") hoverImageUrl: String?,
+    @Suppress("UNUSED_PARAMETER") hovered: Boolean,
 ) {
     if (!animateIfPossible) {
         AsyncImage(

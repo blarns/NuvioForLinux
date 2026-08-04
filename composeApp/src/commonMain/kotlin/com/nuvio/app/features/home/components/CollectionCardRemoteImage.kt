@@ -11,4 +11,8 @@ internal expect fun CollectionCardRemoteImage(
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
     animateIfPossible: Boolean = false,
+    // Desktop fork: collection tiles cross-fade to animated art on hover. Ignored on touch.
+    restImageUrl: String? = null,
+    hoverImageUrl: String? = null,
+    hovered: Boolean = false,
 )

@@ -206,3 +206,6 @@ private class AndroidPlayerGestureController(
             .coerceIn(1, 255)
             .toFloat() / 255f
 }
+
+// Touch platforms: surface taps are the primary control gesture.
+actual val suppressSurfaceTapGestures: Boolean = false
