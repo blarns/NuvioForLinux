@@ -92,6 +92,10 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.roundToInt
+import com.nuvio.app.features.player.PlayerSettingsUiState
+import com.nuvio.app.features.player.PlayerSettingsStorage
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 
 internal fun LazyListScope.playbackSettingsContent(
     isTablet: Boolean,
@@ -3664,7 +3668,17 @@ private fun libassRenderTypeRes(renderType: String): StringResource = when (rend
 @Composable
 private fun libassRenderTypeLabel(renderType: String): String = stringResource(libassRenderTypeRes(renderType))
 
-// ── Subtitle appearance + audio output (Linux desktop / VLCJ) ─────────────────
+// ── Subtitle appearance + audio output (Linux desktop / VLCJ) ──
+
+// Preset value tables. Ints are the raw libVLC option values. rel-fontsize is inverse
+// (smaller number = larger on-screen text).
+private val subtitleFontSizeOptions = listOf(20 to "Small", 16 to "Normal", 12 to "Large", 8 to "Extra large")
+private val subtitleColorOptions = listOf(0xFFFFFF to "White", 0xFFFF00 to "Yellow", 0x00FFFF to "Cyan", 0x00FF00 to "Green")
+private val subtitleBackgroundOptions = listOf(0 to "Off", 80 to "Light", 160 to "Strong")
+private val subtitleOutlineOptions = listOf(0 to "None", 2 to "Thin", 4 to "Thick")
+
+private fun <T> optionLabel(options: List<Pair<T, String>>, value: T, fallback: String): String =
+    options.firstOrNull { it.first == value }?.second ?: fallback
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)

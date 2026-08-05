@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.getString
 
@@ -340,16 +341,25 @@ object PlayerStreamsRepository {
 
                     val displayName = addon.addonName
                     val group = runCatchingUnlessCancelled {
-                        val payload = httpGetText(url)
-                        StreamParser.parse(
-                            payload = payload,
-                            addonName = displayName,
-                            addonId = addon.addonId,
-                            addonLogo = addon.manifest.logoUrl,
-                        )
+                        // The fan-in below waits for exactly one completion per source, so a
+                        // source that never returns leaves the whole panel spinning forever.
+                        withTimeoutOrNull(SOURCE_TIMEOUT_MS) {
+                            val payload = httpGetText(url)
+                            StreamParser.parse(
+                                payload = payload,
+                                addonName = displayName,
+                                addonId = addon.addonId,
+                                addonLogo = addon.manifest.logoUrl,
+                            )
+                        }
                     }.fold(
                         onSuccess = { streams ->
-                            AddonStreamGroup(displayName, addon.addonId, streams, isLoading = false)
+                            if (streams == null) {
+                                log.w { "Timed out: $displayName" }
+                                AddonStreamGroup(displayName, addon.addonId, emptyList(), isLoading = false, error = "Timed out")
+                            } else {
+                                AddonStreamGroup(displayName, addon.addonId, streams, isLoading = false)
+                            }
                         },
                         onFailure = { err ->
                             log.w(err) { "Failed: ${displayName}" }
@@ -364,7 +374,8 @@ object PlayerStreamsRepository {
                 val includeScraperNameInSubtitle = false
                 providerGroup.scrapers.forEach { scraper ->
                     launch {
-                        val completion = PluginRepository.executeScraper(
+                        val completion = withTimeoutOrNull(SOURCE_TIMEOUT_MS) {
+                        PluginRepository.executeScraper(
                             scraper = scraper,
                             tmdbId = pluginContentId(
                                 videoId = videoId,
@@ -398,6 +409,14 @@ object PlayerStreamsRepository {
                                 )
                             },
                         )
+                        } ?: run {
+                            log.w { "Timed out: ${scraper.name}" }
+                            StreamLoadCompletion.PluginScraper(
+                                addonId = providerGroup.addonId,
+                                streams = emptyList(),
+                                error = "Timed out",
+                            )
+                        }
                         publishCompletion(completion)
                     }
                 }
@@ -511,4 +530,5 @@ private fun StreamsUiState.streamDiagnostics(): String {
 private fun com.nuvio.app.features.addons.ManagedAddon.streamAddonInstanceId(manifestId: String): String =
     "addon:$manifestId:$manifestUrl"
 
-
+// A source that never returns would otherwise leave the fan-in below waiting forever.
+private const val SOURCE_TIMEOUT_MS = 45_000L
