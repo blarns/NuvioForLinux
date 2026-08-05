@@ -49,9 +49,26 @@ fun main(args: Array<String>) {
     val mediaTitle by PlayerLaunchStore.currentTitle.collectAsState()
     val windowTitle = if (mediaTitle != null) "Nuvio — $mediaTitle" else "Nuvio"
     val appIcon = runCatching { BitmapPainter(useResource("nuvio-icon.png", ::loadImageBitmap)) }.getOrNull()
+    // Size the window from the screen it is actually starting on. A hardcoded default read as
+    // "the window is smaller than my screen" on anything bigger than 1280x720, and a size
+    // restored from a larger monitor could leave the title bar off screen — issues/4.
+    val initialSize = remember {
+        val screen = DesktopWindowGeometry.usableScreen()
+        val saved = windowStore.getFloat("width")?.let { width ->
+            windowStore.getFloat("height")?.let { height -> DesktopWindowGeometry.Size(width, height) }
+        }
+        DesktopWindowGeometry.resolve(saved, screen).also {
+            DesktopWindowGeometry.logDisplayInfo(it, screen)
+        }
+    }
     val windowState = rememberWindowState(
-        width = (windowStore.getFloat("width") ?: 1280f).dp,
-        height = (windowStore.getFloat("height") ?: 720f).dp,
+        placement = if (windowStore.getBoolean("maximized") == true) {
+            WindowPlacement.Maximized
+        } else {
+            WindowPlacement.Floating
+        },
+        width = initialSize.width.dp,
+        height = initialSize.height.dp,
     )
     DesktopWindowState.toggleFullscreen = {
         windowState.placement = if (windowState.placement == WindowPlacement.Fullscreen)
@@ -87,8 +104,18 @@ fun main(args: Array<String>) {
         // Clear and disconnect the Discord presence (no-op when the feature was inert).
         com.nuvio.app.features.discord.DiscordRichPresence.shutdown()
         DesktopTray.remove()
-        windowStore.putFloat("width", windowState.size.width.value)
-        windowStore.putFloat("height", windowState.size.height.value)
+        // WindowState.size tracks the live window, so while maximised or fullscreen it reports
+        // the screen size. Persist the placement separately and only write a size back when the
+        // window is floating, otherwise quitting from fullscreen locks that size in forever.
+        windowStore.putBoolean("maximized", windowState.placement == WindowPlacement.Maximized)
+        if (windowState.placement == WindowPlacement.Floating) {
+            val width = windowState.size.width.value
+            val height = windowState.size.height.value
+            if (DesktopWindowGeometry.isPersistable(width, height)) {
+                windowStore.putFloat("width", width)
+                windowStore.putFloat("height", height)
+            }
+        }
         exitApplication()
     }
     // System tray (opt-in, applied at startup). Tray actions route through DesktopWindowState.

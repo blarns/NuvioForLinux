@@ -6,6 +6,24 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Fixed
+- **The window now opens sized to your screen** ([#4](https://github.com/blarns/NuvioForLinux/issues/4)).
+  It previously opened at a hardcoded 1280x720 no matter how large the display was, which on
+  anything bigger looks like the window failed to scale. A first run now takes 90% of the usable
+  screen area instead.
+- A window size restored from a previous run is validated before use: it is clamped to the current
+  screen (so a size saved on a larger monitor can no longer put the title bar out of reach) and a
+  corrupt saved value is discarded rather than carried forward into every later launch.
+- Quitting while maximised no longer persists the maximised size as the floating window size. The
+  maximised state itself is now remembered and restored instead.
+
+### Added
+- Nuvio prints one line describing the display at startup (screen size, scale, whether AWT reports
+  fullscreen support, and the session type). Window bugs are almost always window-manager specific
+  and can't be reproduced on the reporter's behalf, so this makes them triageable from a pasted log.
+
 ## [0.2.2] — 2026-08-04
 
 ### Fixed
