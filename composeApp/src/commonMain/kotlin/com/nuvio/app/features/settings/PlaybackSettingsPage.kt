@@ -1008,6 +1008,49 @@ private fun PlaybackSettingsSection(
                         "jack" -> "JACK"
                         else -> "Auto (default)"
                     }
+                    // Desktop-only rows. The whole settings object is needed for the subtitle
+                    // summary, so it is collected here rather than threaded through as more params.
+                    val desktopSettings by PlayerSettingsRepository.uiState.collectAsStateWithLifecycle()
+                    var showAudioOutputDialog by remember { mutableStateOf(false) }
+                    var showSubtitleDialog by remember { mutableStateOf(false) }
+                    SettingsNavigationRow(
+                        title = "Audio output",
+                        description = audioOutputLabel,
+                        isTablet = isTablet,
+                        onClick = { showAudioOutputDialog = true },
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsNavigationRow(
+                        title = "Subtitle appearance",
+                        description = subtitleAppearanceSummary(desktopSettings),
+                        isTablet = isTablet,
+                        onClick = { showSubtitleDialog = true },
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsSwitchRow(
+                        title = "System tray icon",
+                        description = "Show a Nuvio icon in the system tray with show/play-pause/quit. Requires app restart. Needs a tray host (Cinnamon, KDE, XFCE, or GNOME with an app-indicator extension).",
+                        checked = desktopSettings.trayIconEnabled,
+                        isTablet = isTablet,
+                        onCheckedChange = PlayerSettingsRepository::setTrayIconEnabled,
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    if (showSubtitleDialog) {
+                        SubtitleAppearanceDialog(
+                            settings = desktopSettings,
+                            onDismiss = { showSubtitleDialog = false },
+                        )
+                    }
+                    if (showAudioOutputDialog) {
+                        AudioOutputDialog(
+                            selectedModule = audioOutput,
+                            onSelect = { module ->
+                                PlayerSettingsRepository.setAudioOutput(module)
+                                showAudioOutputDialog = false
+                            },
+                            onDismiss = { showAudioOutputDialog = false },
+                        )
+                    }
                     SettingsNavigationRow(
                         title = stringResource(Res.string.settings_playback_ios_audio_output),
                         description = autoPlayPlayerSettings.iosAudioOutputMode.label,
@@ -3620,3 +3663,202 @@ private fun libassRenderTypeRes(renderType: String): StringResource = when (rend
 
 @Composable
 private fun libassRenderTypeLabel(renderType: String): String = stringResource(libassRenderTypeRes(renderType))
+
+// ── Subtitle appearance + audio output (Linux desktop / VLCJ) ─────────────────
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun AudioOutputDialog(
+    selectedModule: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val options = listOf(
+        "" to "Auto (default)",
+        "pulse" to "PulseAudio",
+        "alsa" to "ALSA",
+        "jack" to "JACK",
+    )
+
+    BasicAlertDialog(
+        onDismissRequest = onDismiss,
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = "Audio output",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    options.forEach { (module, label) ->
+                        val isSelected = module == selectedModule
+                        val containerColor = if (isSelected) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(module) },
+                            shape = RoundedCornerShape(12.dp),
+                            color = containerColor,
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Box(
+                                    modifier = Modifier.size(24.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = stringResource(Res.string.settings_playback_dialog_close),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun SubtitleAppearanceDialog(
+    settings: PlayerSettingsUiState,
+    onDismiss: () -> Unit,
+) {
+    BasicAlertDialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    text = "Subtitle appearance",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = "Applies to the next played video.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                SubtitleOptionGroup("Text size", subtitleFontSizeOptions, settings.subtitleFontSize) {
+                    PlayerSettingsRepository.setSubtitleFontSize(it)
+                }
+                SubtitleOptionGroup("Text color", subtitleColorOptions, settings.subtitleColor) {
+                    PlayerSettingsRepository.setSubtitleColor(it)
+                }
+                SubtitleOptionGroup("Background", subtitleBackgroundOptions, settings.subtitleBackgroundOpacity) {
+                    PlayerSettingsRepository.setSubtitleBackgroundOpacity(it)
+                }
+                SubtitleOptionGroup("Outline", subtitleOutlineOptions, settings.subtitleOutline) {
+                    PlayerSettingsRepository.setSubtitleOutline(it)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SubtitleOptionGroup(
+    title: String,
+    options: List<Pair<Int, String>>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        options.forEach { (value, label) ->
+            val isSelected = value == selected
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSelect(value) },
+                shape = RoundedCornerShape(12.dp),
+                color = if (isSelected) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                },
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (isSelected) {
+                        Icon(
+                            imageVector = Icons.Rounded.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun subtitleAppearanceSummary(s: PlayerSettingsUiState): String {
+    val color = optionLabel(subtitleColorOptions, s.subtitleColor, "Custom")
+    val size = optionLabel(subtitleFontSizeOptions, s.subtitleFontSize, "Custom")
+    val bg = if (s.subtitleBackgroundOpacity > 0) "background on" else "no background"
+    return "$color · $size · $bg · applies to next video"
+}
