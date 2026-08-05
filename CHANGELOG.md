@@ -6,7 +6,9 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [0.2.3] — 2026-08-05
+
+A small fix release for the window opening smaller than the screen.
 
 ### Fixed
 - **The window now opens sized to your screen** ([#4](https://github.com/blarns/NuvioForLinux/issues/4)).
