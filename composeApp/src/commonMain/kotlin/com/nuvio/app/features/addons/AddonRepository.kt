@@ -60,6 +60,7 @@ object AddonRepository {
         val effectiveProfileId = resolveEffectiveProfileId(ProfileRepository.activeProfileId)
         if (initialized) return
         initialized = true
+        AddonUpdateChecker.ensureStarted()
         currentProfileId = effectiveProfileId
         log.d { "initialize() — loading local addons for profile $currentProfileId" }
 
@@ -259,6 +260,59 @@ object AddonRepository {
                     isRefreshing = false,
                     errorMessage = null,
                 ),
+            )
+        }
+        persist()
+        pushToServer()
+        return AddAddonResult.Success(manifest)
+    }
+
+    suspend fun replaceAddonUrl(currentUrl: String, newRawUrl: String): AddAddonResult {
+        if (isUsingPrimaryAddonsFromSecondaryProfile()) {
+            return AddAddonResult.Error(getString(Res.string.profile_primary_addons_required))
+        }
+        log.i { "replaceAddonUrl() — currentUrl=$currentUrl" }
+        val newManifestUrl = try {
+            normalizeManifestUrl(newRawUrl)
+        } catch (error: IllegalArgumentException) {
+            return AddAddonResult.Error(error.message ?: getString(Res.string.addon_invalid_url))
+        }
+
+        if (_uiState.value.addons.none { it.manifestUrl == currentUrl }) {
+            return AddAddonResult.Error(getString(Res.string.addons_update_url_not_installed))
+        }
+        if (newManifestUrl != currentUrl && _uiState.value.addons.any { it.manifestUrl == newManifestUrl }) {
+            return AddAddonResult.Error(getString(Res.string.addon_already_installed))
+        }
+
+        // Fetch the new manifest before touching anything so a bad URL can't
+        // clobber a working install.
+        val manifest = try {
+            withContext(Dispatchers.Default) {
+                val payload = httpGetText(newManifestUrl)
+                AddonManifestParser.parse(
+                    manifestUrl = newManifestUrl,
+                    payload = payload,
+                )
+            }
+        } catch (error: Throwable) {
+            return AddAddonResult.Error(error.message ?: getString(Res.string.addon_load_manifest_failed))
+        }
+
+        _uiState.update { current ->
+            current.copy(
+                addons = current.addons.map { addon ->
+                    if (addon.manifestUrl != currentUrl) {
+                        addon
+                    } else {
+                        addon.copy(
+                            manifestUrl = newManifestUrl,
+                            manifest = manifest,
+                            isRefreshing = false,
+                            errorMessage = null,
+                        )
+                    }
+                },
             )
         }
         persist()

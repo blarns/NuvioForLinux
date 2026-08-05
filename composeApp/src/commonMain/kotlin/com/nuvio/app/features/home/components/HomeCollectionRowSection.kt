@@ -1,5 +1,8 @@
 package com.nuvio.app.features.home.components
 
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -15,6 +18,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -123,6 +128,11 @@ private fun CollectionFolderCard(
     ) {
         val shapeCorner = RoundedCornerShape(posterCardStyle.cornerRadiusDp.dp)
         val imageUrl = collectionFolderCardImageUrl(folder)
+        // Desktop hover-to-focus is detected here on the card — an ancestor of the click overlay,
+        // which sits on top and would otherwise swallow the hover. Touch platforms never hover, so
+        // this stays false there.
+        val interactionSource = remember { MutableInteractionSource() }
+        val isHovered by interactionSource.collectIsHoveredAsState()
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -140,7 +150,7 @@ private fun CollectionFolderCard(
             ),
         ) {
             Box(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().hoverable(interactionSource),
                 contentAlignment = Alignment.Center,
             ) {
                 when {
@@ -151,6 +161,9 @@ private fun CollectionFolderCard(
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop,
                             animateIfPossible = animateGifs && isAnimatedCollectionFolderImage(folder, imageUrl),
+                            restImageUrl = collectionFolderRestImageUrl(folder),
+                            hoverImageUrl = collectionFolderHoverImageUrl(folder, animateGifs),
+                            hovered = isHovered,
                         )
                     }
                     !folder.coverEmoji.isNullOrBlank() -> {
@@ -197,6 +210,18 @@ private fun collectionFolderCardImageUrl(folder: CollectionFolder): String? {
     } else {
         firstNonBlank(folder.coverImageUrl)
     }
+}
+
+/** Desktop hover-to-focus: the static cover shown at rest (falls back to the focus art if there is no cover). */
+private fun collectionFolderRestImageUrl(folder: CollectionFolder): String? {
+    return firstNonBlank(folder.coverImageUrl, folder.focusGifUrl)
+}
+
+/** Desktop hover-to-focus: the animated "focus" art played on mouse hover, or null when there is nothing to swap to. */
+private fun collectionFolderHoverImageUrl(folder: CollectionFolder, animateGifs: Boolean): String? {
+    if (!animateGifs || !folder.mobileFocusGifEnabled) return null
+    val focus = firstNonBlank(folder.focusGifUrl) ?: return null
+    return if (focus == firstNonBlank(folder.coverImageUrl)) null else focus
 }
 
 private fun firstNonBlank(vararg candidates: String?): String? {
