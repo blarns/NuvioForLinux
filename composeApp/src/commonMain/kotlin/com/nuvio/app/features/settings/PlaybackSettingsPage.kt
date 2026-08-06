@@ -85,6 +85,7 @@ import com.nuvio.app.features.plugins.PluginsUiState
 import com.nuvio.app.features.plugins.PluginRepository
 import com.nuvio.app.features.streams.StreamAutoPlayMode
 import com.nuvio.app.features.streams.StreamAutoPlaySource
+import com.nuvio.app.isDesktop
 import com.nuvio.app.isIos
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.*
@@ -971,9 +972,14 @@ private fun PlaybackSettingsSection(
             }
         }
 
-        if (isIos) {
+        if (isDesktop) {
+            // The whole settings object is needed for the subtitle summary, so it is collected
+            // here rather than threaded through as more params.
+            val desktopSettings by PlayerSettingsRepository.uiState.collectAsStateWithLifecycle()
+            var showAudioOutputDialog by remember { mutableStateOf(false) }
+            var showSubtitleDialog by remember { mutableStateOf(false) }
             SettingsSection(
-                title = stringResource(Res.string.settings_playback_ios_audio_output_section),
+                title = "Linux desktop",
                 isTablet = isTablet,
             ) {
                 SettingsGroup(isTablet = isTablet) {
@@ -1012,11 +1018,6 @@ private fun PlaybackSettingsSection(
                         "jack" -> "JACK"
                         else -> "Auto (default)"
                     }
-                    // Desktop-only rows. The whole settings object is needed for the subtitle
-                    // summary, so it is collected here rather than threaded through as more params.
-                    val desktopSettings by PlayerSettingsRepository.uiState.collectAsStateWithLifecycle()
-                    var showAudioOutputDialog by remember { mutableStateOf(false) }
-                    var showSubtitleDialog by remember { mutableStateOf(false) }
                     SettingsNavigationRow(
                         title = "Audio output",
                         description = audioOutputLabel,
@@ -1038,23 +1039,32 @@ private fun PlaybackSettingsSection(
                         isTablet = isTablet,
                         onCheckedChange = PlayerSettingsRepository::setTrayIconEnabled,
                     )
-                    SettingsGroupDivider(isTablet = isTablet)
-                    if (showSubtitleDialog) {
-                        SubtitleAppearanceDialog(
-                            settings = desktopSettings,
-                            onDismiss = { showSubtitleDialog = false },
-                        )
-                    }
-                    if (showAudioOutputDialog) {
-                        AudioOutputDialog(
-                            selectedModule = audioOutput,
-                            onSelect = { module ->
-                                PlayerSettingsRepository.setAudioOutput(module)
-                                showAudioOutputDialog = false
-                            },
-                            onDismiss = { showAudioOutputDialog = false },
-                        )
-                    }
+                }
+            }
+            if (showSubtitleDialog) {
+                SubtitleAppearanceDialog(
+                    settings = desktopSettings,
+                    onDismiss = { showSubtitleDialog = false },
+                )
+            }
+            if (showAudioOutputDialog) {
+                AudioOutputDialog(
+                    selectedModule = audioOutput,
+                    onSelect = { module ->
+                        PlayerSettingsRepository.setAudioOutput(module)
+                        showAudioOutputDialog = false
+                    },
+                    onDismiss = { showAudioOutputDialog = false },
+                )
+            }
+        }
+
+        if (isIos) {
+            SettingsSection(
+                title = stringResource(Res.string.settings_playback_ios_audio_output_section),
+                isTablet = isTablet,
+            ) {
+                SettingsGroup(isTablet = isTablet) {
                     SettingsNavigationRow(
                         title = stringResource(Res.string.settings_playback_ios_audio_output),
                         description = autoPlayPlayerSettings.iosAudioOutputMode.label,
