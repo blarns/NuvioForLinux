@@ -6,7 +6,28 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [0.3.0] — unreleased
+
+The 1:1 upstream port: this fork's Linux desktop layer rebased onto current
+[NuvioMobile](https://github.com/NuvioMedia/NuvioMobile), replacing the re-derived shared code
+that had accumulated since the fork diverged.
+
+### Changed
+- The shared (non-desktop) code is now upstream's, rather than this fork's re-derivation of it.
+  Desktop-specific code — the VLCJ player, MPRIS, tray, Discord presence, window handling,
+  screenshots, the sleep timer and desktop storage — is unchanged and remains fork-owned.
+
+### Fixed
+- The in-app updater pointed at upstream's repository and offered Linux users upstream's Android
+  APK. It is back on this fork's releases.
+- The six **Settings → Playback → Linux desktop** rows were rendering behind an iOS-only
+  condition, so none of them appeared on Linux.
+- Four fork features the rebase dropped are restored: the addon update checker, replacing an
+  addon URL in place, cloud audio playback for debrid providers, and collection hover-to-focus.
+- Six upstream issue-triage bots that the rebase introduced are removed. They would have run
+  against this fork's issue tracker once merged to the default branch.
+
+## [0.2.3] — 2026-08-05
 
 ### Fixed
 - **The window now opens sized to your screen** ([#4](https://github.com/blarns/NuvioForLinux/issues/4)).
