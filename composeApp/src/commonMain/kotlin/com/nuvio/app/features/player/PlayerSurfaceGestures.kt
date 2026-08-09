@@ -3,13 +3,41 @@ package com.nuvio.app.features.player
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntSize
+import com.nuvio.app.features.trakt.TraktPlatformClock
 import kotlin.math.abs
 import kotlin.math.roundToLong
+
+/** Wall clock for the mouse-idle timers. commonMain has no `System.currentTimeMillis()`. */
+internal fun currentTimeMillis(): Long = TraktPlatformClock.nowEpochMs()
+
+// Fork (desktop): record mouse activity over the player surface and re-show the controls on
+// movement. Pairs with the mouse-idle auto-hide in BindPlayerUiVisibilityEffects. Move events
+// only fire for hover-capable pointers, so this is inert on touch platforms.
+internal fun Modifier.playerSurfaceMouseActivity(
+    lastMouseMoveMs: MutableState<Long>,
+    playerControlsLockedState: State<Boolean>,
+    onShowControls: () -> Unit,
+): Modifier =
+    pointerInput(Unit) {
+        awaitPointerEventScope {
+            while (true) {
+                val event = awaitPointerEvent()
+                if (event.type == PointerEventType.Move) {
+                    lastMouseMoveMs.value = currentTimeMillis()
+                    if (!playerControlsLockedState.value) {
+                        onShowControls()
+                    }
+                }
+            }
+        }
+    }
 
 internal fun Modifier.playerSurfaceTapGestures(
     layoutSize: IntSize,
@@ -26,7 +54,9 @@ internal fun Modifier.playerSurfaceTapGestures(
                 tryAwaitRelease()
                 deactivateHoldToSpeedState.value()
             },
-            onTap = { offset -> onSurfaceTap.value(offset) },
+            // Fork (desktop): suppressSurfaceTapGestures disables tap-to-toggle so surface
+            // clicks don't fight the button controls; mouse movement shows the controls.
+            onTap = { offset -> if (!suppressSurfaceTapGestures) onSurfaceTap.value(offset) },
             onDoubleTap = { offset -> onSurfaceDoubleTap.value(offset) },
             onLongPress = {
                 if (playerControlsLockedState.value) {

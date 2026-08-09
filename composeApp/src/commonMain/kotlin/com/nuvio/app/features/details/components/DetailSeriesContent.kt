@@ -69,6 +69,7 @@ import com.nuvio.app.core.ui.NuvioProgressBar
 import com.nuvio.app.core.ui.nuvioCardDepth
 import com.nuvio.app.core.ui.nuvioHorizontalScrollBleed
 import com.nuvio.app.core.ui.posterCardClickable
+import com.nuvio.app.core.ui.onRightClick
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.MetaEpisodeCardStyle
 import com.nuvio.app.features.details.MetaVideo
@@ -435,6 +436,10 @@ private fun SeasonTextChipScrollRow(
                         onClick = { onSelect(season) },
                         onLongClick = onLongPress?.let { handler -> { handler(season) } },
                     )
+                    .let { mod ->
+                        val handler = onLongPress?.let { h -> { h(season) } }
+                        if (handler != null) mod.onRightClick(handler) else mod
+                    }
                     .padding(
                         horizontal = sizing.seasonChipHorizontalPadding,
                         vertical = sizing.seasonChipVerticalPadding,
@@ -525,7 +530,8 @@ private fun SeasonPosterButton(
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick,
-            ),
+            )
+            .let { if (onLongClick != null) it.onRightClick(onLongClick) else it },
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(
@@ -1069,7 +1075,8 @@ private fun EpisodeListCard(
                 enabled = onClick != null || onLongPress != null,
                 onClick = { onClick?.invoke() },
                 onLongClick = onLongPress,
-            ),
+            )
+            .let { if (onLongPress != null) it.onRightClick(onLongPress) else it },
     ) {
         Row(
             modifier = Modifier.fillMaxSize(),

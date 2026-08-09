@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -88,32 +89,37 @@ fun <T> NuvioShelfSection(
                 viewAllPillSize = viewAllPillSize,
             )
         }
-        LazyRow(
-            modifier = rowModifier,
-            state = state,
-            contentPadding = rowContentPadding,
-            horizontalArrangement = Arrangement.spacedBy(itemSpacing),
-        ) {
-            if (key != null) {
-                items(
-                    items = entries.withDuplicateSafeLazyKeys(key),
-                    key = { entry -> entry.lazyKey },
-                ) { keyedEntry ->
-                    if (animatePlacement) {
-                        Box(modifier = Modifier.animateItem()) { itemContent(keyedEntry.value) }
-                    } else {
-                        itemContent(keyedEntry.value)
+        val rowScrollScope = rememberCoroutineScope()
+        Box(modifier = Modifier.fillMaxWidth()) {
+            LazyRow(
+                modifier = rowModifier.rowWheelScroll(state, rowScrollScope),
+                state = state,
+                contentPadding = rowContentPadding,
+                horizontalArrangement = Arrangement.spacedBy(itemSpacing),
+            ) {
+                if (key != null) {
+                    items(
+                        items = entries.withDuplicateSafeLazyKeys(key),
+                        key = { entry -> entry.lazyKey },
+                    ) { keyedEntry ->
+                        if (animatePlacement) {
+                            Box(modifier = Modifier.animateItem()) { itemContent(keyedEntry.value) }
+                        } else {
+                            itemContent(keyedEntry.value)
+                        }
                     }
-                }
-            } else {
-                items(entries) { entry ->
-                    if (animatePlacement) {
-                        Box(modifier = Modifier.animateItem()) { itemContent(entry) }
-                    } else {
-                        itemContent(entry)
+                } else {
+                    items(entries) { entry ->
+                        if (animatePlacement) {
+                            Box(modifier = Modifier.animateItem()) { itemContent(entry) }
+                        } else {
+                            itemContent(entry)
+                        }
                     }
                 }
             }
+            // Desktop-only floating left/right scroll buttons (no-op on touch platforms).
+            RowScrollArrows(state, rowScrollScope)
         }
     }
 }
@@ -358,25 +364,29 @@ internal fun Modifier.posterCardClickable(
 ): Modifier {
     if (onClick == null && onLongClick == null) return this
     val bounds = remember { mutableStateOf<Rect?>(null) }
+    val longClickWithZoomAnchor = onLongClick?.let { longClick ->
+        {
+            bounds.value?.let { cardBounds ->
+                PosterZoomAnchorHolder.stash(
+                    PosterZoomAnchor(
+                        boundsInRoot = cardBounds,
+                        imageUrl = zoomImageUrl,
+                        cornerRadius = zoomCornerRadius,
+                    ),
+                )
+            }
+            longClick()
+        }
+    }
     return this
         .onGloballyPositioned { coordinates -> bounds.value = coordinates.unclippedBoundsInRoot() }
         .combinedClickable(
             onClick = { onClick?.invoke() },
-            onLongClick = onLongClick?.let { longClick ->
-                {
-                    bounds.value?.let { cardBounds ->
-                        PosterZoomAnchorHolder.stash(
-                            PosterZoomAnchor(
-                                boundsInRoot = cardBounds,
-                                imageUrl = zoomImageUrl,
-                                cornerRadius = zoomCornerRadius,
-                            ),
-                        )
-                    }
-                    longClick()
-                }
-            },
+            onLongClick = longClickWithZoomAnchor,
         )
+        // Desktop has no long-press: the secondary mouse button opens the same context menu,
+        // through the same handler so the poster-zoom anchor is stashed either way.
+        .let { if (longClickWithZoomAnchor != null) it.onRightClick(longClickWithZoomAnchor) else it }
 }
 
 private fun androidx.compose.ui.layout.LayoutCoordinates.unclippedBoundsInRoot(): Rect {

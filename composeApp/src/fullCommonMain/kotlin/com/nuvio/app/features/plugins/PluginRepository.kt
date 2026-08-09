@@ -414,11 +414,13 @@ actual object PluginRepository {
     }
 
     private fun PluginManifestScraper.isSupportedOnCurrentPlatform(): Boolean {
-        val platform = currentPluginPlatform().lowercase()
+        // Fork: match on every tag this platform answers to, not just one. A Linux desktop
+        // build reports {desktop, jvm, linux}, so a plugin declaring any of them is usable.
+        val platformTags = currentPluginPlatformTags().map { it.lowercase() }.toSet()
         val supported = supportedPlatforms?.map { it.lowercase() }?.toSet().orEmpty()
         val disabled = disabledPlatforms?.map { it.lowercase() }?.toSet().orEmpty()
-        if (supported.isNotEmpty() && platform !in supported) return false
-        if (platform in disabled) return false
+        if (supported.isNotEmpty() && platformTags.none { it in supported }) return false
+        if (platformTags.any { it in disabled }) return false
         return true
     }
 

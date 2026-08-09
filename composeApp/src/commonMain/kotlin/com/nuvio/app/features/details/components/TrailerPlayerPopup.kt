@@ -39,6 +39,25 @@ import com.nuvio.app.core.ui.nuvioSafeBottomPadding
 import com.nuvio.app.features.player.PlatformPlayerSurface
 import com.nuvio.app.features.player.PlayerResizeMode
 import com.nuvio.app.features.trailer.TrailerPlaybackSource
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
+import com.nuvio.app.isDesktop
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
@@ -68,14 +87,95 @@ fun TrailerPlayerPopup(
         }
     }.joinToString(separator = " • ")
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val coroutineScope = rememberCoroutineScope()
     var playerError by remember(playbackSource?.videoUrl, playbackSource?.audioUrl) {
         mutableStateOf<String?>(null)
     }
-
     val activeError = errorMessage ?: playerError
 
+    if (isDesktop) {
+        // Desktop: a top-anchored overlay that slides down from the top, instead of a bottom
+        // sheet (which renders as a small panel at the bottom of a wide desktop window).
+        var shown by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) { shown = true }
+        Popup(
+            // Position at the window origin and let the content fill the whole window —
+            // a modal AlertDialog caps content width on desktop, which kept the card tiny.
+            popupPositionProvider = remember {
+                object : PopupPositionProvider {
+                    override fun calculatePosition(
+                        anchorBounds: IntRect,
+                        windowSize: IntSize,
+                        layoutDirection: LayoutDirection,
+                        popupContentSize: IntSize,
+                    ): IntOffset = IntOffset.Zero
+                }
+            },
+            onDismissRequest = onDismiss,
+            properties = PopupProperties(focusable = true, dismissOnClickOutside = true, dismissOnBackPress = true),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onDismiss,
+                    ),
+                contentAlignment = Alignment.TopCenter,
+            ) {
+                AnimatedVisibility(
+                    visible = shown,
+                    // Fill the overlay width so the card can use it; AnimatedVisibility otherwise
+                    // wraps to its content, which collapsed the card back to a small size.
+                    modifier = Modifier.fillMaxWidth(),
+                    enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+                    exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
+                ) {
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+                        Surface(
+                            modifier = Modifier
+                                .widthIn(max = 960.dp)
+                                .fillMaxWidth()
+                                .padding(top = 28.dp, start = 24.dp, end = 24.dp)
+                                // Consume clicks on the card so they don't fall through to the dismiss scrim.
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = {},
+                                ),
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            tonalElevation = 8.dp,
+                            shadowElevation = 16.dp,
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                TrailerSheetBody(
+                                    headerType = headerType,
+                                    headerSubtitle = headerSubtitle,
+                                    isLoading = isLoading,
+                                    activeError = activeError,
+                                    playbackSource = playbackSource,
+                                    onClose = onDismiss,
+                                    onRetry = onRetry,
+                                    onPlayerError = { playerError = it },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return
+    }
+
+    // Mobile: bottom sheet (slides up from the bottom).
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val coroutineScope = rememberCoroutineScope()
     val dismissSheet: () -> Unit = {
         coroutineScope.launch {
             dismissNuvioBottomSheet(sheetState = sheetState, onDismiss = onDismiss)
@@ -93,97 +193,122 @@ fun TrailerPlayerPopup(
                 .padding(bottom = nuvioSafeBottomPadding(14.dp)),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            TrailerSheetBody(
+                headerType = headerType,
+                headerSubtitle = headerSubtitle,
+                isLoading = isLoading,
+                activeError = activeError,
+                playbackSource = playbackSource,
+                onClose = dismissSheet,
+                onRetry = onRetry,
+                onPlayerError = { playerError = it },
+            )
+        }
+    }
+}
+
+@Composable
+private fun TrailerSheetBody(
+    headerType: String,
+    headerSubtitle: String,
+    isLoading: Boolean,
+    activeError: String?,
+    playbackSource: TrailerPlaybackSource?,
+    onClose: () -> Unit,
+    onRetry: (() -> Unit)?,
+    onPlayerError: (String?) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = headerType,
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (headerSubtitle.isNotBlank()) {
+                Text(
+                    text = headerSubtitle,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        IconButton(onClick = onClose) {
+            Icon(
+                imageVector = Icons.Rounded.Close,
+                contentDescription = stringResource(Res.string.trailer_close),
+                tint = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+
+    NuvioBottomSheetDivider()
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.scrim)
+            .aspectRatio(16f / 9f),
+        contentAlignment = Alignment.Center,
+    ) {
+        when {
+            isLoading -> {
+                NuvioLoadingIndicator(color = MaterialTheme.colorScheme.primary)
+            }
+
+            activeError != null -> {
                 Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        text = headerType,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                        text = stringResource(Res.string.trailer_unable_to_play),
+                        style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 2,
+                    )
+                    Text(
+                        text = activeError,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (headerSubtitle.isNotBlank()) {
-                        Text(
-                            text = headerSubtitle,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                    if (onRetry != null) {
+                        TextButton(onClick = onRetry) {
+                            Text(stringResource(Res.string.action_retry))
+                        }
                     }
-                }
-
-                IconButton(onClick = dismissSheet) {
-                    Icon(
-                        imageVector = Icons.Rounded.Close,
-                        contentDescription = stringResource(Res.string.trailer_close),
-                        tint = MaterialTheme.colorScheme.onSurface,
-                    )
                 }
             }
 
-            NuvioBottomSheetDivider()
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(MaterialTheme.colorScheme.scrim)
-                    .aspectRatio(16f / 9f),
-                contentAlignment = Alignment.Center,
-            ) {
-                when {
-                    isLoading -> {
-                        NuvioLoadingIndicator(color = MaterialTheme.colorScheme.primary)
-                    }
-
-                    activeError != null -> {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(
-                                text = stringResource(Res.string.trailer_unable_to_play),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Text(
-                                text = activeError,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            if (onRetry != null) {
-                                TextButton(onClick = onRetry) {
-                                    Text(stringResource(Res.string.action_retry))
-                                }
-                            }
-                        }
-                    }
-
-                    playbackSource != null -> {
-                        PlatformPlayerSurface(
-                            sourceUrl = playbackSource.videoUrl,
-                            sourceAudioUrl = playbackSource.audioUrl,
-                            useYoutubeChunkedPlayback = true,
-                            modifier = Modifier.fillMaxSize(),
-                            playWhenReady = true,
-                            resizeMode = PlayerResizeMode.Fit,
-                            useNativeController = true,
-                            onControllerReady = {},
-                            onSnapshot = {},
-                            onError = { playerError = it },
-                        )
-                    }
-                }
+            playbackSource != null -> {
+                PlatformPlayerSurface(
+                    sourceUrl = playbackSource.videoUrl,
+                    sourceAudioUrl = playbackSource.audioUrl,
+                    useYoutubeChunkedPlayback = true,
+                    // fillMaxSize (not just width): the desktop surface is pure Compose with no
+                    // intrinsic height, so width-only collapses it to zero height (blank video)
+                    // inside this 16:9 box. Mobile's AndroidView/UIKitView filled it anyway.
+                    modifier = Modifier.fillMaxSize(),
+                    playWhenReady = true,
+                    resizeMode = PlayerResizeMode.Fit,
+                    useNativeController = true,
+                    onControllerReady = {},
+                    onSnapshot = {},
+                    onError = onPlayerError,
+                )
             }
         }
     }

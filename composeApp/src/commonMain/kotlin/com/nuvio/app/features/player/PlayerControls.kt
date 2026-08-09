@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeContent
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -34,6 +35,8 @@ import androidx.compose.material.icons.rounded.Replay10
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.VideoLibrary
+import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.VolumeOff
 import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -42,7 +45,11 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,6 +68,7 @@ import com.nuvio.app.core.ui.appIconPainter
 import com.nuvio.app.core.ui.nuvioTypeScale
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
+import kotlin.math.abs
 
 @Composable
 internal fun PlayerControlsShell(
@@ -88,6 +96,10 @@ internal fun PlayerControlsShell(
     onVideoSettingsClick: (() -> Unit)? = null,
     onSourcesClick: (() -> Unit)? = null,
     onEpisodesClick: (() -> Unit)? = null,
+    // Fork (desktop): the volume slider is only rendered when onVolumeChange is non-null,
+    // so touch platforms (which use the vertical drag gesture) leave it out.
+    onVolumeChange: ((Float) -> Unit)? = null,
+    currentVolumeFraction: Float? = null,
     onOpenInExternalPlayer: (() -> Unit)? = null,
     onSubmitIntroClick: (() -> Unit)? = null,
     parentalWarnings: List<ParentalWarning> = emptyList(),
@@ -190,6 +202,8 @@ internal fun PlayerControlsShell(
                     onAudioClick = onAudioClick,
                     onSourcesClick = onSourcesClick,
                     onEpisodesClick = onEpisodesClick,
+                    onVolumeChange = onVolumeChange,
+                    currentVolumeFraction = currentVolumeFraction ?: 1.0f,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
@@ -482,6 +496,57 @@ private fun PlayPauseControlButton(
     }
 }
 
+// Fork (desktop): mouse-driven volume control shown next to the action pills.
+@Composable
+private fun VolumeSlider(
+    volumeFraction: Float,
+    onVolumeChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // The external fraction only refreshes with the playback snapshot poll, so following it
+    // mid-drag makes the thumb rubber-band toward stale values. Track the drag locally and
+    // hand back to the external value once it has caught up.
+    var dragFraction by remember { mutableStateOf<Float?>(null) }
+    LaunchedEffect(volumeFraction, dragFraction) {
+        val drag = dragFraction
+        if (drag != null && abs(volumeFraction - drag) < 0.02f) {
+            dragFraction = null
+        }
+    }
+    val displayedFraction = dragFraction ?: volumeFraction
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color.Black.copy(alpha = 0.5f))
+            .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(24.dp))
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .width(120.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            imageVector = if (displayedFraction <= 0f) Icons.Rounded.VolumeOff else Icons.Rounded.VolumeUp,
+            contentDescription = "Volume",
+            tint = Color.White,
+            modifier = Modifier.size(20.dp),
+        )
+        Slider(
+            value = displayedFraction,
+            onValueChange = { fraction ->
+                dragFraction = fraction
+                onVolumeChange(fraction)
+            },
+            valueRange = 0f..1f,
+            modifier = Modifier.height(24.dp),
+            colors = SliderDefaults.colors(
+                thumbColor = Color.White,
+                activeTrackColor = Color.White,
+                inactiveTrackColor = Color.White.copy(alpha = 0.3f),
+            ),
+        )
+    }
+}
+
 @Composable
 private fun ProgressControls(
     playbackSnapshot: PlayerPlaybackSnapshot,
@@ -496,6 +561,8 @@ private fun ProgressControls(
     onAudioClick: () -> Unit,
     onSourcesClick: (() -> Unit)? = null,
     onEpisodesClick: (() -> Unit)? = null,
+    onVolumeChange: ((Float) -> Unit)? = null,
+    currentVolumeFraction: Float = 1.0f,
     modifier: Modifier = Modifier,
 ) {
     val durationMs = playbackSnapshot.durationMs.coerceAtLeast(1L)
@@ -528,7 +595,27 @@ private fun ProgressControls(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
+            // Fork (desktop): a real volume control. Touch platforms drag vertically instead
+            // and pass onVolumeChange = null, which leaves this out entirely.
+            if (onVolumeChange != null) {
+                Surface(
+                    color = Color.Black.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(24.dp),
+                    modifier = Modifier.border(
+                        width = 1.dp,
+                        color = Color.White.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(24.dp),
+                    ),
+                ) {
+                    VolumeSlider(
+                        volumeFraction = currentVolumeFraction,
+                        onVolumeChange = onVolumeChange,
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+            }
             Surface(
                 color = Color.Black.copy(alpha = 0.5f),
                 shape = RoundedCornerShape(24.dp),

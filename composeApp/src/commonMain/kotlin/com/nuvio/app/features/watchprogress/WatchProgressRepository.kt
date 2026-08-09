@@ -54,6 +54,12 @@ private const val WATCH_PROGRESS_DELTA_PAGE_SIZE = 900
 private const val WATCH_PROGRESS_DELTA_OPERATION_UPSERT = "upsert"
 private const val WATCH_PROGRESS_DELTA_OPERATION_DELETE = "delete"
 
+// Regression-guard tuning: a save is treated as a startup/reload transient (and skipped) only
+// when the reported position is below NearZero while the stored position is at least
+// MinCollapse further along. Genuine backward seeks land outside this window and still save.
+private const val RegressionGuardNearZeroMs = 30_000L
+private const val RegressionGuardMinCollapseMs = 120_000L
+
 private data class RemoteMetadataResolutionResult(
     val key: WatchProgressMetadataKey,
     val entries: List<WatchProgressEntry>,
@@ -1198,7 +1204,6 @@ object WatchProgressRepository {
         if (!isCompleted && !shouldStoreWatchProgress(positionMs = positionMs, durationMs = durationMs)) {
             return
         }
-
         val progressProvider = activeProgressProvider()
         val effectiveParentMetaId = progressProvider?.normalizeParentContentId(
             parentContentId = session.parentMetaId,
@@ -1242,7 +1247,23 @@ object WatchProgressRepository {
             return
         }
 
-        val entry = localEntriesSnapshot().resolveIdentityForUpsert(candidateEntry)
+        // Fork: suppress only a collapse to near-zero from substantial progress. VLCJ briefly
+        // reports ~0 while it seeks to the :start-time offset on a (re)loaded session (e.g.
+        // after a stream-URL token rotation), and the first periodic save can capture it. A
+        // blanket "never go backward" guard would break genuine rewinds and rewatches.
+        val localEntries = localEntriesSnapshot()
+        if (!isCompleted) {
+            val existing = localEntries.firstOrNull { it.videoId == session.videoId }
+            if (existing != null &&
+                !existing.isCompleted &&
+                positionMs < RegressionGuardNearZeroMs &&
+                existing.lastPositionMs - positionMs >= RegressionGuardMinCollapseMs
+            ) {
+                return
+            }
+        }
+
+        val entry = localEntries.resolveIdentityForUpsert(candidateEntry)
 
         if (entry.parentMetaType.equals("series", ignoreCase = true)) {
             ContinueWatchingPreferencesRepository.removeDismissedNextUpKeysForContent(entry.parentMetaId)

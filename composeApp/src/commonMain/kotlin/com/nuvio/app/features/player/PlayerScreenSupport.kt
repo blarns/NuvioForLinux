@@ -8,6 +8,8 @@ internal const val PlaybackProgressPersistIntervalMs = 60_000L
 internal const val PlayerDoubleTapSeekStepMs = 10_000L
 internal const val PlayerDoubleTapSeekResetDelayMs = 800L
 internal const val PlayerLockedOverlayDurationMs = 2_000L
+// Fork (desktop): idle time after the last mouse move before the controls auto-hide.
+internal const val PlayerMouseHideDelayMs = 3_000L
 internal const val PlayerLeftGestureBoundary = 0.4f
 internal const val PlayerRightGestureBoundary = 0.6f
 internal const val PlayerVerticalGestureSensitivity = 0.65f

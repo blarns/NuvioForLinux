@@ -71,6 +71,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import coil3.compose.AsyncImagePainter
 import com.nuvio.app.core.ui.NuvioTokens
 import com.nuvio.app.core.ui.nuvio
 import com.nuvio.app.isIos
@@ -609,6 +610,10 @@ private fun PopupProfileBubble(
     val avatarImageUrl = remember(profile.avatarUrl, avatarItem) {
         profileAvatarImageUrl(profile, avatarItem)
     }
+    // Fork: fall back to the initial-letter tile when the avatar image fails to load,
+    // not just when there is no URL.
+    var avatarImageFailed by remember(avatarImageUrl) { mutableStateOf(false) }
+    val showAvatarImage = avatarImageUrl != null && !avatarImageFailed
 
     // Per-item entrance animation
     val itemAlpha = remember { Animatable(0f) }
@@ -664,7 +669,7 @@ private fun PopupProfileBubble(
                     .size(48.dp)
                     .clip(tokens.shapes.avatar)
                     .background(
-                        if (avatarImageUrl != null) {
+                        if (showAvatarImage) {
                             avatarItem?.bgColor?.let { parseHexColor(it) } ?: avatarColor
                         } else {
                             avatarColor.copy(alpha = 0.15f)
@@ -682,7 +687,7 @@ private fun PopupProfileBubble(
                                 avatarColor.copy(alpha = 0.6f),
                                 tokens.shapes.avatar,
                             )
-                            avatarImageUrl == null -> Modifier.border(
+                            !showAvatarImage -> Modifier.border(
                                 tokens.borders.thin + NuvioTokens.Space.hairline,
                                 avatarColor.copy(alpha = 0.3f),
                                 tokens.shapes.avatar,
@@ -692,12 +697,15 @@ private fun PopupProfileBubble(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                if (avatarImageUrl != null) {
+                if (showAvatarImage) {
                     AsyncImage(
                         model = avatarImageUrl,
                         contentDescription = profile.name,
                         modifier = Modifier.size(48.dp).clip(tokens.shapes.avatar),
                         contentScale = ContentScale.Crop,
+                        onState = { state ->
+                            if (state is AsyncImagePainter.State.Error) avatarImageFailed = true
+                        },
                     )
                 } else if (profile.name.isNotBlank()) {
                     Text(
@@ -987,6 +995,10 @@ fun ActiveProfileMiniAvatar(
     val avatarImageUrl = remember(profile.avatarUrl, avatarItem) {
         profileAvatarImageUrl(profile, avatarItem)
     }
+    // Fork: fall back to the initial-letter tile when the avatar image fails to load,
+    // not just when there is no URL.
+    var avatarImageFailed by remember(avatarImageUrl) { mutableStateOf(false) }
+    val showAvatarImage = avatarImageUrl != null && !avatarImageFailed
 
     val borderColor = if (selected) {
         tokens.colors.borderSelected
@@ -999,7 +1011,7 @@ fun ActiveProfileMiniAvatar(
             .size(size.dp)
             .clip(tokens.shapes.avatar)
             .background(
-                if (avatarImageUrl != null) {
+                if (showAvatarImage) {
                     avatarItem?.bgColor?.let { parseHexColor(it) } ?: avatarColor
                 } else {
                     avatarColor.copy(alpha = 0.15f)
@@ -1008,12 +1020,15 @@ fun ActiveProfileMiniAvatar(
             .border(tokens.borders.thin + NuvioTokens.Space.hairline, borderColor, tokens.shapes.avatar),
         contentAlignment = Alignment.Center,
     ) {
-        if (avatarImageUrl != null) {
+        if (showAvatarImage) {
             AsyncImage(
                 model = avatarImageUrl,
                 contentDescription = profile.name,
                 modifier = Modifier.size(size.dp).clip(tokens.shapes.avatar),
                 contentScale = ContentScale.Crop,
+                onState = { state ->
+                    if (state is AsyncImagePainter.State.Error) avatarImageFailed = true
+                },
             )
         } else if (profile.name.isNotBlank()) {
             Text(

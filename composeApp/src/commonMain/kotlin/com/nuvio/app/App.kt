@@ -173,6 +173,7 @@ import com.nuvio.app.features.notifications.EpisodeReleaseNotificationsRepositor
 import com.nuvio.app.features.p2p.P2pConsentDialog
 import com.nuvio.app.features.p2p.P2pSettingsRepository
 import com.nuvio.app.features.player.PlayerLaunch
+import com.nuvio.app.features.player.ExternalOpenRequestStore
 import com.nuvio.app.features.player.PlayerLaunchStore
 import com.nuvio.app.features.player.PlayerScreen
 import com.nuvio.app.features.player.PlayerPlaybackSnapshot
@@ -1208,6 +1209,37 @@ private fun MainAppContent(
     var resumePromptItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }
     var lastExternalPlayerLaunch by remember { mutableStateOf<PlayerLaunch?>(null) }
     val activePlaybackProfileId = profileState.activeProfile?.profileIndex ?: ProfileRepository.activeProfileId
+
+    // Fork (desktop): open a URL/magnet passed on launch (CLI or browser handoff) once a
+    // profile is active. Main.kt stashes it before Compose starts; nothing else reads it.
+    LaunchedEffect(profileState.activeProfile?.profileIndex) {
+        if (profileState.activeProfile == null) return@LaunchedEffect
+        val request = ExternalOpenRequestStore.consume() ?: return@LaunchedEffect
+        when (request.kind) {
+            ExternalOpenRequestStore.Kind.HTTP -> {
+                val playerLaunch = PlayerLaunch(
+                    profileId = activePlaybackProfileId,
+                    title = request.title,
+                    sourceUrl = request.url,
+                    streamTitle = request.title,
+                    providerName = "External link",
+                    parentMetaId = request.url,
+                    parentMetaType = "movie",
+                    contentType = "movie",
+                    videoId = request.url,
+                )
+                val launchId = PlayerLaunchStore.put(playerLaunch)
+                navController.navigate(PlayerRoute(launchId = launchId))
+            }
+            ExternalOpenRequestStore.Kind.MAGNET -> {
+                // P2P playback of ad-hoc magnets isn't wired up here yet; point the user at
+                // the experimental P2P streaming feature.
+                NuvioToastController.show(
+                    "Magnet links need experimental P2P streaming — enable it in Settings, then open the magnet from an addon.",
+                )
+            }
+        }
+    }
     val launchExternalPlayer = rememberExternalPlayerLauncher { result ->
         if (result != null && result.positionMs > 0L) {
             coroutineScope.launch {
