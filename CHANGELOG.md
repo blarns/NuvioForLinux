@@ -26,6 +26,24 @@ that had accumulated since the fork diverged.
   addon URL in place, cloud audio playback for debrid providers, and collection hover-to-focus.
 - Six upstream issue-triage bots that the rebase introduced are removed. They would have run
   against this fork's issue tracker once merged to the default branch.
+- Mouse-wheel horizontal scrolling and the floating scroll arrows on card rows, which had lost
+  every call site — mouse users could not scroll any row.
+- The player controls were dead again: the session-reset effect cleared the controller on the
+  first composition.
+- The volume slider in the player controls, which had been removed entirely.
+- Mouse-idle control hiding, the surface tap suppression it pairs with, and right-click context
+  menus on posters, episodes, seasons and Continue Watching.
+- Quitting mid-playback no longer loses the position — the shutdown flush had no caller.
+- Watch progress could be overwritten with ~0 when VLCJ reported a transient position during a
+  resume seek.
+- Profile avatars fall back to the initial-letter tile when an image fails to load, and the
+  avatar catalog is read anonymously when the session read fails.
+- Signing in on desktop persists again: the Supabase client was not installing the desktop
+  session manager.
+- URLs and magnet links passed on the command line (or handed off by the browser) are opened
+  again; nothing was reading them.
+- Plugins that declare `jvm` or `linux` rather than `desktop` are recognised again.
+- The trailer overlay is a top-anchored card on desktop again, not a small bottom sheet.
 
 ## [0.2.3] — 2026-08-05
 
