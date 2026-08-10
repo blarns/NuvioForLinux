@@ -36,6 +36,7 @@ data class AppUpdate(
     val assetName: String,
     val assetUrl: String,
     val assetSizeBytes: Long?,
+    val isPrerelease: Boolean = false,
 )
 
 data class AppUpdaterUiState(
@@ -118,7 +119,10 @@ private object VersionUtils {
 }
 
 private object AppUpdaterRepository {
-    suspend fun getLatestChannelUpdate(): Result<AppUpdate> = runCatching {
+    // allowPrerelease is the fork's experimental (alpha) channel opt-in. With it off — the
+    // default — a GitHub pre-release is skipped entirely, so alphas never reach people running
+    // a stable build.
+    suspend fun getLatestChannelUpdate(allowPrerelease: Boolean): Result<AppUpdate> = runCatching {
         val response = httpRequestRaw(
             method = "GET",
             url = "$gitHubApiBase/repos/$gitHubOwner/$gitHubRepo/releases?per_page=20",
@@ -133,8 +137,9 @@ private object AppUpdaterRepository {
         }
 
         val releases = appUpdaterJson.decodeFromString<List<GitHubReleaseDto>>(response.body)
-        val release = releases.firstOrNull { it.matchesRequestedChannel() && !it.draft && !it.prerelease }
-            ?: throw NoChannelReleaseException()
+        val release = releases.firstOrNull {
+            it.matchesRequestedChannel() && !it.draft && (allowPrerelease || !it.prerelease)
+        } ?: throw NoChannelReleaseException()
 
         val tag = release.tagName?.takeIf { it.isNotBlank() }
             ?: release.name?.takeIf { it.isNotBlank() }
@@ -151,6 +156,7 @@ private object AppUpdaterRepository {
             assetName = asset.name,
             assetUrl = asset.browserDownloadUrl,
             assetSizeBytes = asset.size,
+            isPrerelease = release.prerelease,
         )
     }
 
@@ -229,7 +235,10 @@ class AppUpdaterController internal constructor(
             }
 
             val ignoredTag = AppUpdaterPlatform.getIgnoredTag()
-            val result = AppUpdaterRepository.getLatestChannelUpdate()
+            val result = AppUpdaterRepository.getLatestChannelUpdate(
+                allowPrerelease = AppUpdaterPlatform.supportsExperimentalChannel &&
+                    AppUpdaterPlatform.getExperimentalUpdatesEnabled(),
+            )
 
             result.onSuccess { update ->
                 val remoteNewer = VersionUtils.isRemoteNewer(update.tag, AppVersionConfig.VERSION_NAME)

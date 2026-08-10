@@ -6,11 +6,22 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [0.3.0] — unreleased
+## [0.3.0] — 2026-08-10 (alpha)
 
 The 1:1 upstream port: this fork's Linux desktop layer rebased onto current
 [NuvioMobile](https://github.com/NuvioMedia/NuvioMobile), replacing the re-derived shared code
 that had accumulated since the fork diverged.
+
+**Shipped as an alpha.** The rebase silently dropped fork-only code four separate times, and
+each round was found only after the previous one was believed complete, so this release is
+published as a GitHub pre-release: if you are on 0.2.2 or 0.2.3 the in-app updater will not
+offer it to you and nothing changes. To take it, either download it from the Releases page or
+turn on **Settings → About → Experimental updates** and check for updates.
+
+### Added
+- **Experimental updates** (Settings → About). Off by default. With it on, the in-app updater
+  also offers pre-release (alpha) builds; with it off, pre-releases are skipped entirely so a
+  stable install is never moved onto an alpha.
 
 ### Changed
 - The shared (non-desktop) code is now upstream's, rather than this fork's re-derivation of it.

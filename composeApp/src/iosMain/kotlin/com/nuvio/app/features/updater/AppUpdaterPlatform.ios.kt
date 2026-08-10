@@ -15,6 +15,12 @@ actual object AppUpdaterPlatform {
 
     actual fun setIgnoredTag(tag: String?) = Unit
 
+    actual val supportsExperimentalChannel: Boolean = false
+
+    actual fun getExperimentalUpdatesEnabled(): Boolean = false
+
+    actual fun setExperimentalUpdatesEnabled(enabled: Boolean) = Unit
+
     actual suspend fun downloadApk(
         assetUrl: String,
         assetName: String,

@@ -31,6 +31,15 @@ actual object AppUpdaterPlatform {
         }
     }
 
+    actual val supportsExperimentalChannel: Boolean = true
+
+    actual fun getExperimentalUpdatesEnabled(): Boolean =
+        store.getBoolean("experimental_updates") ?: false
+
+    actual fun setExperimentalUpdatesEnabled(enabled: Boolean) {
+        store.putBoolean("experimental_updates", enabled)
+    }
+
     actual suspend fun downloadApk(
         assetUrl: String,
         assetName: String,
