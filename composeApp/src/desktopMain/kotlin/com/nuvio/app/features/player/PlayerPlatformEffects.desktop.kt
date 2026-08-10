@@ -10,7 +10,11 @@ actual fun LockPlayerToLandscape() {}
 actual fun EnterImmersivePlayerMode(keepScreenAwake: Boolean) {}
 
 @Composable
-actual fun ManagePlayerPictureInPicture(isPlaying: Boolean, playerSize: IntSize) {}
+actual fun ManagePlayerPictureInPicture(isPlaying: Boolean, videoSize: IntSize) {}
 
 @Composable
 actual fun rememberPlayerGestureController(): PlayerGestureController? = null
+
+// No picture-in-picture on the Linux desktop build.
+@Composable
+actual fun rememberIsInPictureInPicture(): Boolean = false

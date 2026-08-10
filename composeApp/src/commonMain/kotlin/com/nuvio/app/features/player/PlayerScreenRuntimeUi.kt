@@ -13,6 +13,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import com.nuvio.app.features.p2p.P2pStreamingState
 import com.nuvio.app.features.p2p.formatP2pMegabytes
 import com.nuvio.app.features.p2p.formatP2pSpeed
+import com.nuvio.app.isDesktop
 import com.nuvio.app.isIos
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.*
@@ -20,10 +21,12 @@ import nuvio.composeapp.generated.resources.*
 @Composable
 internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
     val runtime = this
+    val isInPip = rememberIsInPictureInPicture()
     val displayedPositionMs = scrubbingPositionMs ?: playbackSnapshot.positionMs
     val isEpisode = activeSeasonNumber != null && activeEpisodeNumber != null
     val currentGestureFeedback = liveGestureFeedback ?: gestureFeedback
     val isP2pPlaybackActive = activeTorrentInfoHash != null
+    val p2pConnecting = p2pStreamingState as? P2pStreamingState.Connecting
     val p2pStats = p2pStreamingState as? P2pStreamingState.Streaming
     val p2pPeerInfo = p2pStats?.let { stats ->
         org.jetbrains.compose.resources.stringResource(
@@ -33,20 +36,35 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         )
     }
     val p2pDownloadSpeed = p2pStats?.let { formatP2pSpeed(it.downloadSpeed) }
+    val p2pLoadingBytes = p2pStats?.let { maxOf(it.downloadedBytes, it.deliveredBytes) } ?: 0L
+    val connectingPeerInfo = p2pConnecting?.let { state ->
+        org.jetbrains.compose.resources.stringResource(
+            nuvio.composeapp.generated.resources.Res.string.player_torrent_peer_info,
+            state.seeds,
+            state.peers,
+        )
+    }
     val p2pInitialLoadingMessage = when {
         !isP2pPlaybackActive || initialLoadCompleted -> null
-        p2pStreamingState is P2pStreamingState.Connecting -> {
-            org.jetbrains.compose.resources.stringResource(
-                nuvio.composeapp.generated.resources.Res.string.player_torrent_connecting_peers,
-            )
+        p2pConnecting != null -> {
+            if (p2pSettingsUiState.hideTorrentStats) {
+                p2pConnectingPhaseLabel(p2pConnecting.phase)
+            } else {
+                org.jetbrains.compose.resources.stringResource(
+                    nuvio.composeapp.generated.resources.Res.string.player_torrent_connecting_status,
+                    p2pConnectingPhaseLabel(p2pConnecting.phase),
+                    connectingPeerInfo.orEmpty(),
+                    formatP2pSpeed(p2pConnecting.downloadSpeed),
+                )
+            }
         }
         p2pStats != null -> {
             if (p2pSettingsUiState.hideTorrentStats) {
                 null
             } else {
                 org.jetbrains.compose.resources.stringResource(
-                    nuvio.composeapp.generated.resources.Res.string.player_torrent_buffered_status,
-                    formatP2pMegabytes(p2pStats.preloadedBytes),
+                    nuvio.composeapp.generated.resources.Res.string.player_torrent_loading_status,
+                    formatP2pMegabytes(p2pLoadingBytes),
                     p2pPeerInfo.orEmpty(),
                     p2pDownloadSpeed.orEmpty(),
                 )
@@ -56,9 +74,15 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
             nuvio.composeapp.generated.resources.Res.string.player_torrent_starting_engine,
         )
     }
+    val bufferedAheadMs = (playbackSnapshot.bufferedPositionMs - playbackSnapshot.positionMs)
+        .coerceAtLeast(0L)
     val p2pInitialLoadingProgress = when {
         !isP2pPlaybackActive || initialLoadCompleted || p2pStats == null -> null
-        else -> (p2pStats.preloadedBytes.toFloat() / P2pInitialPreloadTargetBytes.toFloat()).coerceIn(0f, 1f)
+        else -> p2pInitialLoadingProgress(
+            bufferedAheadMs = bufferedAheadMs,
+            downloadedBytes = p2pStats.downloadedBytes,
+            deliveredBytes = p2pStats.deliveredBytes,
+        )
     }
     val showP2pRebufferStats = isP2pPlaybackActive &&
         initialLoadCompleted &&
@@ -107,6 +131,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                 layoutSize = layoutSize,
                 sideGestureSystemEdgeExclusionPx = sideGestureSystemEdgeExclusionPx,
                 playerControlsLockedState = gestureCallbacks.playerControlsLocked,
+                touchGesturesEnabledState = gestureCallbacks.touchGesturesEnabled,
                 isHoldToSpeedGestureActiveState = gestureCallbacks.isHoldToSpeedGestureActive,
                 currentPositionMsState = gestureCallbacks.currentPositionMs,
                 currentDurationMsState = gestureCallbacks.currentDurationMs,
@@ -120,19 +145,25 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
             ),
     ) {
         val playerSurfaceSourceUrl = if (isP2pPlaybackActive) p2pResolvedSourceUrl else activeSourceUrl
+        val initialPositionRequestKey = currentInitialPositionRequestKey()
         if (playerSurfaceSourceUrl != null) {
             PlatformPlayerSurface(
                 sourceUrl = playerSurfaceSourceUrl,
                 sourceAudioUrl = activeSourceAudioUrl,
                 sourceHeaders = activeSourceHeaders,
                 sourceResponseHeaders = activeSourceResponseHeaders,
+                externalSubtitles = externalSubtitles,
+                streamType = activeStreamType,
                 modifier = Modifier.fillMaxSize(),
                 playWhenReady = shouldPlay,
+                initialPositionMs = activeInitialPositionMs.takeIf { it > 0L },
+                initialPositionRequestKey = initialPositionRequestKey,
                 resizeMode = resizeMode,
-                // Fork: VLCJ resumes via the :start-time media option (seekTo right after
-                // play() silently no-ops before libVLC parses the media — the 0.1.8 fix).
-                // The runtime's initial-seek effect still runs as the generic fallback.
-                startPositionMs = activeInitialPositionMs,
+                onInitialPositionHandled = { key, handled ->
+                    if (key == currentInitialPositionRequestKey()) {
+                        initialSeekApplied = handled
+                    }
+                },
                 onControllerReady = { controller ->
                     playerController = controller
                     playerControllerSourceUrl = activeSourceUrl
@@ -194,9 +225,28 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
 }
 
 @Composable
+private fun p2pConnectingPhaseLabel(phase: String): String = when (phase) {
+    "add_magnet" -> org.jetbrains.compose.resources.stringResource(
+        nuvio.composeapp.generated.resources.Res.string.player_torrent_fetching_metadata,
+    )
+    "prepare_stream", "attach_route" -> org.jetbrains.compose.resources.stringResource(
+        nuvio.composeapp.generated.resources.Res.string.player_torrent_preparing_stream,
+    )
+    else -> org.jetbrains.compose.resources.stringResource(
+        nuvio.composeapp.generated.resources.Res.string.player_torrent_starting_engine,
+    )
+}
+
+private fun PlayerScreenRuntime.currentInitialPositionRequestKey(): String? {
+    val positionMs = activeInitialPositionMs.takeIf { it > 0L } ?: return null
+    return "$activePlaybackIdentity:${activeVideoId.orEmpty()}:$positionMs"
+}
+
+@Composable
 private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long, isEpisode: Boolean) {
+    val isInPip = rememberIsInPictureInPicture()
     AnimatedVisibility(
-        visible = (controlsVisible || showParentalGuide) && !playerControlsLocked,
+        visible = (controlsVisible || showParentalGuide) && !playerControlsLocked && !isInPip,
         enter = fadeIn(),
         exit = fadeOut(),
     ) {
@@ -209,8 +259,14 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long, 
             episodeTitle = activeEpisodeTitle,
             playbackSnapshot = playbackSnapshot,
             displayedPositionMs = displayedPositionMs,
-            // Fork: desktop volume slider in the controls pill row.
-            currentVolumeFraction = playerController?.currentVolume()?.fraction,
+            // Fork: desktop volume slider in the controls pill row. Touch platforms use the
+            // vertical drag gesture instead and leave both of these null.
+            currentVolumeFraction = if (isDesktop) playerController?.currentVolume()?.fraction else null,
+            onVolumeChange = if (isDesktop) {
+                { volumeFraction: Float -> playerController?.setVolume(volumeFraction) }
+            } else {
+                null
+            },
             metrics = metrics,
             resizeMode = resizeMode,
             isLocked = playerControlsLocked,
@@ -267,6 +323,9 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long, 
                             sourceHeaders = activeSourceHeaders,
                             resumePositionMs = playbackSnapshot.positionMs,
                             subtitles = loadedSubtitles,
+                            season = activeSeasonNumber,
+                            episode = activeEpisodeNumber,
+                            episodeTitle = activeEpisodeTitle,
                         ),
                     )
                 }
@@ -292,10 +351,6 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long, 
                 scrubbingPositionMs = null
                 playerController?.seekTo(positionMs)
                 scheduleProgressSyncAfterSeek()
-            },
-            // Fork: desktop volume slider — PlayerControls only shows it when non-null.
-            onVolumeChange = { volumeFraction ->
-                playerController?.setVolume(volumeFraction)
             },
             horizontalSafePadding = horizontalSafePadding,
             modifier = Modifier.fillMaxSize(),
@@ -344,7 +399,10 @@ private fun BoxScope.RenderPlaybackOverlays(
         skipIntervalDismissed = skipIntervalDismissed,
         controlsVisible = controlsVisible,
         onSkipInterval = { interval ->
-            playerController?.seekTo((interval.endTime * 1000).toLong())
+            val rawMs = (interval.endTime * 1000.0).toLong()
+            val durationMs = playbackSnapshot.durationMs
+            val seekMs = if (durationMs > 0L) rawMs.coerceAtMost(durationMs - 1) else rawMs
+            playerController?.seekTo(seekMs)
             scheduleProgressSyncAfterSeek()
             skipIntervalDismissed = true
         },
@@ -403,7 +461,6 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
         },
         onAudioModalDismissed = { showAudioModal = false },
         showSubtitleModal = showSubtitleModal,
-        activeSubtitleTab = activeSubtitleTab,
         subtitleTracks = subtitleTracks,
         selectedSubtitleIndex = selectedSubtitleIndex,
         addonSubtitles = visibleAddonSubtitles,
@@ -413,7 +470,6 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
         subtitleDelayMs = subtitleDelayMs,
         selectedAddonSubtitle = selectedAddonSubtitle,
         subtitleAutoSyncState = subtitleAutoSyncState,
-        onSubtitleTabSelected = { activeSubtitleTab = it },
         onBuiltInSubtitleTrackSelected = { index ->
             val wasCustom = useCustomSubtitles
             selectedSubtitleIndex = index
@@ -449,6 +505,8 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
         onVideoSettingsModalDismissed = { showVideoSettingsModal = false },
         showSourcesPanel = showSourcesPanel,
         sourceStreamsState = sourceStreamsState,
+        contentTitle = title,
+        activeEpisodeTitle = activeEpisodeTitle,
         activeSourceUrl = activeSourceUrl,
         activeStreamTitle = activeStreamTitle,
         onSourceFilterSelected = PlayerStreamsRepository::selectSourceFilter,
@@ -476,7 +534,7 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
         parentMetaId = parentMetaId,
         activeSeasonNumber = activeSeasonNumber,
         activeEpisodeNumber = activeEpisodeNumber,
-        watchProgressByVideoId = watchProgressUiState.byVideoId,
+        watchProgressByVideoId = watchProgressUiState.byVideoIdForContent(parentMetaId),
         watchedKeys = watchedUiState.watchedKeys,
         blurUnwatchedEpisodes = metaScreenSettingsUiState.blurUnwatchedEpisodes,
         episodeStreamsPanelState = episodeStreamsPanelState,

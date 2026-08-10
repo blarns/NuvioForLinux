@@ -1,6 +1,11 @@
 package com.nuvio.app.features.trakt
 
+import com.nuvio.app.core.auth.AuthRepository
+import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.features.library.LibrarySourceMode
+import com.nuvio.app.features.profiles.ProfileRepository
+import com.nuvio.app.features.simkl.DEFAULT_SIMKL_ANIME_ID_PREFERENCE
+import com.nuvio.app.features.simkl.SimklAnimeIdPreference
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -8,6 +13,16 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+
+typealias WatchProgressSource = com.nuvio.app.features.tracking.WatchProgressSource
+
+val DEFAULT_WATCH_PROGRESS_SOURCE: WatchProgressSource =
+    com.nuvio.app.features.tracking.DEFAULT_WATCH_PROGRESS_SOURCE
+val DEFAULT_LIBRARY_SOURCE_MODE: LibrarySourceMode =
+    com.nuvio.app.features.tracking.DEFAULT_LIBRARY_SOURCE_MODE
+
+fun librarySourceModeFromStorage(value: String?): LibrarySourceMode =
+    com.nuvio.app.features.tracking.librarySourceModeFromStorage(value)
 
 const val TRAKT_CONTINUE_WATCHING_DAYS_CAP_ALL = 0
 const val TRAKT_DEFAULT_CONTINUE_WATCHING_DAYS_CAP = 60
@@ -23,23 +38,6 @@ val TraktContinueWatchingDaysOptions: List<Int> = listOf(
     TRAKT_MAX_CONTINUE_WATCHING_DAYS_CAP,
     TRAKT_CONTINUE_WATCHING_DAYS_CAP_ALL,
 )
-
-@Serializable
-enum class WatchProgressSource {
-    TRAKT,
-    NUVIO_SYNC;
-
-    companion object {
-        fun fromStorage(value: String?): WatchProgressSource =
-            entries.firstOrNull { it.name == value } ?: DEFAULT_WATCH_PROGRESS_SOURCE
-    }
-}
-
-val DEFAULT_WATCH_PROGRESS_SOURCE: WatchProgressSource = WatchProgressSource.TRAKT
-val DEFAULT_LIBRARY_SOURCE_MODE: LibrarySourceMode = LibrarySourceMode.TRAKT
-
-fun librarySourceModeFromStorage(value: String?): LibrarySourceMode =
-    LibrarySourceMode.entries.firstOrNull { it.name == value } ?: DEFAULT_LIBRARY_SOURCE_MODE
 
 @Serializable
 enum class MoreLikeThisSourcePreference {
@@ -59,6 +57,7 @@ data class TraktSettingsUiState(
     val continueWatchingDaysCap: Int = TRAKT_DEFAULT_CONTINUE_WATCHING_DAYS_CAP,
     val librarySourceMode: LibrarySourceMode = DEFAULT_LIBRARY_SOURCE_MODE,
     val moreLikeThisSource: MoreLikeThisSourcePreference = DEFAULT_MORE_LIKE_THIS_SOURCE,
+    val simklAnimeIdPreference: SimklAnimeIdPreference = DEFAULT_SIMKL_ANIME_ID_PREFERENCE,
 )
 
 @Serializable
@@ -67,6 +66,7 @@ private data class StoredTraktSettings(
     val continueWatchingDaysCap: Int = TRAKT_DEFAULT_CONTINUE_WATCHING_DAYS_CAP,
     val librarySourceMode: String? = null,
     val moreLikeThisSource: String? = null,
+    val simklAnimeIdPreference: String? = null,
 )
 
 object TraktSettingsRepository {
@@ -94,11 +94,23 @@ object TraktSettingsRepository {
         _uiState.value = TraktSettingsUiState()
     }
 
-    fun setWatchProgressSource(source: WatchProgressSource) {
+    internal fun setWatchProgressSource(
+        source: WatchProgressSource,
+        profileId: Int = ProfileRepository.activeProfileId,
+    ) {
         ensureLoaded()
         if (_uiState.value.watchProgressSource == source) return
-        _uiState.value = _uiState.value.copy(watchProgressSource = source)
-        persist()
+        val nextState = _uiState.value.copy(watchProgressSource = source)
+        persist(nextState)
+        val authState = AuthRepository.state.value
+        if (authState is AuthState.Authenticated && !authState.isAnonymous) {
+            ProfileSettingsWatchSourceOutbox.record(
+                accountId = authState.userId,
+                profileId = profileId,
+                source = source,
+            )
+        }
+        _uiState.value = nextState
     }
 
     fun setContinueWatchingDaysCap(days: Int) {
@@ -123,6 +135,14 @@ object TraktSettingsRepository {
         persist()
     }
 
+    fun setSimklAnimeIdPreference(preference: SimklAnimeIdPreference) {
+        ensureLoaded()
+        if (_uiState.value.simklAnimeIdPreference == preference) return
+        _uiState.value = _uiState.value.copy(simklAnimeIdPreference = preference)
+        persist()
+        com.nuvio.app.features.simkl.SimklSyncRepository.invalidateProjections()
+    }
+
     private fun loadFromDisk() {
         hasLoaded = true
 
@@ -142,20 +162,22 @@ object TraktSettingsRepository {
                 continueWatchingDaysCap = normalizeTraktContinueWatchingDaysCap(stored.continueWatchingDaysCap),
                 librarySourceMode = librarySourceModeFromStorage(stored.librarySourceMode),
                 moreLikeThisSource = MoreLikeThisSourcePreference.fromStorage(stored.moreLikeThisSource),
+                simklAnimeIdPreference = SimklAnimeIdPreference.fromStorage(stored.simklAnimeIdPreference),
             )
         } else {
             TraktSettingsUiState()
         }
     }
 
-    private fun persist() {
+    private fun persist(state: TraktSettingsUiState = _uiState.value) {
         TraktSettingsStorage.savePayload(
             json.encodeToString(
                 StoredTraktSettings(
-                    watchProgressSource = _uiState.value.watchProgressSource.name,
-                    continueWatchingDaysCap = _uiState.value.continueWatchingDaysCap,
-                    librarySourceMode = _uiState.value.librarySourceMode.name,
-                    moreLikeThisSource = _uiState.value.moreLikeThisSource.name,
+                    watchProgressSource = state.watchProgressSource.name,
+                    continueWatchingDaysCap = state.continueWatchingDaysCap,
+                    librarySourceMode = state.librarySourceMode.name,
+                    moreLikeThisSource = state.moreLikeThisSource.name,
+                    simklAnimeIdPreference = state.simklAnimeIdPreference.name,
                 ),
             ),
         )
@@ -173,6 +195,20 @@ fun shouldUseTraktProgress(
     isAuthenticated: Boolean,
     source: WatchProgressSource,
 ): Boolean = isAuthenticated && source == WatchProgressSource.TRAKT
+
+fun effectiveWatchProgressSource(
+    isTraktAuthenticated: Boolean,
+    requestedSource: WatchProgressSource,
+): WatchProgressSource =
+    if (shouldUseTraktProgress(
+            isAuthenticated = isTraktAuthenticated,
+            source = requestedSource,
+        )
+    ) {
+        WatchProgressSource.TRAKT
+    } else {
+        WatchProgressSource.NUVIO_SYNC
+    }
 
 fun effectiveLibrarySourceMode(
     isAuthenticated: Boolean,

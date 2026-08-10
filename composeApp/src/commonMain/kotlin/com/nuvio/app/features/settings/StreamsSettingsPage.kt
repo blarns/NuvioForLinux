@@ -18,11 +18,10 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.Style
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -118,19 +117,23 @@ internal fun LazyListScope.streamsSettingsContent(isTablet: Boolean) {
                 SettingsNavigationRow(
                     title = stringResource(Res.string.settings_stream_badge_position_title),
                     description = badgePlacementLabel,
-                    icon = Icons.Rounded.Style,
                     isTablet = isTablet,
                     onClick = { showBadgePositionDialog = true },
                 )
                 SettingsNavigationRow(
                     title = stringResource(Res.string.settings_stream_badge_urls_title),
                     description = badgeRulesPreview(currentRules),
-                    icon = Icons.Rounded.Style,
                     isTablet = isTablet,
                     onClick = { showBadgeImportDialog = true },
                 )
             }
         }
+
+        Spacer(
+            modifier = Modifier.height(
+                if (isTablet) NuvioTokens.Space.s18 else MaterialTheme.nuvio.spacing.listGap,
+            ),
+        )
 
         SettingsSection(
             title = stringResource(Res.string.settings_stream_display_section),
@@ -309,8 +312,7 @@ private fun BadgeUrlManagerDialog(
                     },
                 ) {
                     if (isImporting) {
-                        CircularProgressIndicator(
-                            strokeWidth = tokens.borders.medium,
+                        NuvioLoadingIndicator(
                             modifier = Modifier.size(tokens.icons.sm),
                             color = tokens.colors.onAccent,
                         )

@@ -2,6 +2,8 @@ package com.nuvio.app.features.details
 
 import com.nuvio.app.features.watched.WatchedItem
 import com.nuvio.app.features.watched.normalizeWatchedMarkedAtEpochMs
+import com.nuvio.app.features.watched.watchedItemKey
+import com.nuvio.app.features.watching.application.WatchingState
 import com.nuvio.app.features.watchprogress.WatchProgressEntry
 import com.nuvio.app.features.watching.domain.WatchingCompletedEpisode
 import com.nuvio.app.features.watching.domain.WatchingContentRef
@@ -32,7 +34,7 @@ internal fun List<MetaVideo>.filterUnavailableFutureSeasons(
             val firstEpisode = episodes.minWithOrNull(
                 compareBy<MetaVideo>({ it.episode ?: Int.MAX_VALUE }, { it.released.orEmpty() }),
             ) ?: return@filter false
-            !isReleasedBy(todayIsoDate = todayIsoDate, releasedDate = firstEpisode.released)
+            !firstEpisode.isReleasedBy(todayIsoDate)
         }
         .keys
 
@@ -48,7 +50,7 @@ internal fun MetaDetails.firstPlayableEpisode(): MetaVideo? =
 
 internal fun MetaDetails.firstReleasedPlayableEpisode(todayIsoDate: String): MetaVideo? =
     sortedPlayableEpisodes().firstOrNull { video ->
-        isReleasedBy(todayIsoDate = todayIsoDate, releasedDate = video.released)
+        video.isReleasedBy(todayIsoDate)
     }
 
 internal fun MetaDetails.nextReleasedEpisodeAfter(
@@ -122,6 +124,7 @@ internal fun MetaDetails.nextReleasedEpisodeAfter(
                 todayIsoDate = todayIsoDate,
                 releasedDate = episode.released,
                 showUnairedNextUp = showUnairedNextUp,
+                available = episode.available,
             )
         }
     return candidates.firstOrNull { normalizeSeasonNumber(it.season) > 0 }
@@ -143,15 +146,33 @@ internal fun MetaDetails.seriesPrimaryAction(
     todayIsoDate: String,
     preferFurthestEpisode: Boolean = true,
     showUnairedNextUp: Boolean = false,
-): SeriesPrimaryAction? =
-    seriesPrimaryAction(
-        content = WatchingContentRef(type = type, id = id),
+    watchedKeys: Set<String> = emptySet(),
+): SeriesPrimaryAction? {
+    val content = WatchingContentRef(type = type, id = id)
+    val effectiveWatchedItems = buildList {
+        addAll(watchedItems.filter { it.type.equals(type, ignoreCase = true) && it.id.equals(id, ignoreCase = true) })
+        if (watchedKeys.isNotEmpty()) {
+            val existingKeys = mapTo(mutableSetOf()) { watchedItemKey(it.type, it.id, it.season, it.episode) }
+            videos.forEach { video ->
+                val season = video.season ?: return@forEach
+                val episode = video.episode ?: return@forEach
+                val key = watchedItemKey(type, id, season, episode)
+                if (key in existingKeys) return@forEach
+                if (WatchingState.isEpisodeWatched(watchedKeys, type, id, video)) {
+                    add(WatchedItem(id = id, type = type, season = season, episode = episode, name = "", markedAtEpochMs = 0L))
+                }
+            }
+        }
+    }
+    return seriesPrimaryAction(
+        content = content,
         entries = entries,
-        watchedItems = watchedItems,
+        watchedItems = effectiveWatchedItems,
         todayIsoDate = todayIsoDate,
         preferFurthestEpisode = preferFurthestEpisode,
         showUnairedNextUp = showUnairedNextUp,
     )
+}
 
 internal fun MetaDetails.seriesPrimaryAction(
     content: WatchingContentRef,
@@ -169,6 +190,7 @@ internal fun MetaDetails.seriesPrimaryAction(
         todayIsoDate = todayIsoDate,
         preferFurthestEpisode = preferFurthestEpisode,
         showUnairedNextUp = showUnairedNextUp,
+        defaultVideoId = defaultVideoId,
     )?.toLegacySeriesPrimaryAction()
 
 internal fun MetaVideo.playLabel(): String =
@@ -181,7 +203,11 @@ internal fun WatchProgressEntry.resumeLabel(): String =
     resumeLabel(seasonNumber = seasonNumber, episodeNumber = episodeNumber)
 
 internal fun MetaVideo.isReleasedBy(todayIsoDate: String): Boolean =
-    isReleasedBy(todayIsoDate = todayIsoDate, releasedDate = released)
+    isReleasedBy(
+        todayIsoDate = todayIsoDate,
+        releasedDate = released,
+        available = available,
+    )
 
 internal data class CompletedSeriesEpisode(
     val seasonNumber: Int,
@@ -209,6 +235,7 @@ private fun MetaVideo.toDomainReleasedEpisode(): WatchingReleasedEpisode =
         title = title,
         thumbnail = thumbnail,
         releasedDate = released,
+        available = available,
     )
 
 private fun WatchProgressEntry.toDomainProgressRecord(): WatchingProgressRecord =

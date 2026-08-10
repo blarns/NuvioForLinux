@@ -1,5 +1,7 @@
 package com.nuvio.app.features.player
 
+import kotlin.concurrent.Volatile
+
 /**
  * Holds a URL/magnet passed to the app on launch (CLI arg or browser "open with"), so the
  * common UI can pick it up once a profile is active and start playback. Set by the desktop

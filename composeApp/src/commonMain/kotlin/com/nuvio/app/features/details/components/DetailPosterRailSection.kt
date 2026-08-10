@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.nuvio.app.core.ui.nuvioHorizontalScrollBleed
 import com.nuvio.app.core.ui.NuvioShelfSection
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.components.HomePosterCard
@@ -24,8 +25,10 @@ fun DetailPosterRailSection(
     items: List<MetaPreview>,
     watchedKeys: Set<String>,
     modifier: Modifier = Modifier,
+    fullyWatchedSeriesKeys: Set<String> = emptySet(),
     showHeader: Boolean = true,
     headerHorizontalPadding: Dp = 0.dp,
+    horizontalScrollPadding: Dp = 0.dp,
     sourceLabel: String? = null,
     onPosterClick: ((MetaPreview) -> Unit)? = null,
     onPosterLongClick: ((MetaPreview) -> Unit)? = null,
@@ -37,8 +40,10 @@ fun DetailPosterRailSection(
             title = if (showHeader) title else "",
             entries = items,
             headerHorizontalPadding = headerHorizontalPadding,
-            rowContentPadding = PaddingValues(horizontal = headerHorizontalPadding),
-            showHeaderAccent = false,
+            rowContentPadding = PaddingValues(
+                horizontal = headerHorizontalPadding + horizontalScrollPadding,
+            ),
+            rowModifier = Modifier.nuvioHorizontalScrollBleed(horizontalScrollPadding),
             key = { item -> item.stableKey() },
         ) { item ->
             HomePosterCard(
@@ -46,6 +51,7 @@ fun DetailPosterRailSection(
                 isWatched = WatchingState.isPosterWatched(
                     watchedKeys = watchedKeys,
                     item = item,
+                    fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
                 ),
                 onClick = onPosterClick?.let { { it(item) } },
                 onLongClick = onPosterLongClick?.let { { it(item) } },

@@ -48,8 +48,11 @@ actual fun EnterImmersivePlayerMode(keepScreenAwake: Boolean) {
 @Composable
 actual fun ManagePlayerPictureInPicture(
     isPlaying: Boolean,
-    playerSize: IntSize,
+    videoSize: IntSize,
 ) = Unit
+
+@Composable
+actual fun rememberIsInPictureInPicture(): Boolean = false
 
 @Composable
 actual fun rememberPlayerGestureController(): PlayerGestureController? {
@@ -108,3 +111,6 @@ private class IOSPlayerGestureController : PlayerGestureController {
         UIScreen.mainScreen.brightness = originalBrightness
     }
 }
+
+// Touch platforms: surface taps are the primary control gesture.
+actual val suppressSurfaceTapGestures: Boolean = false

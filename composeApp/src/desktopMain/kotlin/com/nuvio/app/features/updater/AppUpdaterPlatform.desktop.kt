@@ -82,4 +82,7 @@ actual object AppUpdaterPlatform {
             .inheritIO()
             .start()
     }
+
+    // Packaged .deb/AppImage builds are always release builds.
+    actual val isDebugBuild: Boolean = false
 }

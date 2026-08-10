@@ -148,6 +148,16 @@ internal actual object DownloadsPlatformDownloader {
         }
         return desktopDownloadHttpClient.send(builder.build(), HttpResponse.BodyHandlers.ofInputStream())
     }
+
+    // Hands the downloads folder to the desktop's file manager.
+    actual fun openDownloadsDirectory(): Boolean = runCatching {
+        val dir = java.io.File(System.getProperty("user.home"), "Downloads/Nuvio").apply { mkdirs() }
+        if (java.awt.Desktop.isDesktopSupported()) {
+            java.awt.Desktop.getDesktop().open(dir); true
+        } else {
+            ProcessBuilder("xdg-open", dir.absolutePath).start(); true
+        }
+    }.getOrDefault(false)
 }
 
 private class DesktopDownloadsTaskHandle(

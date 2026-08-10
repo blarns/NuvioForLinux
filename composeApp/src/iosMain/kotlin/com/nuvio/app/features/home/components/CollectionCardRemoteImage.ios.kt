@@ -70,11 +70,10 @@ internal actual fun CollectionCardRemoteImage(
     modifier: Modifier,
     contentScale: ContentScale,
     animateIfPossible: Boolean,
-    restImageUrl: String?,
-    hoverImageUrl: String?,
-    hovered: Boolean,
+    @Suppress("UNUSED_PARAMETER") restImageUrl: String?,
+    @Suppress("UNUSED_PARAMETER") hoverImageUrl: String?,
+    @Suppress("UNUSED_PARAMETER") hovered: Boolean,
 ) {
-    // restImageUrl / hoverImageUrl / hovered drive desktop's mouse hover-to-focus; iOS keeps its own GIF path.
     if (!animateIfPossible) {
         AsyncImage(
             model = imageUrl,

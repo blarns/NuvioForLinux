@@ -1,7 +1,5 @@
 *.iml
 .kotlin
-# Bundled TorrServer binary (downloaded at build time by :composeApp:fetchTorrServer)
-composeApp/desktop-resources/*/torrserver
 .gradle
 **/build/
 !composeApp/src/**/kotlin/com/nuvio/app/core/build/
@@ -22,6 +20,7 @@ captures
 **/xcshareddata/WorkspaceSettings.xcsettings
 node_modules/
 logs/
+analysis/
 Docs
 keystore/
 scripts/build-distribution.sh
@@ -29,14 +28,7 @@ asset
 scripts/scrape_android_compose_animation_docs.py
 tools
 AGENTS.md
-fix_*.py
-generate-*.py
-generate-*.sh
-files.zip
-files/
-nuvio-latest.zip
-IMPLEMENTATION_COMPLETE.md
-.claude/
+PERFORMANCE_FINDINGS.md
 
-# AppImage packaging build artifacts (downloaded tools, staged JDK/VLC, AppDir, dist) — regenerable
-appimage-build/
+# Local MPVKit iOS build environment (sparse APFS image, see MPVKit docs)
+.mpvkit-build.sparseimage

@@ -4,18 +4,38 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.interop.UIKitViewController
+import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import co.touchlab.kermit.Logger
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.useContents
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.action_play
+import nuvio.composeapp.generated.resources.player_error_mpv_unavailable
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
 
 private const val TAG = "NuvioiOSPlayer"
 
@@ -26,12 +46,16 @@ actual fun PlatformPlayerSurface(
     sourceAudioUrl: String?,
     sourceHeaders: Map<String, String>,
     sourceResponseHeaders: Map<String, String>,
+    externalSubtitles: List<com.nuvio.app.features.streams.StreamSubtitle>,
+    streamType: String?,
     useYoutubeChunkedPlayback: Boolean,
     modifier: Modifier,
     playWhenReady: Boolean,
+    initialPositionMs: Long?,
+    initialPositionRequestKey: String?,
     resizeMode: PlayerResizeMode,
     useNativeController: Boolean,
-    startPositionMs: Long,
+    onInitialPositionHandled: (key: String, handled: Boolean) -> Unit,
     onControllerReady: (PlayerEngineController) -> Unit,
     onSnapshot: (PlayerPlaybackSnapshot) -> Unit,
     onError: (String?) -> Unit,
@@ -40,6 +64,7 @@ actual fun PlatformPlayerSurface(
     val latestOnControllerReady = rememberUpdatedState(onControllerReady)
     val latestOnSnapshot = rememberUpdatedState(onSnapshot)
     val latestOnError = rememberUpdatedState(onError)
+    val density = LocalDensity.current
     PlayerSettingsRepository.ensureLoaded()
     val playerSettings by PlayerSettingsRepository.uiState.collectAsStateWithLifecycle()
     val latestPlayerSettings = rememberUpdatedState(playerSettings)
@@ -50,7 +75,7 @@ actual fun PlatformPlayerSurface(
 
     if (bridge == null) {
         LaunchedEffect(Unit) {
-            latestOnError.value("MPV player engine not available. Please rebuild the app.")
+            latestOnError.value(getString(Res.string.player_error_mpv_unavailable))
         }
         return
     }
@@ -77,12 +102,36 @@ actual fun PlatformPlayerSurface(
                 bridge.retry()
             }
 
+            override fun updateNowPlayingMetadata(info: PlayerNowPlayingInfo) {
+                runCatching {
+                    bridge.updateNowPlayingMetadata(
+                        title = info.title,
+                        subtitle = info.subtitle,
+                        artworkUrl = info.artworkUrl,
+                    )
+                }.onFailure { error ->
+                    Logger.w(TAG, error) { "Failed to update iOS Now Playing metadata" }
+                }
+            }
+
+            override fun clearNowPlayingInfo() {
+                runCatching {
+                    bridge.clearNowPlayingInfo()
+                }.onFailure { error ->
+                    Logger.w(TAG, error) { "Failed to clear iOS Now Playing metadata" }
+                }
+            }
+
             override fun configureIosVideoOutput(settings: PlayerSettingsUiState) {
                 bridge.applyIosVideoOutputSettings(settings)
             }
 
             override fun setPlaybackSpeed(speed: Float) {
                 bridge.setPlaybackSpeed(speed)
+            }
+
+            override fun setMuted(muted: Boolean) {
+                bridge.setMuted(muted)
             }
 
             override fun getAudioTracks(): List<AudioTrack> {
@@ -230,12 +279,13 @@ actual fun PlatformPlayerSurface(
     }
 
     // Load file and set initial state
-    LaunchedEffect(bridge, sourceUrl, sourceAudioUrl, sourceHeaders) {
+    LaunchedEffect(bridge, sourceUrl, sourceAudioUrl, sourceHeaders, externalSubtitles) {
         bridge.applyIosVideoOutputSettings(latestPlayerSettings.value)
         bridge.loadFileWithAudio(
-            sourceUrl,
-            sourceAudioUrl,
-            encodePlaybackHeadersForBridge(sourceHeaders),
+            videoUrl = sourceUrl,
+            audioUrl = sourceAudioUrl,
+            headersJson = encodePlaybackHeadersForBridge(sourceHeaders),
+            subtitlesJson = encodeExternalSubtitlesForBridge(externalSubtitles),
         )
         if (playWhenReady) {
             bridge.play()
@@ -295,14 +345,64 @@ actual fun PlatformPlayerSurface(
     }
 
     // Render the player view
-    UIKitViewController(
-        factory = { bridge.createPlayerViewController() },
-        modifier = modifier,
-        interactive = false,
-    )
+    Box(modifier = modifier) {
+        UIKitViewController(
+            factory = { bridge.createPlayerViewController() },
+            modifier = Modifier
+                .fillMaxSize()
+                .onSizeChanged { size ->
+                    if (size.width > 1 && size.height > 1) {
+                        bridge.syncVideoSurfaceLayout(
+                            width = with(density) { size.width.toDp().value.toDouble() },
+                            height = with(density) { size.height.toDp().value.toDouble() },
+                        )
+                    }
+                },
+            onResize = { viewController, rect ->
+                viewController.view.setFrame(rect)
+                rect.useContents {
+                    bridge.syncVideoSurfaceLayout(
+                        width = size.width,
+                        height = size.height,
+                    )
+                }
+            },
+            interactive = false,
+        )
+        
+        if (useNativeController) {
+            var isPlayingLocal by remember { mutableStateOf(playWhenReady) }
+            
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(if (!isPlayingLocal) Color.Black.copy(alpha = 0.4f) else Color.Transparent)
+                    .clickable {
+                        if (isPlayingLocal) {
+                            bridge.pause()
+                            isPlayingLocal = false
+                        } else {
+                            bridge.play()
+                            isPlayingLocal = true
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                if (!isPlayingLocal) {
+                    Icon(
+                        imageVector = Icons.Rounded.PlayArrow,
+                        contentDescription = stringResource(Res.string.action_play),
+                        tint = Color.White,
+                        modifier = Modifier.size(64.dp)
+                    )
+                }
+            }
+        }
+    }
 }
 
 private fun NuvioPlayerBridge.applyIosVideoOutputSettings(settings: PlayerSettingsUiState) {
+    configureAudioOutput(audioOutput = settings.iosAudioOutputMode.mpvValue)
     configureVideoOutput(
         hardwareDecoder = settings.iosHardwareDecoderMode.mpvValue,
         targetColorspaceHint = settings.iosTargetColorspaceHintEnabled,
@@ -347,6 +447,13 @@ private fun Int.toHexByte(): String {
         append(digits[value / 16])
         append(digits[value % 16])
     }
+}
+
+private fun encodeExternalSubtitlesForBridge(subtitles: List<com.nuvio.app.features.streams.StreamSubtitle>): String? {
+    if (subtitles.isEmpty()) return null
+    return runCatching {
+        Json.encodeToString(subtitles)
+    }.getOrNull()
 }
 
 private fun encodePlaybackHeadersForBridge(headers: Map<String, String>): String? {

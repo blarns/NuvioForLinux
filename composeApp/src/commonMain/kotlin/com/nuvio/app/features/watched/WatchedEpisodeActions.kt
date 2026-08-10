@@ -33,6 +33,7 @@ fun MetaDetails.toEpisodeWatchedItem(
         releaseInfo = releaseInfo,
         season = video.season,
         episode = video.episode,
+        videoId = video.id,
         markedAtEpochMs = markedAtEpochMs,
     )
 
@@ -100,4 +101,5 @@ private fun MetaVideo.toDomainReleasedEpisode(): WatchingReleasedEpisode =
         title = title,
         thumbnail = thumbnail,
         releasedDate = released,
+        available = available,
     )

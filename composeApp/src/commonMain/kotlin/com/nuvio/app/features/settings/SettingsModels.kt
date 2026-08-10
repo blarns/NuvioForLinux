@@ -23,7 +23,6 @@ import nuvio.composeapp.generated.resources.compose_settings_page_licenses_attri
 import nuvio.composeapp.generated.resources.compose_settings_page_mdblist_ratings
 import nuvio.composeapp.generated.resources.compose_settings_page_meta_screen
 import nuvio.composeapp.generated.resources.compose_settings_page_notifications
-import nuvio.composeapp.generated.resources.compose_settings_page_p2p
 import nuvio.composeapp.generated.resources.compose_settings_page_playback
 import nuvio.composeapp.generated.resources.compose_settings_page_plugins
 import nuvio.composeapp.generated.resources.compose_settings_page_poster_customization
@@ -32,6 +31,7 @@ import nuvio.composeapp.generated.resources.compose_settings_page_streams
 import nuvio.composeapp.generated.resources.compose_settings_page_supporters_contributors
 import nuvio.composeapp.generated.resources.compose_settings_page_tmdb_enrichment
 import nuvio.composeapp.generated.resources.compose_settings_page_trakt
+import nuvio.composeapp.generated.resources.compose_settings_page_tracking
 import nuvio.composeapp.generated.resources.settings_account
 import org.jetbrains.compose.resources.StringResource
 
@@ -75,15 +75,15 @@ internal enum class SettingsPage(
         category = SettingsCategory.General,
         parentPage = Root,
     ),
-    Streams(
-        titleRes = Res.string.compose_settings_page_streams,
-        category = SettingsCategory.General,
-        parentPage = Root,
-    ),
     Appearance(
         titleRes = Res.string.compose_settings_page_appearance,
         category = SettingsCategory.General,
         parentPage = Root,
+    ),
+    Streams(
+        titleRes = Res.string.compose_settings_page_streams,
+        category = SettingsCategory.General,
+        parentPage = Appearance,
     ),
     Advanced(
         titleRes = Res.string.compose_settings_page_advanced,
@@ -92,11 +92,6 @@ internal enum class SettingsPage(
     ),
     Notifications(
         titleRes = Res.string.compose_settings_page_notifications,
-        category = SettingsCategory.General,
-        parentPage = Root,
-    ),
-    P2p(
-        titleRes = Res.string.compose_settings_page_p2p,
         category = SettingsCategory.General,
         parentPage = Root,
     ),
@@ -128,12 +123,12 @@ internal enum class SettingsPage(
     Homescreen(
         titleRes = Res.string.compose_settings_page_homescreen,
         category = SettingsCategory.General,
-        parentPage = ContentDiscovery,
+        parentPage = Appearance,
     ),
     MetaScreen(
         titleRes = Res.string.compose_settings_page_meta_screen,
         category = SettingsCategory.General,
-        parentPage = ContentDiscovery,
+        parentPage = Appearance,
     ),
     Integrations(
         titleRes = Res.string.compose_settings_page_integrations,
@@ -156,7 +151,8 @@ internal enum class SettingsPage(
         parentPage = Integrations,
     ),
     TraktAuthentication(
-        titleRes = Res.string.compose_settings_page_trakt,
+        // Keep the enum name for saved navigation-state compatibility.
+        titleRes = Res.string.compose_settings_page_tracking,
         category = SettingsCategory.Account,
         parentPage = Root,
     ),

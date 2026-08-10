@@ -528,7 +528,9 @@ object TmdbMetadataService {
             ?: TmdbService.ensureTmdbId(fallbackItemId, tmdbType)
             ?: return meta
 
-        val needsEpisodes = (settings.useEpisodes || settings.useSeasonPosters) && tmdbType == "tv"
+        val needsEpisodes = (
+            settings.useEpisodes || settings.useReleaseDates || settings.useSeasonPosters
+        ) && tmdbType == "tv"
         val (enrichment, episodeMap) = coroutineScope {
             val enrichmentDeferred = async {
                 fetchEnrichment(
@@ -647,20 +649,26 @@ object TmdbMetadataService {
             updated = updated.copy(
                 name = enrichment.localizedTitle ?: updated.name,
                 description = enrichment.description ?: updated.description,
-                imdbRating = enrichment.rating?.formatRating() ?: updated.imdbRating,
+                imdbRating = updated.imdbRating?.takeIf { it.isNotBlank() }
+                    ?: enrichment.rating?.formatRating(),
                 genres = enrichment.genres.ifEmpty { updated.genres },
             )
         }
 
         if (enrichment != null && settings.useDetails) {
             updated = updated.copy(
-                releaseInfo = enrichment.releaseInfo ?: updated.releaseInfo,
-                lastAirDate = enrichment.lastAirDate ?: updated.lastAirDate,
                 status = enrichment.status ?: updated.status,
                 ageRating = enrichment.ageRating ?: updated.ageRating,
                 runtime = enrichment.runtimeMinutes?.formatRuntime() ?: updated.runtime,
                 country = enrichment.countries.takeIf { it.isNotEmpty() }?.joinToString(", ") ?: updated.country,
                 language = enrichment.language ?: updated.language,
+            )
+        }
+
+        if (enrichment != null && settings.useReleaseDates) {
+            updated = updated.copy(
+                releaseInfo = enrichment.releaseInfo ?: updated.releaseInfo,
+                lastAirDate = enrichment.lastAirDate ?: updated.lastAirDate,
             )
         }
 
@@ -701,7 +709,7 @@ object TmdbMetadataService {
                             } else {
                                 video.overview
                             },
-                            released = if (settings.useEpisodes) {
+                            released = if (settings.useReleaseDates) {
                                 enrichmentForEpisode.airDate ?: video.released
                             } else {
                                 video.released

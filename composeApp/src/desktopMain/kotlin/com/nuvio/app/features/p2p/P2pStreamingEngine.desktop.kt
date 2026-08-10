@@ -89,7 +89,7 @@ actual object P2pStreamingEngine {
     private val binary = TorrServerBinary()
     private val api = TorrServerApi(binary)
 
-    actual fun warmup() {
+    fun warmup() {
         synchronized(lifecycleLock) {
             warmupCooldownJob?.cancel()
             warmupCooldownJob = null
@@ -111,7 +111,7 @@ actual object P2pStreamingEngine {
         }
     }
 
-    actual fun cooldownWarmup() {
+    fun cooldownWarmup() {
         synchronized(lifecycleLock) {
             if (currentHash != null) {
                 return
@@ -152,7 +152,7 @@ actual object P2pStreamingEngine {
         val detached = beginStreamGeneration()
         val generation = detached.generation
         detached.hash?.let(::scheduleIdleDrop)
-        _state.value = P2pStreamingState.Connecting
+        _state.value = P2pStreamingState.Connecting()
 
         var attachedHash: String? = null
         try {
@@ -170,7 +170,7 @@ actual object P2pStreamingEngine {
 
             val magnetLink = buildMagnetUri(
                 infoHash = requestedHash,
-                magnetUri = request.magnetUri,
+                magnetUri = null,
                 extraTrackers = request.trackers,
             )
 
@@ -589,7 +589,7 @@ actual object P2pStreamingEngine {
                             uploadSpeed = stats.uploadSpeed,
                             peers = stats.peers,
                             seeds = stats.seeds,
-                            preloadedBytes = stats.preloadedBytes,
+                            downloadedBytes = stats.preloadedBytes,
                         )
                     }
                 } catch (e: CancellationException) {
@@ -1049,6 +1049,21 @@ actual object P2pStreamingEngine {
                 ?.takeIf { it.isNotEmpty() }
                 ?.let { params += "filename=${URLEncoder.encode(it, "UTF-8")}" }
             return "$baseUrl/stream?${params.joinToString("&")}"
+        }
+    }
+
+    // TorrServer manages its own on-disk cache; the desktop build does not yet surface
+    // usage figures, so this reports "no measurement" rather than a misleading zero.
+    private val _cacheState = MutableStateFlow(P2pCacheUiState())
+    actual val cacheState: StateFlow<P2pCacheUiState> = _cacheState.asStateFlow()
+
+    actual suspend fun clearCache(): P2pCacheClearResult {
+        _cacheState.value = _cacheState.value.copy(isClearing = true)
+        return try {
+            stopStream()
+            P2pCacheClearResult(reclaimedBytes = 0L, remainingBytes = 0L, protectedBytes = 0L)
+        } finally {
+            _cacheState.value = P2pCacheUiState()
         }
     }
 }

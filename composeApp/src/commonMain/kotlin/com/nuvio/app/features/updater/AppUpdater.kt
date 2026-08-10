@@ -1,45 +1,15 @@
 package com.nuvio.app.features.updater
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.BasicAlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.core.build.AppVersionConfig
 import com.nuvio.app.core.i18n.localizedByteUnit
 import com.nuvio.app.core.ui.NuvioToastController
 import com.nuvio.app.features.addons.httpRequestRaw
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -49,9 +19,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.runBlocking
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.getString
-import org.jetbrains.compose.resources.stringResource
 
 private const val gitHubOwner = "blarns"
 private const val gitHubRepo = "NuvioForLinux"
@@ -79,6 +49,7 @@ data class AppUpdaterUiState(
     val showDialog: Boolean = false,
     val showUnknownSourcesDialog: Boolean = false,
     val errorMessage: String? = null,
+    val isDebugTest: Boolean = false,
 )
 
 @Serializable
@@ -107,7 +78,7 @@ private val appUpdaterJson = Json {
 }
 
 private class NoChannelReleaseException : IllegalStateException(
-    "No cmp-rewrite release has been published yet.",
+    runBlocking { getString(Res.string.updates_no_channel_release) },
 )
 
 private object VersionUtils {
@@ -162,7 +133,7 @@ private object AppUpdaterRepository {
             body = "",
         )
         if (response.status !in 200..299) {
-            error("GitHub releases API error: ${response.status}")
+            error(getString(Res.string.updates_github_api_error, response.status))
         }
 
         val releases = appUpdaterJson.decodeFromString<List<GitHubReleaseDto>>(response.body)
@@ -172,10 +143,10 @@ private object AppUpdaterRepository {
 
         val tag = release.tagName?.takeIf { it.isNotBlank() }
             ?: release.name?.takeIf { it.isNotBlank() }
-            ?: error("Release has no tag or name")
+            ?: error(getString(Res.string.updates_release_missing_title))
 
         val asset = chooseBestApkAsset(release.assets)
-            ?: error("No APK asset found in the cmp-rewrite release")
+            ?: error(getString(Res.string.updates_apk_asset_missing))
 
         AppUpdate(
             tag = tag,
@@ -200,6 +171,8 @@ private object AppUpdaterRepository {
             .any { value -> value.contains(channel, ignoreCase = true) }
     }
 
+    // The fork ships .deb alongside the Android .apk, and the desktop installer hands the
+    // file to xdg-open, so a .deb has to be selectable here or desktop finds no asset at all.
     private fun chooseBestApkAsset(assets: List<GitHubAssetDto>): GitHubAssetDto? {
         val installableAssets = assets.filter { asset ->
             asset.name.endsWith(".apk", ignoreCase = true) ||
@@ -257,6 +230,7 @@ class AppUpdaterController internal constructor(
                     isChecking = true,
                     errorMessage = null,
                     showUnknownSourcesDialog = false,
+                    isDebugTest = false,
                 )
             }
 
@@ -332,6 +306,10 @@ class AppUpdaterController internal constructor(
 
     fun downloadUpdate() {
         val update = _uiState.value.update ?: return
+        if (_uiState.value.isDebugTest) {
+            runDebugDownloadTest()
+            return
+        }
 
         scope.launch {
             _uiState.update { state ->
@@ -356,7 +334,7 @@ class AppUpdaterController internal constructor(
                 _uiState.update { state ->
                     state.copy(
                         isDownloading = false,
-                        downloadProgress = 1f,
+                        downloadProgress = null,
                         downloadedApkPath = path,
                         errorMessage = null,
                     )
@@ -405,6 +383,56 @@ class AppUpdaterController internal constructor(
             AppUpdaterPlatform.openUnknownSourcesSettings()
         }
     }
+
+    fun showDebugTestUpdate() {
+        if (!AppUpdaterPlatform.isDebugBuild || !AppUpdaterPlatform.isSupported) return
+
+        _uiState.value = AppUpdaterUiState(
+            update = AppUpdate(
+                tag = "9.9.9",
+                title = "Nuvio 9.9.9",
+                notes = """
+                    A local preview of the new update experience.
+
+                    - The banner pushes the app content down.
+                    - Download progress fills the banner with the primary accent.
+                    - Release notes live behind the info button.
+                """.trimIndent(),
+                releaseUrl = null,
+                assetName = "Nuvio-debug-preview.apk",
+                assetUrl = "debug://update-preview",
+                assetSizeBytes = 185L * 1024L * 1024L,
+            ),
+            isUpdateAvailable = true,
+            showDialog = true,
+            isDebugTest = true,
+        )
+    }
+
+    private fun runDebugDownloadTest() {
+        scope.launch {
+            _uiState.update { state ->
+                state.copy(
+                    isDownloading = true,
+                    downloadProgress = 0f,
+                    errorMessage = null,
+                )
+            }
+
+            for (step in 1..100) {
+                delay(35)
+                _uiState.update { state -> state.copy(downloadProgress = step / 100f) }
+            }
+
+            _uiState.update { state ->
+                state.copy(
+                    isDownloading = false,
+                    isUpdateAvailable = false,
+                    downloadProgress = 1f,
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -413,241 +441,7 @@ fun rememberAppUpdaterController(): AppUpdaterController {
     return remember(scope) { AppUpdaterController(scope) }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun AppUpdaterHost(
-    controller: AppUpdaterController,
-    modifier: Modifier = Modifier,
-) {
-    if (!AppFeaturePolicy.inAppUpdaterEnabled || !AppUpdaterPlatform.isSupported) {
-        return
-    }
-
-    val state by controller.uiState.collectAsStateWithLifecycle()
-
-    LaunchedEffect(controller) {
-        controller.ensureAutoCheckStarted()
-    }
-
-    if (!state.showDialog) return
-
-    val showPrimaryAction =
-        state.showUnknownSourcesDialog || state.isDownloading || state.downloadedApkPath != null || state.isUpdateAvailable
-
-    BasicAlertDialog(
-        onDismissRequest = {
-            if (!state.isDownloading) {
-                controller.dismissDialog()
-            }
-        },
-    ) {
-        Surface(
-            modifier = modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 8.dp,
-            shadowElevation = 16.dp,
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = when {
-                            state.showUnknownSourcesDialog -> stringResource(Res.string.updates_title_allow_installs)
-                            state.isUpdateAvailable -> state.update?.title ?: stringResource(Res.string.updates_title_available)
-                            else -> stringResource(Res.string.updates_title_status)
-                        },
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = when {
-                            state.showUnknownSourcesDialog -> stringResource(Res.string.updates_message_allow_installs)
-                            state.isDownloading -> stringResource(Res.string.updates_message_downloading)
-                            state.isUpdateAvailable -> stringResource(Res.string.updates_message_ready)
-                            else -> stringResource(Res.string.updates_message_no_updates)
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-
-                state.errorMessage?.let { message ->
-                    Text(
-                        text = message,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-
-                state.update?.let { update ->
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(18.dp))
-                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            if (state.isChecking) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                            }
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(
-                                    text = update.tag,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                                val assetLine = update.assetSizeBytes?.let(::formatFileSize)?.let { size ->
-                                    stringResource(Res.string.updates_asset_line, size, update.assetName)
-                                } ?: update.assetName
-                                Text(
-                                    text = assetLine,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-
-                        if (state.isDownloading || state.downloadProgress != null) {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                LinearProgressIndicator(
-                                    progress = { (state.downloadProgress ?: 0f).coerceIn(0f, 1f) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                Text(
-                                    text = if (state.downloadProgress != null) {
-                                        stringResource(
-                                            Res.string.updates_downloading_progress,
-                                            ((state.downloadProgress ?: 0f) * 100).toInt().coerceIn(0, 100),
-                                        )
-                                    } else {
-                                        stringResource(Res.string.updates_preparing_download)
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-
-                        if (update.notes.isNotBlank()) {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(
-                                    text = stringResource(Res.string.updates_release_notes),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    fontWeight = FontWeight.Medium,
-                                )
-                                Text(
-                                    text = update.notes,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(180.dp)
-                                        .clip(RoundedCornerShape(18.dp))
-                                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                                        .padding(14.dp)
-                                        .verticalScroll(rememberScrollState()),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    if (showPrimaryAction) {
-                        Button(
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = {
-                                when {
-                                    state.showUnknownSourcesDialog -> controller.resumeInstallation()
-                                    state.downloadedApkPath != null -> controller.installDownloadedUpdate()
-                                    else -> controller.downloadUpdate()
-                                }
-                            },
-                            enabled = if (state.showUnknownSourcesDialog || state.downloadedApkPath != null) {
-                                true
-                            } else {
-                                !state.isChecking && !state.isDownloading && state.isUpdateAvailable
-                            },
-                        ) {
-                            Text(
-                                when {
-                                    state.showUnknownSourcesDialog -> stringResource(Res.string.action_continue)
-                                    state.downloadedApkPath != null -> stringResource(Res.string.action_install)
-                                    state.isDownloading -> stringResource(Res.string.updates_message_downloading)
-                                    else -> stringResource(Res.string.action_update)
-                                },
-                            )
-                        }
-                    }
-
-                    if (state.isUpdateAvailable && !state.isDownloading && !state.showUnknownSourcesDialog) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            OutlinedButton(
-                                modifier = Modifier.weight(1f),
-                                onClick = controller::ignoreThisVersion,
-                            ) {
-                                Text(stringResource(Res.string.action_ignore))
-                            }
-
-                            OutlinedButton(
-                                modifier = Modifier.weight(1f),
-                                onClick = controller::dismissDialog,
-                                enabled = !state.isDownloading,
-                            ) {
-                                Text(
-                                    if (state.isDownloading) {
-                                        stringResource(Res.string.updates_message_downloading)
-                                    } else {
-                                        stringResource(Res.string.action_later)
-                                    },
-                                )
-                            }
-                        }
-                    } else {
-                        OutlinedButton(
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = controller::dismissDialog,
-                            enabled = !state.isDownloading,
-                        ) {
-                            Text(
-                                if (state.isDownloading) {
-                                    stringResource(Res.string.updates_message_downloading)
-                                } else {
-                                    stringResource(Res.string.action_later)
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun formatFileSize(sizeBytes: Long): String {
+internal fun formatFileSize(sizeBytes: Long): String {
     if (sizeBytes <= 0L) return "0 ${localizedByteUnit("B")}"
     val units = listOf("B", "KB", "MB", "GB")
     var value = sizeBytes.toDouble()

@@ -2,14 +2,21 @@ package com.nuvio.app.features.updater
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.updates_download_failed_http
+import nuvio.composeapp.generated.resources.updates_downloaded_file_missing
+import nuvio.composeapp.generated.resources.updates_empty_download_body
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.jetbrains.compose.resources.getString
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
@@ -34,6 +41,11 @@ object AndroidAppUpdaterPlatform {
     }
 
     fun getSupportedAbis(): List<String> = Build.SUPPORTED_ABIS?.toList().orEmpty()
+
+    fun isDebugBuild(): Boolean {
+        val context = appContext ?: return false
+        return context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+    }
 
     fun getIgnoredTag(): String? =
         preferences().getString(ignoredTagKey, null)
@@ -71,10 +83,10 @@ object AndroidAppUpdaterPlatform {
 
             httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    error("Download failed with HTTP ${response.code}")
+                    error(runBlocking { getString(Res.string.updates_download_failed_http, response.code) })
                 }
 
-                val body = response.body ?: error("Empty download body")
+                val body = response.body ?: error(runBlocking { getString(Res.string.updates_empty_download_body) })
                 val totalBytes = body.contentLength().takeIf { it > 0L }
                 body.byteStream().use { input ->
                     FileOutputStream(destination).use { output ->
@@ -123,7 +135,7 @@ object AndroidAppUpdaterPlatform {
     fun installDownloadedApk(path: String): Result<Unit> = runCatching {
         val context = requireContext()
         val apkFile = File(path)
-        check(apkFile.exists()) { "Downloaded update file is missing." }
+        check(apkFile.exists()) { runBlocking { getString(Res.string.updates_downloaded_file_missing) } }
 
         val apkUri = FileProvider.getUriForFile(
             context,

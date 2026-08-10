@@ -2,8 +2,17 @@ package com.nuvio.app.features.streams
 
 import com.nuvio.app.core.build.AppFeaturePolicy
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.Serializable
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.getString
+
+@Serializable
+data class StreamSubtitle(
+    val url: String,
+    val language: String,
+    val name: String? = null,
+    val headers: Map<String, String>? = null
+)
 
 data class StreamItem(
     val name: String? = null,
@@ -18,9 +27,11 @@ data class StreamItem(
     val addonName: String,
     val addonId: String,
     val addonLogo: String? = null,
+    val streamType: String? = null,
     val behaviorHints: StreamBehaviorHints = StreamBehaviorHints(),
     val clientResolve: StreamClientResolve? = null,
     val debridCacheStatus: StreamDebridCacheStatus? = null,
+    val externalSubtitles: List<StreamSubtitle> = emptyList(),
     val badges: List<StreamBadge> = emptyList(),
 ) {
     val streamLabel: String
@@ -30,15 +41,34 @@ data class StreamItem(
         get() = description
 
     val directPlaybackUrl: String?
-        get() = url ?: externalUrl
+        get() = url?.trim()?.takeIf { it.isNotEmpty() }
 
+    /**
+     * First URL that can be handed directly to a player or HTTP consumer.
+     * `magnet:` and `torrent://` URLs are filtered out. `externalUrl` is not
+     * a media URL in the Stremio SDK contract and must be opened externally.
+     */
     val playableDirectUrl: String?
-        get() = listOfNotNull(url, externalUrl)
-            .firstOrNull { !it.isMagnetLink() }
+        get() = directPlaybackUrl?.takeIf { !it.isMagnetLink() && !it.isTorrentSchemeUrl() }
+
+    val externalOpenUrl: String?
+        get() = externalUrl
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() && !it.isMagnetLink() && !it.isTorrentSchemeUrl() }
+
+    val shouldOpenExternally: Boolean
+        get() = url.isNullOrBlank() &&
+            infoHash.isNullOrBlank() &&
+            clientResolve == null &&
+            externalOpenUrl != null
 
     val torrentMagnetUri: String?
-        get() = listOfNotNull(url, externalUrl, clientResolve?.magnetUri)
+        get() = listOfNotNull(url, externalUrl)
             .firstOrNull { it.isMagnetLink() }
+
+    val torrentSchemeUri: String?
+        get() = listOfNotNull(url, externalUrl)
+            .firstOrNull { it.isTorrentSchemeUrl() }
 
     val isDirectDebridStream: Boolean
         get() = clientResolve?.isDirectDebridCandidate == true
@@ -50,7 +80,9 @@ data class StreamItem(
         get() = !isDirectDebridStream && (
             !infoHash.isNullOrBlank() ||
             url.isMagnetLink() ||
-            externalUrl.isMagnetLink()
+            externalUrl.isMagnetLink() ||
+            url.isTorrentSchemeUrl() ||
+            externalUrl.isTorrentSchemeUrl()
         )
 
     val isCachedDebridTorrentStream: Boolean
@@ -62,27 +94,20 @@ data class StreamItem(
     val p2pInfoHash: String?
         get() = infoHash.normalizedInfoHash()
             ?: clientResolve?.infoHash.normalizedInfoHash()
-            ?: clientResolve?.magnetUri.extractBtihInfoHash()
             ?: torrentMagnetUri.extractBtihInfoHash()
+            ?: torrentSchemeUri.extractTorrentSchemeInfoHash()
 
     val p2pFileIdx: Int?
-        get() = fileIdx ?: clientResolve?.fileIdx
-
-    val p2pFilename: String?
-        get() = behaviorHints.filename ?: clientResolve?.filename
+        get() = fileIdx ?: torrentSchemeUri.extractTorrentSchemeFileIdx()
 
     val p2pTrackers: List<String>
-        get() = p2pSourceHints
+        get() = sources
             .asSequence()
             .filter { it.startsWith("tracker:") }
             .map { it.removePrefix("tracker:").trim() }
             .filter { it.isNotEmpty() }
             .distinct()
             .toList()
-
-    val p2pSourceHints: List<String>
-        get() = (sources + clientResolve?.sources.orEmpty())
-            .distinct()
 
     val isAddonDebridCandidate: Boolean
         get() = isInstalledAddonStream && (needsLocalDebridResolve || isDirectDebridStream)
@@ -100,8 +125,37 @@ data class StreamBadge(
     val borderColor: String = "",
 )
 
+fun normalizeStreamType(raw: String?): String? =
+    raw?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
+
 private fun String?.isMagnetLink(): Boolean =
     this?.trimStart()?.startsWith("magnet:", ignoreCase = true) == true
+
+private fun String?.isTorrentSchemeUrl(): Boolean =
+    this?.trimStart()?.startsWith("torrent://", ignoreCase = true) == true
+
+private fun String?.extractTorrentSchemeInfoHash(): String? {
+    val raw = this?.trimStart()?.takeIf { it.isTorrentSchemeUrl() } ?: return null
+    return raw.removeRange(0, "torrent://".length)
+        .substringBefore('/')
+        .substringBefore('?')
+        .trim()
+        .takeIf { it.isValidInfoHash() }
+}
+
+private fun String?.extractTorrentSchemeFileIdx(): Int? {
+    val raw = this?.trimStart()?.takeIf { it.isTorrentSchemeUrl() } ?: return null
+    val path = raw.removeRange(0, "torrent://".length).substringBefore('?')
+    if ('/' !in path) return null
+    return path.substringAfter('/')
+        .trim()
+        .takeIf { segment -> segment.isNotEmpty() && segment.all { it.isDigit() } }
+        ?.toIntOrNull()
+}
+
+private fun String.isValidInfoHash(): Boolean =
+    (length == 40 && all { it in '0'..'9' || it.lowercaseChar() in 'a'..'f' }) ||
+        (length == 32 && all { it in '2'..'7' || it.lowercaseChar() in 'a'..'z' })
 
 private fun String?.normalizedInfoHash(): String? =
     this
@@ -122,6 +176,7 @@ private fun String?.extractBtihInfoHash(): String? {
 
 fun StreamItem.isSelectableForPlayback(debridEnabled: Boolean): Boolean =
     playableDirectUrl != null ||
+        shouldOpenExternally ||
         (AppFeaturePolicy.p2pEnabled && needsLocalDebridResolve && p2pInfoHash != null) ||
         (debridEnabled && isAddonDebridCandidate)
 

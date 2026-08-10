@@ -28,15 +28,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nuvio.app.core.ui.NuvioCardDepthSurface
 import com.nuvio.app.core.ui.NuvioShelfSection
 import com.nuvio.app.core.ui.PosterLandscapeAspectRatio
 import com.nuvio.app.core.ui.landscapePosterWidth
+import com.nuvio.app.core.ui.nuvioCardDepth
 import com.nuvio.app.core.ui.posterCardClickable
 import com.nuvio.app.core.ui.rememberPosterCardStyleUiState
 import com.nuvio.app.features.collection.Collection
 import com.nuvio.app.features.collection.CollectionFolder
-import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.PosterShape
 
 @Composable
@@ -78,18 +78,12 @@ private fun HomeCollectionRowSectionContent(
     animateGifs: Boolean,
     onFolderClick: ((collectionId: String, folderId: String) -> Unit)?,
 ) {
-    val homeCatalogSettings by remember {
-        HomeCatalogSettingsRepository.snapshot()
-        HomeCatalogSettingsRepository.uiState
-    }.collectAsStateWithLifecycle()
-
     NuvioShelfSection(
         title = collection.title,
         entries = collection.folders,
         modifier = modifier,
         headerHorizontalPadding = sectionPadding,
         rowContentPadding = PaddingValues(horizontal = sectionPadding),
-        showHeaderAccent = !homeCatalogSettings.hideCatalogUnderline,
         key = { folder -> "collection_${collection.id}_folder_${folder.id}" },
     ) { folder ->
         CollectionFolderCard(
@@ -142,7 +136,11 @@ private fun CollectionFolderCard(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(aspectRatio),
+                .aspectRatio(aspectRatio)
+                .nuvioCardDepth(
+                    shape = shapeCorner,
+                    surface = NuvioCardDepthSurface.Posters,
+                ),
             shape = shapeCorner,
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surface,

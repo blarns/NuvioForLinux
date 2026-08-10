@@ -11,6 +11,8 @@ fun PlayerScreen(
     sourceAudioUrl: String? = null,
     sourceHeaders: Map<String, String> = emptyMap(),
     sourceResponseHeaders: Map<String, String> = emptyMap(),
+    externalSubtitles: List<com.nuvio.app.features.streams.StreamSubtitle> = emptyList(),
+    streamType: String? = null,
     providerName: String,
     streamTitle: String,
     streamSubtitle: String?,
@@ -18,6 +20,7 @@ fun PlayerScreen(
     pauseDescription: String? = null,
     onBack: () -> Unit,
     onOpenInExternalPlayer: ((ExternalPlayerPlaybackRequest) -> Unit)? = null,
+    onOpenExternalUrl: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
     logo: String? = null,
     poster: String? = null,
@@ -34,10 +37,10 @@ fun PlayerScreen(
     torrentInfoHash: String? = null,
     torrentFileIdx: Int? = null,
     torrentFilename: String? = null,
-    torrentMagnetUri: String? = null,
     torrentTrackers: List<String> = emptyList(),
     initialPositionMs: Long = 0L,
     initialProgressFraction: Float? = null,
+    contentLanguage: String? = null,
 ) {
     PlayerScreenContent(
         PlayerScreenArgs(
@@ -47,6 +50,8 @@ fun PlayerScreen(
             sourceAudioUrl = sourceAudioUrl,
             sourceHeaders = sourceHeaders,
             sourceResponseHeaders = sourceResponseHeaders,
+            externalSubtitles = externalSubtitles,
+            streamType = streamType,
             providerName = providerName,
             streamTitle = streamTitle,
             streamSubtitle = streamSubtitle,
@@ -54,6 +59,7 @@ fun PlayerScreen(
             pauseDescription = pauseDescription,
             onBack = onBack,
             onOpenInExternalPlayer = onOpenInExternalPlayer,
+            onOpenExternalUrl = onOpenExternalUrl,
             modifier = modifier,
             logo = logo,
             poster = poster,
@@ -70,10 +76,10 @@ fun PlayerScreen(
             torrentInfoHash = torrentInfoHash,
             torrentFileIdx = torrentFileIdx,
             torrentFilename = torrentFilename,
-            torrentMagnetUri = torrentMagnetUri,
             torrentTrackers = torrentTrackers,
             initialPositionMs = initialPositionMs,
             initialProgressFraction = initialProgressFraction,
+            contentLanguage = contentLanguage,
         )
     )
 }

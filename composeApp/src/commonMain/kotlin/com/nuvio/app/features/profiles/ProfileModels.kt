@@ -4,6 +4,8 @@ import androidx.compose.ui.graphics.Color
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
+const val MAX_PROFILES = 6
+
 @Serializable
 data class NuvioProfile(
     val id: String = "",

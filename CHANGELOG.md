@@ -6,14 +6,64 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.0] — 2026-08-10 (alpha)
+
+The 1:1 upstream port: this fork's Linux desktop layer rebased onto current
+[NuvioMobile](https://github.com/NuvioMedia/NuvioMobile), replacing the re-derived shared code
+that had accumulated since the fork diverged.
+
+**Shipped as an alpha.** The rebase silently dropped fork-only code four separate times, and
+each round was found only after the previous one was believed complete, so this release is
+published as a GitHub pre-release: if you are on 0.2.2 or 0.2.3 the in-app updater will not
+offer it to you and nothing changes. To take it, either download it from the Releases page or
+turn on **Settings → About → Experimental updates** and check for updates.
+
+### Added
+- **Experimental updates** (Settings → About). Off by default. With it on, the in-app updater
+  also offers pre-release (alpha) builds; with it off, pre-releases are skipped entirely so a
+  stable install is never moved onto an alpha.
+
+### Changed
+- The shared (non-desktop) code is now upstream's, rather than this fork's re-derivation of it.
+  Desktop-specific code — the VLCJ player, MPRIS, tray, Discord presence, window handling,
+  screenshots, the sleep timer and desktop storage — is unchanged and remains fork-owned.
+
+### Fixed
+- The in-app updater pointed at upstream's repository and offered Linux users upstream's Android
+  APK. It is back on this fork's releases.
+- The six **Settings → Playback → Linux desktop** rows were rendering behind an iOS-only
+  condition, so none of them appeared on Linux.
+- Four fork features the rebase dropped are restored: the addon update checker, replacing an
+  addon URL in place, cloud audio playback for debrid providers, and collection hover-to-focus.
+- Six upstream issue-triage bots that the rebase introduced are removed. They would have run
+  against this fork's issue tracker once merged to the default branch.
+- Mouse-wheel horizontal scrolling and the floating scroll arrows on card rows, which had lost
+  every call site — mouse users could not scroll any row.
+- The player controls were dead again: the session-reset effect cleared the controller on the
+  first composition.
+- The volume slider in the player controls, which had been removed entirely.
+- Mouse-idle control hiding, the surface tap suppression it pairs with, and right-click context
+  menus on posters, episodes, seasons and Continue Watching.
+- Quitting mid-playback no longer loses the position — the shutdown flush had no caller.
+- Watch progress could be overwritten with ~0 when VLCJ reported a transient position during a
+  resume seek.
+- Profile avatars fall back to the initial-letter tile when an image fails to load, and the
+  avatar catalog is read anonymously when the session read fails.
+- Signing in on desktop persists again: the Supabase client was not installing the desktop
+  session manager.
+- URLs and magnet links passed on the command line (or handed off by the browser) are opened
+  again; nothing was reading them.
+- Plugins that declare `jvm` or `linux` rather than `desktop` are recognised again.
+- The trailer overlay is a top-anchored card on desktop again, not a small bottom sheet.
+
 ## [0.2.3.1] — 2026-08-10
 
 One setting, nothing else. Same app as 0.2.3 in every other respect.
 
-The next release, 0.3.0, rebases this fork's Linux desktop layer onto current upstream. That is a
-large change and it ships as an alpha, so it is published as a pre-release and the updater will
-not offer it to you. Deciding to try it should be your choice — but 0.2.3 has no way to make that
-choice, which is what this release adds.
+0.3.0 ships as an alpha, so it is published as a pre-release and the updater does not offer it.
+That is the intent — but 0.2.3 had no way to say "actually, I'll take the alpha", because the
+setting that grants that consent only existed in the alpha itself. This release closes that gap
+so the choice is available before 0.3.0 lands.
 
 ### Added
 - **Experimental updates** (Settings → About). Off by default, and off is exactly how 0.2.3
@@ -21,8 +71,6 @@ choice, which is what this release adds.
   alpha builds; turn it off again and you go back to stable releases only.
 
 ## [0.2.3] — 2026-08-05
-
-A small fix release for the window opening smaller than the screen.
 
 ### Fixed
 - **The window now opens sized to your screen** ([#4](https://github.com/blarns/NuvioForLinux/issues/4)).

@@ -1,6 +1,5 @@
 package com.nuvio.app.features.player
 
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -40,7 +39,7 @@ import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.Speed
-import androidx.compose.material3.CircularProgressIndicator
+import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -238,9 +237,8 @@ internal fun OpeningOverlay(
                         },
                 )
             } else {
-                CircularProgressIndicator(
+                NuvioLoadingIndicator(
                     color = Color(0xFFE50914),
-                    strokeWidth = 3.dp,
                     modifier = Modifier.size(54.dp),
                 )
             }
@@ -248,30 +246,23 @@ internal fun OpeningOverlay(
             val showHorizontalProgress = progressActive && logo == null
             if (!message.isNullOrBlank() || showHorizontalProgress) {
                 Spacer(modifier = Modifier.height(16.dp))
-                Crossfade(
-                    targetState = message?.takeIf { it.isNotBlank() },
-                    animationSpec = tween(durationMillis = 260),
-                    label = "openingOverlayMessageCrossfade",
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(40.dp),
-                ) { loadingMessage ->
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (loadingMessage != null) {
-                            Text(
-                                text = loadingMessage,
-                                color = Color.White.copy(alpha = 0.72f),
-                                textAlign = TextAlign.Center,
-                                maxLines = 2,
-                                style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 24.dp),
-                            )
-                        }
+                    contentAlignment = Alignment.Center,
+                ) {
+                    message?.takeIf { it.isNotBlank() }?.let { loadingMessage ->
+                        Text(
+                            text = loadingMessage,
+                            color = Color.White.copy(alpha = 0.72f),
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp),
+                        )
                     }
                 }
                 if (showHorizontalProgress) {

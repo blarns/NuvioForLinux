@@ -3,9 +3,9 @@ package com.nuvio.app.features.player
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.registerPlaybackFlushCallback
 import com.nuvio.app.unregisterPlaybackFlushCallback
+import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.p2p.P2pSettingsRepository
 import com.nuvio.app.features.p2p.P2pStreamRequest
 import com.nuvio.app.features.p2p.P2pStreamingEngine
@@ -17,6 +17,7 @@ import com.nuvio.app.features.streams.BingeGroupCacheRepository
 import com.nuvio.app.features.streams.StreamLinkCacheRepository
 import com.nuvio.app.features.streams.StreamItem
 import com.nuvio.app.features.streams.hasLikelyExpiringPlaybackCredentials
+import com.nuvio.app.features.tracking.TrackingScrobbleAction
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -77,7 +78,7 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         initialLoadCompleted = false
         lastProgressPersistEpochMs = 0L
         previousIsPlaying = false
-        pendingScrobbleStartAfterSeek = false
+        pendingSeekScrobbleRestart = false
         seekProgressSyncJob?.cancel()
         seekProgressSyncJob = null
         accumulatedSeekResetJob?.cancel()
@@ -98,7 +99,6 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         activeTorrentInfoHash,
         activeTorrentFileIdx,
         activeTorrentFilename,
-        activeTorrentMagnetUri,
         activeTorrentTrackers,
         p2pSettingsUiState.p2pEnabled,
     ) {
@@ -109,13 +109,14 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
             return@LaunchedEffect
         }
         if (!P2pSettingsRepository.isVisible || !p2pSettingsUiState.p2pEnabled) {
+            p2pResolvedSourceUrl = null
+            P2pStreamingEngine.stopStream()
             return@LaunchedEffect
         }
 
         p2pResolvedSourceUrl = null
         val requestedFileIdx = activeTorrentFileIdx
         val requestedFilename = activeTorrentFilename
-        val requestedMagnetUri = activeTorrentMagnetUri
         val requestedTrackers = activeTorrentTrackers
         errorMessage = null
         playerController = null
@@ -129,7 +130,6 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
                     infoHash = infoHash,
                     fileIdx = requestedFileIdx,
                     filename = requestedFilename,
-                    magnetUri = requestedMagnetUri,
                     trackers = requestedTrackers,
                 ),
             )
@@ -154,6 +154,11 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
     LaunchedEffect(p2pStreamingState, activeTorrentInfoHash) {
         val state = p2pStreamingState
         if (activeTorrentInfoHash != null && state is P2pStreamingState.Error) {
+            p2pResolvedSourceUrl = null
+            playerController = null
+            playerControllerSourceUrl = null
+            playbackSnapshot = PlayerPlaybackSnapshot()
+            initialLoadCompleted = true
             errorMessage = getString(Res.string.player_error_torrent, state.message)
             controlsVisible = !playerControlsLocked
         }
@@ -174,6 +179,23 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
 
     LaunchedEffect(playerController, subtitleStyle) {
         playerController?.applySubtitleStyle(subtitleStyle)
+    }
+
+    LaunchedEffect(
+        playerController,
+        playerControllerSourceUrl,
+        activeSourceUrl,
+        title,
+        activeStreamTitle,
+        activeSeasonNumber,
+        activeEpisodeNumber,
+        activeEpisodeTitle,
+        poster,
+        background,
+    ) {
+        val controller = playerController ?: return@LaunchedEffect
+        if (playerControllerSourceUrl != activeSourceUrl) return@LaunchedEffect
+        controller.updateNowPlayingMetadata(buildNowPlayingInfo())
     }
 
     LaunchedEffect(activeSourceUrl, addonSubtitleFetchKey, playerSettingsUiState.addonSubtitleStartupMode) {
@@ -271,6 +293,7 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         registerPlaybackFlushCallback { flushWatchProgress() }
         onDispose {
             unregisterPlaybackFlushCallback()
+            playerController?.clearNowPlayingInfo()
             P2pStreamingEngine.shutdown()
             PlayerStreamsRepository.clearAll()
         }
@@ -308,7 +331,7 @@ private fun PlayerScreenRuntime.BindPlayerUiVisibilityEffects() {
         if (controlsVisible && suppressSurfaceTapGestures) {
             while (true) {
                 delay(500)
-                val idleMs = System.currentTimeMillis() - lastMouseMoveMs.value
+                val idleMs = currentTimeMillis() - lastMouseMoveMs.value
                 if (idleMs >= PlayerMouseHideDelayMs) {
                     controlsVisible = false
                     break
@@ -340,22 +363,26 @@ private fun PlayerScreenRuntime.BindPlayerUiVisibilityEffects() {
         playbackSnapshot.durationMs,
     ) {
         if (playbackSnapshot.isEnded) {
-            flushWatchProgress()
+            flushWatchProgress(TrackingScrobbleAction.STOP)
             previousIsPlaying = false
-            pendingScrobbleStartAfterSeek = false
+            pendingSeekScrobbleRestart = false
             return@LaunchedEffect
         }
 
         if (previousIsPlaying && !playbackSnapshot.isPlaying && !playbackSnapshot.isLoading) {
-            pendingScrobbleStartAfterSeek = false
-            flushWatchProgress()
+            pendingSeekScrobbleRestart = false
+            flushWatchProgress(TrackingScrobbleAction.PAUSE)
         }
 
-        if (playbackSnapshot.isPlaying && pendingScrobbleStartAfterSeek) {
-            pendingScrobbleStartAfterSeek = false
-            emitTraktScrobbleStart()
+        if (playbackSnapshot.isPlaying && pendingSeekScrobbleRestart) {
+            pendingSeekScrobbleRestart = false
+            if (hasRequestedScrobbleStartForCurrentItem) {
+                emitTrackingSeekScrobbleStart()
+            } else {
+                emitTrackingScrobbleStart()
+            }
         } else if (!previousIsPlaying && playbackSnapshot.isPlaying) {
-            emitTraktScrobbleStart()
+            emitTrackingScrobbleStart()
         }
 
         if (!playbackSnapshot.isLoading) {
@@ -483,8 +510,8 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
         )
         if (shouldShow && !showNextEpisodeCard) {
             showNextEpisodeCard = true
-            // Suppress pre-emptive autoplay while the sleep timer is set to stop after
-            // this episode (the timer is consumed at the true end below).
+            // Suppress pre-emptive autoplay while the sleep timer is set to stop after this
+            // episode (the timer is consumed at the true end, below).
             if (playerSettingsUiState.streamAutoPlayNextEpisodeEnabled && nextEpisodeInfo?.hasAired == true &&
                 !SleepTimerController.isAfterEpisodeArmed()
             ) {
@@ -498,12 +525,11 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
     LaunchedEffect(playbackSnapshot.isEnded, nextEpisodeInfo) {
         if (!playbackSnapshot.isEnded || nextEpisodeInfo == null) return@LaunchedEffect
         // Consume the sleep timer before the card guard below. By the true end the card is
-        // normally already showing (it is armed at the threshold above), so this used to be
-        // unreachable: "after this episode" never disarmed and went on silently suppressing
-        // autoplay — with no toast — for the rest of the session.
+        // normally already showing (armed at the threshold above), so putting this behind that
+        // guard leaves "after this episode" armed — silently suppressing autoplay, with no
+        // toast, for the rest of the session.
         val stoppedBySleepTimer = SleepTimerController.consumeAfterEpisodeIfArmed()
-        // The card already being up means autoplay was handled at the threshold; don't
-        // restart the search here.
+        // Card already up means autoplay was handled at the threshold; don't restart the search.
         if (showNextEpisodeCard) return@LaunchedEffect
         showNextEpisodeCard = true
         if (stoppedBySleepTimer) return@LaunchedEffect
@@ -512,6 +538,45 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
         }
     }
 }
+
+private fun PlayerScreenRuntime.buildNowPlayingInfo(): PlayerNowPlayingInfo {
+    val isEpisode = activeSeasonNumber != null && activeEpisodeNumber != null
+    return PlayerNowPlayingInfo(
+        title = title.ifBlank { activeStreamTitle },
+        subtitle = buildNowPlayingSubtitle(
+            isEpisode = isEpisode,
+            seasonNumber = activeSeasonNumber,
+            episodeNumber = activeEpisodeNumber,
+            episodeTitle = activeEpisodeTitle,
+        ),
+        artworkUrl = firstNonBlankUrl(poster, background),
+    )
+}
+
+private fun buildNowPlayingSubtitle(
+    isEpisode: Boolean,
+    seasonNumber: Int?,
+    episodeNumber: Int?,
+    episodeTitle: String?,
+): String? {
+    if (!isEpisode) return null
+
+    val episodeParts = buildList {
+        if (seasonNumber != null && episodeNumber != null) {
+            add("S${seasonNumber}E${episodeNumber}")
+        }
+        episodeTitle?.takeIf { it.isNotBlank() }?.let { add(it) }
+    }
+
+    return when (episodeParts.size) {
+        0 -> null
+        1 -> episodeParts.first()
+        else -> "${episodeParts[0]} - ${episodeParts[1]}"
+    }
+}
+
+private fun firstNonBlankUrl(vararg values: String?): String? =
+    values.firstOrNull { !it.isNullOrBlank() }?.trim()
 
 internal fun PlayerScreenRuntime.removeFailedStreamFromCache() {
     val currentVideoId = activeVideoId ?: return
@@ -599,6 +664,7 @@ internal fun PlayerScreenRuntime.tryRefreshCredentialedSourceAfterError(message:
         activeSourceAudioUrl = null
         activeSourceHeaders = sanitizePlaybackHeaders(stream.behaviorHints.proxyHeaders?.request)
         activeSourceResponseHeaders = sanitizePlaybackResponseHeaders(stream.behaviorHints.proxyHeaders?.response)
+        activeStreamType = stream.streamType
         activeStreamTitle = stream.streamLabel
         activeStreamSubtitle = stream.streamSubtitle
         activeProviderName = stream.addonName

@@ -10,8 +10,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntSize
+import com.nuvio.app.features.trakt.TraktPlatformClock
 import kotlin.math.abs
 import kotlin.math.roundToLong
+
+/** Wall clock for the mouse-idle timers. commonMain has no `System.currentTimeMillis()`. */
+internal fun currentTimeMillis(): Long = TraktPlatformClock.nowEpochMs()
 
 // Fork (desktop): record mouse activity over the player surface and re-show the controls on
 // movement. Pairs with the mouse-idle auto-hide in BindPlayerUiVisibilityEffects. Move events
@@ -26,7 +30,7 @@ internal fun Modifier.playerSurfaceMouseActivity(
             while (true) {
                 val event = awaitPointerEvent()
                 if (event.type == PointerEventType.Move) {
-                    lastMouseMoveMs.value = System.currentTimeMillis()
+                    lastMouseMoveMs.value = currentTimeMillis()
                     if (!playerControlsLockedState.value) {
                         onShowControls()
                     }
@@ -69,6 +73,7 @@ internal fun Modifier.playerSurfaceDragGestures(
     layoutSize: IntSize,
     sideGestureSystemEdgeExclusionPx: Float,
     playerControlsLockedState: State<Boolean>,
+    touchGesturesEnabledState: State<Boolean>,
     isHoldToSpeedGestureActiveState: State<Boolean>,
     currentPositionMsState: State<Long>,
     currentDurationMsState: State<Long>,
@@ -90,6 +95,9 @@ internal fun Modifier.playerSurfaceDragGestures(
                     if (!change.pressed) break
                     change.consume()
                 }
+                return@awaitEachGesture
+            }
+            if (!touchGesturesEnabledState.value) {
                 return@awaitEachGesture
             }
             val controller = gestureController

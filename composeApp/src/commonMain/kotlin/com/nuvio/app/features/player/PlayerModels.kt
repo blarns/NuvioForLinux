@@ -3,12 +3,19 @@ package com.nuvio.app.features.player
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.serialization.Serializable
 
-@Serializable
-data class PlayerRoute(
-    val launchId: Long,
-)
+import androidx.compose.runtime.Composable
+import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.player_ios_hardware_decoder_off
+import nuvio.composeapp.generated.resources.player_ios_preset_compatibility_desc
+import nuvio.composeapp.generated.resources.player_ios_preset_compatibility_label
+import nuvio.composeapp.generated.resources.player_ios_preset_custom_desc
+import nuvio.composeapp.generated.resources.player_ios_preset_custom_label
+import nuvio.composeapp.generated.resources.player_ios_preset_native_edr_desc
+import nuvio.composeapp.generated.resources.player_ios_preset_native_edr_label
+import nuvio.composeapp.generated.resources.player_ios_preset_sdr_tone_mapped_desc
+import nuvio.composeapp.generated.resources.player_ios_preset_sdr_tone_mapped_label
+import org.jetbrains.compose.resources.stringResource
 
 data class PlayerLaunch(
     val profileId: Int,
@@ -17,6 +24,8 @@ data class PlayerLaunch(
     val sourceAudioUrl: String? = null,
     val sourceHeaders: Map<String, String> = emptyMap(),
     val sourceResponseHeaders: Map<String, String> = emptyMap(),
+    val externalSubtitles: List<com.nuvio.app.features.streams.StreamSubtitle> = emptyList(),
+    val streamType: String? = null,
     val logo: String? = null,
     val poster: String? = null,
     val background: String? = null,
@@ -34,14 +43,21 @@ data class PlayerLaunch(
     val videoId: String? = null,
     val parentMetaId: String,
     val parentMetaType: String,
+    val torrentInfoHash: String? = null,
+    val torrentFileIdx: Int? = null,
+    val torrentFilename: String? = null,
+    val torrentTrackers: List<String> = emptyList(),
     val initialPositionMs: Long = 0L,
     val initialProgressFraction: Float? = null,
+    val contentLanguage: String? = null,
 )
 
 object PlayerLaunchStore {
     private var nextLaunchId = 1L
     private val launches = mutableMapOf<Long, PlayerLaunch>()
 
+    // Desktop fork: the window title, MPRIS metadata and Discord presence all need to know what
+    // is playing without being wired through the player composable.
     private val _currentTitle = MutableStateFlow<String?>(null)
     val currentTitle: StateFlow<String?> = _currentTitle.asStateFlow()
 
@@ -78,6 +94,31 @@ enum class PlayerResizeMode {
     Fit,
     Fill,
     Zoom,
+}
+
+enum class AndroidPlaybackEngine(
+    val label: String,
+) {
+    Auto("Auto"),
+    ExoPlayer("ExoPlayer"),
+    Libmpv("libmpv"),
+}
+
+enum class AndroidLibmpvVideoOutput(
+    val mpvValue: String,
+    val label: String,
+    val description: String,
+) {
+    GpuNext(
+        mpvValue = "gpu-next",
+        label = "GPU next",
+        description = "Modern libmpv renderer with higher quality processing.",
+    ),
+    Gpu(
+        mpvValue = "gpu",
+        label = "GPU",
+        description = "Compatibility renderer for devices that have issues with GPU next.",
+    ),
 }
 
 enum class IosVideoOutputPreset(
@@ -147,6 +188,47 @@ enum class IosHardwareDecoderMode(
     Off("no", "Off"),
 }
 
+enum class IosAudioOutputMode(
+    val mpvValue: String,
+    val label: String,
+) {
+    Auto("audiounit", "Auto"),
+    AvFoundation("avfoundation", "AVFoundation"),
+    AudioUnit("audiounit", "AudioUnit");
+
+    companion object {
+        val selectableEntries: List<IosAudioOutputMode> = listOf(Auto, AudioUnit)
+
+        fun fromStoredName(name: String?): IosAudioOutputMode =
+            name
+                ?.let { runCatching { valueOf(it) }.getOrNull() }
+                ?.takeUnless { it == AvFoundation }
+                ?: Auto
+    }
+}
+
+@Composable
+fun IosVideoOutputPreset.localizedLabel(): String = when (this) {
+    IosVideoOutputPreset.NativeEdr -> stringResource(Res.string.player_ios_preset_native_edr_label)
+    IosVideoOutputPreset.SdrToneMapped -> stringResource(Res.string.player_ios_preset_sdr_tone_mapped_label)
+    IosVideoOutputPreset.Compatibility -> stringResource(Res.string.player_ios_preset_compatibility_label)
+    IosVideoOutputPreset.Custom -> stringResource(Res.string.player_ios_preset_custom_label)
+}
+
+@Composable
+fun IosVideoOutputPreset.localizedDescription(): String = when (this) {
+    IosVideoOutputPreset.NativeEdr -> stringResource(Res.string.player_ios_preset_native_edr_desc)
+    IosVideoOutputPreset.SdrToneMapped -> stringResource(Res.string.player_ios_preset_sdr_tone_mapped_desc)
+    IosVideoOutputPreset.Compatibility -> stringResource(Res.string.player_ios_preset_compatibility_desc)
+    IosVideoOutputPreset.Custom -> stringResource(Res.string.player_ios_preset_custom_desc)
+}
+
+@Composable
+fun IosHardwareDecoderMode.localizedLabel(): String = when (this) {
+    IosHardwareDecoderMode.Off -> stringResource(Res.string.player_ios_hardware_decoder_off)
+    else -> label
+}
+
 data class PlayerPlaybackSnapshot(
     val isLoading: Boolean = true,
     val isPlaying: Boolean = false,
@@ -155,4 +237,12 @@ data class PlayerPlaybackSnapshot(
     val positionMs: Long = 0L,
     val bufferedPositionMs: Long = 0L,
     val playbackSpeed: Float = 1f,
+    val videoWidth: Int = 0,
+    val videoHeight: Int = 0,
+)
+
+data class PlayerNowPlayingInfo(
+    val title: String,
+    val subtitle: String? = null,
+    val artworkUrl: String? = null,
 )

@@ -243,10 +243,8 @@ internal actual object PlayerSettingsStorage {
     actual fun saveIosTargetTransfer(transfer: String) = saveString(iosTargetTransferKey, transfer)
     actual fun loadIosHardwareDecoderMode(): String? = loadString(iosHardwareDecoderModeKey)
     actual fun saveIosHardwareDecoderMode(mode: String) = saveString(iosHardwareDecoderModeKey, mode)
-    // Fork: no iOS-audio-output expect in NuvioMobile's commonMain — kept non-actual so
-    // the sync import/export below stays identical to NuvioDesktop's file.
-    fun loadIosAudioOutputMode(): String? = loadString(iosAudioOutputModeKey)
-    fun saveIosAudioOutputMode(mode: String) = saveString(iosAudioOutputModeKey, mode)
+    actual fun loadIosAudioOutputMode(): String? = loadString(iosAudioOutputModeKey)
+    actual fun saveIosAudioOutputMode(mode: String) = saveString(iosAudioOutputModeKey, mode)
     actual fun loadIosExtendedDynamicRangeEnabled(): Boolean? = loadBoolean(iosExtendedDynamicRangeEnabledKey)
     actual fun saveIosExtendedDynamicRangeEnabled(enabled: Boolean) = saveBoolean(iosExtendedDynamicRangeEnabledKey, enabled)
     actual fun loadIosTargetColorspaceHintEnabled(): Boolean? = loadBoolean(iosTargetColorspaceHintEnabledKey)
@@ -441,4 +439,21 @@ internal actual object PlayerSettingsStorage {
     actual fun loadSubtitleOutline(): Int? = machineStore.getInt("subtitleOutline")
     actual fun saveSubtitleOutline(thickness: Int) { machineStore.putInt("subtitleOutline", thickness) }
     actual fun invalidatePlayerEngineConfig() { invalidateVlcjFactory() }
+
+    // ── Added upstream; not surfaced in the Linux desktop UI ──────────────
+    actual fun loadShowParentalGuide(): Boolean? = machineStore.getBoolean("showParentalGuide")
+    actual fun saveShowParentalGuide(enabled: Boolean) { machineStore.putBoolean("showParentalGuide", enabled) }
+    actual fun loadTouchGesturesEnabled(): Boolean? = machineStore.getBoolean("touchGesturesEnabled")
+    actual fun saveTouchGesturesEnabled(enabled: Boolean) { machineStore.putBoolean("touchGesturesEnabled", enabled) }
+    actual fun loadExternalPlayerSendSkipSegments(): Boolean? = machineStore.getBoolean("externalPlayerSendSkipSegments")
+    actual fun saveExternalPlayerSendSkipSegments(enabled: Boolean) { machineStore.putBoolean("externalPlayerSendSkipSegments", enabled) }
+    // Android/iOS playback-engine settings: stored so profile sync round-trips them, never read here.
+    actual fun loadAndroidPlaybackEngine(): String? = machineStore.getString("androidPlaybackEngine")
+    actual fun saveAndroidPlaybackEngine(engine: String) { machineStore.putString("androidPlaybackEngine", engine) }
+    actual fun loadAndroidLibmpvVideoOutput(): String? = machineStore.getString("androidLibmpvVideoOutput")
+    actual fun saveAndroidLibmpvVideoOutput(output: String) { machineStore.putString("androidLibmpvVideoOutput", output) }
+    actual fun loadAndroidLibmpvHardwareDecodingEnabled(): Boolean? = machineStore.getBoolean("androidLibmpvHwDec")
+    actual fun saveAndroidLibmpvHardwareDecodingEnabled(enabled: Boolean) { machineStore.putBoolean("androidLibmpvHwDec", enabled) }
+    actual fun loadAndroidLibmpvYuv420pEnabled(): Boolean? = machineStore.getBoolean("androidLibmpvYuv420p")
+    actual fun saveAndroidLibmpvYuv420pEnabled(enabled: Boolean) { machineStore.putBoolean("androidLibmpvYuv420p", enabled) }
 }

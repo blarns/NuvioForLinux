@@ -81,4 +81,7 @@ internal actual object MdbListSettingsStorage {
         payload.decodeSyncBoolean(useLetterboxdKey)?.let(::saveUseLetterboxd)
         payload.decodeSyncBoolean(useAudienceKey)?.let(::saveUseAudience)
     }
+    private const val useMalKey = "mdblist_use_mal"
+    actual fun loadUseMal(): Boolean? = loadBoolean(useMalKey)
+    actual fun saveUseMal(enabled: Boolean) = saveBoolean(useMalKey, enabled)
 }

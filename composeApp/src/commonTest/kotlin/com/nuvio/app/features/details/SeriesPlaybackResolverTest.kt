@@ -37,7 +37,7 @@ class SeriesPlaybackResolverTest {
         )
 
         assertNotNull(action)
-        assertEquals("Up Next • S1E3", action.label)
+        assertEquals("Next Up • S1E3", action.label)
         assertEquals("show:1:3", action.videoId)
         assertEquals(1, action.seasonNumber)
         assertEquals(3, action.episodeNumber)
@@ -86,7 +86,7 @@ class SeriesPlaybackResolverTest {
         )
 
         assertNotNull(action)
-        assertEquals("Up Next • S1E3", action.label)
+        assertEquals("Next Up • S1E3", action.label)
         assertEquals("show:1:3", action.videoId)
     }
 
@@ -124,10 +124,76 @@ class SeriesPlaybackResolverTest {
         )
 
         assertNotNull(action)
-        assertEquals("Up Next • S4E15", action.label)
+        assertEquals("Next Up • S4E15", action.label)
         assertEquals("tmdb:98765:4:15", action.videoId)
         assertEquals(4, action.seasonNumber)
         assertEquals(15, action.episodeNumber)
+    }
+
+    @Test
+    fun seriesPrimaryAction_prefers_default_video_id_when_nothing_watched() {
+        val meta = MetaDetails(
+            id = "show",
+            type = "series",
+            name = "Show",
+            defaultVideoId = "show:1:2",
+            videos = listOf(
+                MetaVideo(id = "show:1:1", title = "Episode 1", season = 1, episode = 1, released = "2026-03-01"),
+                MetaVideo(id = "show:1:2", title = "Episode 2", season = 1, episode = 2, released = "2026-03-08"),
+                MetaVideo(id = "show:1:3", title = "Episode 3", season = 1, episode = 3, released = "2026-03-15"),
+            ),
+        )
+
+        val action = meta.seriesPrimaryAction(
+            entries = emptyList(),
+            watchedItems = emptyList(),
+            todayIsoDate = "2026-03-30",
+        )
+
+        assertNotNull(action)
+        assertEquals("Play S1E2", action.label)
+        assertEquals("show:1:2", action.videoId)
+        assertEquals(1, action.seasonNumber)
+        assertEquals(2, action.episodeNumber)
+    }
+
+    @Test
+    fun seriesPrimaryAction_ignores_default_video_id_when_progress_exists() {
+        val meta = MetaDetails(
+            id = "show",
+            type = "series",
+            name = "Show",
+            defaultVideoId = "show:1:2",
+            videos = listOf(
+                MetaVideo(id = "show:1:1", title = "Episode 1", season = 1, episode = 1, released = "2026-03-01"),
+                MetaVideo(id = "show:1:2", title = "Episode 2", season = 1, episode = 2, released = "2026-03-08"),
+                MetaVideo(id = "show:1:3", title = "Episode 3", season = 1, episode = 3, released = "2026-03-15"),
+            ),
+        )
+
+        val action = meta.seriesPrimaryAction(
+            entries = listOf(
+                WatchProgressEntry(
+                    contentType = "series",
+                    parentMetaId = "show",
+                    parentMetaType = "series",
+                    videoId = "show:1:1",
+                    title = "Show",
+                    seasonNumber = 1,
+                    episodeNumber = 1,
+                    lastPositionMs = 1_000L,
+                    durationMs = 10_000L,
+                    lastUpdatedEpochMs = 100L,
+                    isCompleted = false,
+                ),
+            ),
+            watchedItems = emptyList(),
+            todayIsoDate = "2026-03-30",
+        )
+
+        assertNotNull(action)
+        assertEquals("Resume S1E1", action.label)
+        assertEquals("show:1:1", action.videoId)
     }
 
     @Test
@@ -155,5 +221,17 @@ class SeriesPlaybackResolverTest {
         assertEquals(2, nextEpisode.season)
         assertEquals(2, nextEpisode.episode)
         assertEquals("s2e2", nextEpisode.id)
+    }
+
+    @Test
+    fun filterUnavailableFutureSeasons_removes_explicitly_unavailable_season_without_release_date() {
+        val episodes = listOf(
+            MetaVideo(id = "s1e1", title = "Episode 1", season = 1, episode = 1, released = "2026-01-01"),
+            MetaVideo(id = "s3e1", title = "Episode 1", season = 3, episode = 1, released = null, available = false),
+        )
+
+        val filtered = episodes.filterUnavailableFutureSeasons(todayIsoDate = "2026-07-05")
+
+        assertEquals(listOf("s1e1"), filtered.map(MetaVideo::id))
     }
 }

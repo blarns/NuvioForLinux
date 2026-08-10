@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -26,7 +28,7 @@ import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material.icons.rounded.StopCircle
 import androidx.compose.material3.BasicAlertDialog
-import androidx.compose.material3.CircularProgressIndicator
+import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,6 +51,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.action_cancel
+import nuvio.composeapp.generated.resources.action_close
+import nuvio.composeapp.generated.resources.submit_intro_button_submit
+import nuvio.composeapp.generated.resources.submit_intro_capture_button
+import nuvio.composeapp.generated.resources.submit_intro_end_time_label
+import nuvio.composeapp.generated.resources.submit_intro_segment_intro
+import nuvio.composeapp.generated.resources.submit_intro_segment_outro
+import nuvio.composeapp.generated.resources.submit_intro_segment_recap
+import nuvio.composeapp.generated.resources.submit_intro_segment_type_label
+import nuvio.composeapp.generated.resources.submit_intro_start_time_label
+import nuvio.composeapp.generated.resources.submit_intro_title
+import org.jetbrains.compose.resources.stringResource
 import kotlin.math.floor
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -73,7 +88,10 @@ fun SubmitIntroDialog(
 
     BasicAlertDialog(onDismissRequest = onDismiss) {
         Surface(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp),
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 24.dp)
+                .widthIn(max = 420.dp)
+                .heightIn(max = 560.dp),
             shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 8.dp,
@@ -81,6 +99,7 @@ fun SubmitIntroDialog(
             Column(
                 modifier = Modifier
                     .padding(24.dp)
+                    .heightIn(max = 512.dp)
                     .verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -91,20 +110,24 @@ fun SubmitIntroDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "Submit Timestamps",
+                        text = stringResource(Res.string.submit_intro_title),
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.Bold,
                     )
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Rounded.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = stringResource(Res.string.action_close),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
 
                 // Segment Type
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "SEGMENT TYPE",
+                        text = stringResource(Res.string.submit_intro_segment_type_label),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.SemiBold,
@@ -114,21 +137,21 @@ fun SubmitIntroDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         SegmentTypeButton(
-                            label = "Intro",
+                            label = stringResource(Res.string.submit_intro_segment_intro),
                             icon = Icons.Rounded.PlayCircleOutline,
                             selected = segmentType == "intro",
                             onClick = { onSegmentTypeChange("intro") },
                             modifier = Modifier.weight(1f)
                         )
                         SegmentTypeButton(
-                            label = "Recap",
+                            label = stringResource(Res.string.submit_intro_segment_recap),
                             icon = Icons.Rounded.Replay,
                             selected = segmentType == "recap",
                             onClick = { onSegmentTypeChange("recap") },
                             modifier = Modifier.weight(1f)
                         )
                         SegmentTypeButton(
-                            label = "Outro",
+                            label = stringResource(Res.string.submit_intro_segment_outro),
                             icon = Icons.Rounded.StopCircle,
                             selected = segmentType == "outro",
                             onClick = { onSegmentTypeChange("outro") },
@@ -139,7 +162,7 @@ fun SubmitIntroDialog(
 
                 // Start Time
                 TimeInputRow(
-                    label = "START TIME (MM:SS)",
+                    label = stringResource(Res.string.submit_intro_start_time_label),
                     value = startTimeStr,
                     onValueChange = onStartTimeChange,
                     onCapture = { onStartTimeChange(formatSecondsToMMSS(currentTimeSec)) }
@@ -147,7 +170,7 @@ fun SubmitIntroDialog(
 
                 // End Time
                 TimeInputRow(
-                    label = "END TIME (MM:SS)",
+                    label = stringResource(Res.string.submit_intro_end_time_label),
                     value = endTimeStr,
                     onValueChange = onEndTimeChange,
                     onCapture = { onEndTimeChange(formatSecondsToMMSS(currentTimeSec)) }
@@ -170,7 +193,7 @@ fun SubmitIntroDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Cancel",
+                            text = stringResource(Res.string.action_cancel),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -205,10 +228,9 @@ fun SubmitIntroDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         if (isSubmitting) {
-                            CircularProgressIndicator(
+                            NuvioLoadingIndicator(
                                 color = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier.size(24.dp),
-                                strokeWidth = 2.dp
                             )
                         } else {
                             Row(
@@ -217,7 +239,7 @@ fun SubmitIntroDialog(
                             ) {
                                 Icon(Icons.Rounded.Send, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
                                 Text(
-                                    text = "Submit",
+                                    text = stringResource(Res.string.submit_intro_button_submit),
                                     color = MaterialTheme.colorScheme.onPrimary,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -328,7 +350,7 @@ private fun TimeInputRow(
                     modifier = Modifier.size(18.dp)
                 )
                 Text(
-                    text = "Capture",
+                    text = stringResource(Res.string.submit_intro_capture_button),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.SemiBold

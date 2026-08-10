@@ -17,6 +17,8 @@ import com.nuvio.app.features.notifications.EpisodeReleaseNotificationsRepositor
 import com.nuvio.app.features.player.PlayerSettingsStorage
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.profiles.ProfileRepository
+import com.nuvio.app.core.ui.CardDepthStyleRepository
+import com.nuvio.app.core.ui.CardDepthStyleStorage
 import com.nuvio.app.core.ui.PosterCardStyleRepository
 import com.nuvio.app.core.ui.PosterCardStyleStorage
 import com.nuvio.app.features.settings.ThemeSettingsStorage
@@ -28,7 +30,7 @@ import com.nuvio.app.features.tmdb.TmdbSettingsRepository
 import com.nuvio.app.features.trakt.TraktCommentsStorage
 import com.nuvio.app.features.trakt.TraktCommentsSettings
 import com.nuvio.app.features.trakt.TraktSettingsStorage
-import com.nuvio.app.features.trakt.TraktSettingsRepository
+import com.nuvio.app.features.tracking.TrackingSettingsRepository
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesStorage
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepository
 import io.github.jan.supabase.postgrest.postgrest
@@ -39,7 +41,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -86,6 +87,12 @@ object ProfileSettingsSync {
         observeLocalChangesAndPush()
     }
 
+    fun clearAccountState() {
+        observeJob?.cancel()
+        observeJob = null
+        skipNextPushSignature = null
+    }
+
     suspend fun pull(profileId: Int): Boolean {
         ensureRepositoriesLoaded()
         return syncMutex.withLock {
@@ -110,9 +117,6 @@ object ProfileSettingsSync {
 
                 if (remoteJson == null) {
                     log.i { "pull(profileId=$profileId) — no remote settings blob found" }
-                    if (localSignature != defaultSignature()) {
-                        pushToRemoteLocked(profileId, localBlob)
-                    }
                     return@withLock false
                 }
 
@@ -124,7 +128,6 @@ object ProfileSettingsSync {
                         log.e(error) { "pull(profileId=$profileId) — failed to decode remote settings blob" }
                         return@withLock false
                     }
-
                     val remoteSignature = buildSignature(remoteBlob)
                     if (remoteSignature == localSignature) {
                         log.d { "pull(profileId=$profileId) — remote matches local" }
@@ -149,17 +152,18 @@ object ProfileSettingsSync {
         }
     }
 
-    suspend fun pushCurrentProfileToRemote() {
+    suspend fun pushCurrentProfileToRemote(): Boolean {
         ensureRepositoriesLoaded()
-        syncMutex.withLock {
+        return syncMutex.withLock {
             runCatching {
                 val profileId = ProfileRepository.activeProfileId
                 val blob = exportSettingsBlob()
-                if (ProfileRepository.activeProfileId != profileId) return@runCatching
+                if (ProfileRepository.activeProfileId != profileId) return@runCatching false
                 pushToRemoteLocked(profileId, blob)
+                true
             }.onFailure { error ->
                 log.e(error) { "pushCurrentProfileToRemote() — FAILED" }
-            }
+            }.getOrDefault(false)
         }
     }
 
@@ -169,7 +173,9 @@ object ProfileSettingsSync {
             ThemeSettingsRepository.selectedTheme.map { "theme" },
             ThemeSettingsRepository.amoledEnabled.map { "amoled" },
             ThemeSettingsRepository.liquidGlassNativeTabBarEnabled.map { "liquid_glass_tab_bar" },
+            ThemeSettingsRepository.navBarStyle.map { "nav_bar_style" },
             PosterCardStyleRepository.uiState.map { "poster_card_style" },
+            CardDepthStyleRepository.uiState.map { "card_depth_style" },
             PlayerSettingsRepository.uiState.map { "player" },
             StreamBadgeSettingsRepository.uiState.map { "stream_badges" },
             DebridSettingsRepository.uiState.map { "debrid" },
@@ -178,7 +184,7 @@ object ProfileSettingsSync {
             MetaScreenSettingsRepository.uiState.map { "meta" },
             CollectionMobileSettingsRepository.uiState.map { "collection_mobile_settings" },
             ContinueWatchingPreferencesRepository.uiState.map { "continue_watching" },
-            TraktSettingsRepository.uiState.map { "trakt_settings" },
+            TrackingSettingsRepository.uiState.map { "trakt_settings" },
             TraktCommentsSettings.enabled.map { "trakt_comments" },
             EpisodeReleaseNotificationsRepository.uiState.map { "episode_release_alerts" },
         )
@@ -218,6 +224,7 @@ object ProfileSettingsSync {
             features = MobileProfileSettingsFeatures(
                 themeSettings = ThemeSettingsStorage.exportToSyncPayload(),
                 posterCardStyleSettingsPayload = PosterCardStyleStorage.loadPayload().orEmpty().trim(),
+                cardDepthStyleSettingsPayload = CardDepthStyleStorage.loadPayload().orEmpty().trim(),
                 playerSettings = PlayerSettingsStorage.exportToSyncPayload(),
                 streamBadgeSettings = StreamBadgeSettingsStorage.exportToSyncPayload(),
                 debridSettings = DebridSettingsStorage.exportToSyncPayload(),
@@ -241,6 +248,9 @@ object ProfileSettingsSync {
 
         PosterCardStyleStorage.savePayload(blob.features.posterCardStyleSettingsPayload)
         PosterCardStyleRepository.onProfileChanged()
+
+        CardDepthStyleStorage.savePayload(blob.features.cardDepthStyleSettingsPayload)
+        CardDepthStyleRepository.onProfileChanged()
 
         PlayerSettingsStorage.replaceFromSyncPayload(blob.features.playerSettings)
         PlayerSettingsRepository.onProfileChanged()
@@ -268,7 +278,7 @@ object ProfileSettingsSync {
         ContinueWatchingPreferencesRepository.onProfileChanged()
 
         TraktSettingsStorage.savePayload(blob.features.traktSettingsPayload)
-        TraktSettingsRepository.onProfileChanged()
+        TrackingSettingsRepository.onProfileChanged()
 
         TraktCommentsStorage.replaceFromSyncPayload(blob.features.traktCommentsSettings)
         TraktCommentsSettings.onProfileChanged()
@@ -279,6 +289,7 @@ object ProfileSettingsSync {
     private fun ensureRepositoriesLoaded() {
         ThemeSettingsRepository.ensureLoaded()
         PosterCardStyleRepository.ensureLoaded()
+        CardDepthStyleRepository.ensureLoaded()
         PlayerSettingsRepository.ensureLoaded()
         StreamBadgeSettingsRepository.ensureLoaded()
         DebridSettingsRepository.ensureLoaded()
@@ -287,7 +298,7 @@ object ProfileSettingsSync {
         MetaScreenSettingsRepository.ensureLoaded()
         CollectionMobileSettingsRepository.ensureLoaded()
         ContinueWatchingPreferencesRepository.ensureLoaded()
-        TraktSettingsRepository.ensureLoaded()
+        TrackingSettingsRepository.ensureLoaded()
         TraktCommentsSettings.ensureLoaded()
         EpisodeReleaseNotificationsRepository.ensureLoaded()
     }
@@ -295,14 +306,13 @@ object ProfileSettingsSync {
     private fun buildSignature(blob: MobileProfileSettingsBlob): String =
         json.encodeToString(MobileProfileSettingsBlob.serializer(), blob)
 
-    private fun defaultSignature(): String =
-        buildSignature(MobileProfileSettingsBlob())
-
     private fun currentObservedStateSignature(): String = listOf(
         "theme=${ThemeSettingsRepository.selectedTheme.value.name}",
         "amoled=${ThemeSettingsRepository.amoledEnabled.value}",
         "liquid_glass_tab_bar=${ThemeSettingsRepository.liquidGlassNativeTabBarEnabled.value}",
+        "nav_bar_style=${ThemeSettingsRepository.navBarStyle.value.key}",
         "poster_card_style=${PosterCardStyleRepository.uiState.value}",
+        "card_depth_style=${CardDepthStyleRepository.uiState.value}",
         "player=${PlayerSettingsRepository.uiState.value}",
         "stream_badges=${StreamBadgeSettingsRepository.uiState.value}",
         "debrid=${DebridSettingsRepository.uiState.value}",
@@ -311,10 +321,11 @@ object ProfileSettingsSync {
         "meta=${MetaScreenSettingsRepository.uiState.value}",
         "collection_mobile_settings=${CollectionMobileSettingsRepository.uiState.value}",
         "continue=${ContinueWatchingPreferencesRepository.uiState.value}",
-        "trakt_settings=${TraktSettingsRepository.uiState.value}",
+        "trakt_settings=${TrackingSettingsRepository.uiState.value}",
         "trakt_comments=${TraktCommentsSettings.enabled.value}",
         "episode_release_alerts=${EpisodeReleaseNotificationsRepository.uiState.value.isEnabled}",
     ).joinToString(separator = "||")
+
 }
 
 @Serializable
@@ -327,6 +338,7 @@ private data class MobileProfileSettingsBlob(
 private data class MobileProfileSettingsFeatures(
     @SerialName("theme_settings") val themeSettings: JsonObject = JsonObject(emptyMap()),
     @SerialName("poster_card_style_settings_payload") val posterCardStyleSettingsPayload: String = "",
+    @SerialName("card_depth_style_settings_payload") val cardDepthStyleSettingsPayload: String = "",
     @SerialName("player_settings") val playerSettings: JsonObject = JsonObject(emptyMap()),
     @SerialName("stream_badge_settings") val streamBadgeSettings: JsonObject = JsonObject(emptyMap()),
     @SerialName("debrid_settings") val debridSettings: JsonObject = JsonObject(emptyMap()),

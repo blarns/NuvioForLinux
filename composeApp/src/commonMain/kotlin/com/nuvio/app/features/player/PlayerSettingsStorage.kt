@@ -5,16 +5,22 @@ import kotlinx.serialization.json.JsonObject
 internal expect object PlayerSettingsStorage {
     fun loadShowLoadingOverlay(): Boolean?
     fun saveShowLoadingOverlay(enabled: Boolean)
+    fun loadShowParentalGuide(): Boolean?
+    fun saveShowParentalGuide(enabled: Boolean)
     fun loadResizeMode(): String?
     fun saveResizeMode(mode: String)
     fun loadHoldToSpeedEnabled(): Boolean?
     fun saveHoldToSpeedEnabled(enabled: Boolean)
     fun loadHoldToSpeedValue(): Float?
     fun saveHoldToSpeedValue(speed: Float)
+    fun loadTouchGesturesEnabled(): Boolean?
+    fun saveTouchGesturesEnabled(enabled: Boolean)
     fun loadExternalPlayerEnabled(): Boolean?
     fun saveExternalPlayerEnabled(enabled: Boolean)
     fun loadExternalPlayerForwardSubtitles(): Boolean?
     fun saveExternalPlayerForwardSubtitles(enabled: Boolean)
+    fun loadExternalPlayerSendSkipSegments(): Boolean?
+    fun saveExternalPlayerSendSkipSegments(enabled: Boolean)
     fun loadExternalPlayerId(): String?
     fun saveExternalPlayerId(playerId: String?)
     fun loadPreferredAudioLanguage(): String?
@@ -51,39 +57,20 @@ internal expect object PlayerSettingsStorage {
     fun saveStreamReuseLastLinkEnabled(enabled: Boolean)
     fun loadStreamReuseLastLinkCacheHours(): Int?
     fun saveStreamReuseLastLinkCacheHours(hours: Int)
+    fun loadAndroidPlaybackEngine(): String?
+    fun saveAndroidPlaybackEngine(engine: String)
+    fun loadAndroidLibmpvVideoOutput(): String?
+    fun saveAndroidLibmpvVideoOutput(output: String)
+    fun loadAndroidLibmpvHardwareDecodingEnabled(): Boolean?
+    fun saveAndroidLibmpvHardwareDecodingEnabled(enabled: Boolean)
+    fun loadAndroidLibmpvYuv420pEnabled(): Boolean?
+    fun saveAndroidLibmpvYuv420pEnabled(enabled: Boolean)
     fun loadDecoderPriority(): Int?
     fun saveDecoderPriority(priority: Int)
     fun loadMapDV7ToHevc(): Boolean?
     fun saveMapDV7ToHevc(enabled: Boolean)
     fun loadTunnelingEnabled(): Boolean?
     fun saveTunnelingEnabled(enabled: Boolean)
-    fun loadHwAccelEnabled(): Boolean?
-    fun saveHwAccelEnabled(enabled: Boolean)
-    fun loadDiscordRichPresenceEnabled(): Boolean?
-    fun saveDiscordRichPresenceEnabled(enabled: Boolean)
-    /**
-     * Null when Discord presence can actually work; otherwise a short reason the setting is
-     * having no effect, shown under the toggle. Always null where the feature doesn't exist.
-     */
-    fun discordRichPresenceUnavailableReason(): String?
-    fun loadTrayIconEnabled(): Boolean?
-    fun saveTrayIconEnabled(enabled: Boolean)
-    fun loadMenuBarEnabled(): Boolean?
-    fun saveMenuBarEnabled(enabled: Boolean)
-    fun loadAudioOutput(): String?
-    fun saveAudioOutput(module: String)
-    // Subtitle appearance (desktop/VLCJ freetype). Ints are the raw libVLC values.
-    fun loadSubtitleFontSize(): Int?
-    fun saveSubtitleFontSize(relSize: Int)
-    fun loadSubtitleColor(): Int?
-    fun saveSubtitleColor(rgb: Int)
-    fun loadSubtitleBackgroundOpacity(): Int?
-    fun saveSubtitleBackgroundOpacity(opacity: Int)
-    fun loadSubtitleOutline(): Int?
-    fun saveSubtitleOutline(thickness: Int)
-    // Desktop hook: drop any cached VLCJ factory so the next player build picks up
-    // changed engine options (subtitle appearance). No-op on mobile.
-    fun invalidatePlayerEngineConfig()
     fun loadStreamAutoPlayMode(): String?
     fun saveStreamAutoPlayMode(mode: String)
     fun loadStreamAutoPlaySource(): String?
@@ -133,6 +120,8 @@ internal expect object PlayerSettingsStorage {
     fun saveIosTargetTransfer(transfer: String)
     fun loadIosHardwareDecoderMode(): String?
     fun saveIosHardwareDecoderMode(mode: String)
+    fun loadIosAudioOutputMode(): String?
+    fun saveIosAudioOutputMode(mode: String)
     fun loadIosExtendedDynamicRangeEnabled(): Boolean?
     fun saveIosExtendedDynamicRangeEnabled(enabled: Boolean)
     fun loadIosTargetColorspaceHintEnabled(): Boolean?
@@ -151,6 +140,36 @@ internal expect object PlayerSettingsStorage {
     fun saveIosSaturation(value: Int)
     fun loadIosGamma(): Int?
     fun saveIosGamma(value: Int)
+    // ── Linux desktop fork ────────────────────────────────────────────────
+    // No-ops on mobile; see the desktop actual for behaviour.
+    fun loadHwAccelEnabled(): Boolean?
+    fun saveHwAccelEnabled(enabled: Boolean)
+    fun loadDiscordRichPresenceEnabled(): Boolean?
+    fun saveDiscordRichPresenceEnabled(enabled: Boolean)
+    /**
+     * Null when Discord presence can actually work; otherwise a short reason the setting is
+     * having no effect, shown under the toggle. Always null where the feature doesn't exist.
+     */
+    fun discordRichPresenceUnavailableReason(): String?
+    fun loadTrayIconEnabled(): Boolean?
+    fun saveTrayIconEnabled(enabled: Boolean)
+    fun loadMenuBarEnabled(): Boolean?
+    fun saveMenuBarEnabled(enabled: Boolean)
+    fun loadAudioOutput(): String?
+    fun saveAudioOutput(module: String)
+    // Subtitle appearance (desktop/VLCJ freetype). Ints are the raw libVLC values.
+    fun loadSubtitleFontSize(): Int?
+    fun saveSubtitleFontSize(relSize: Int)
+    fun loadSubtitleColor(): Int?
+    fun saveSubtitleColor(rgb: Int)
+    fun loadSubtitleBackgroundOpacity(): Int?
+    fun saveSubtitleBackgroundOpacity(opacity: Int)
+    fun loadSubtitleOutline(): Int?
+    fun saveSubtitleOutline(thickness: Int)
+    // Desktop hook: drop any cached VLCJ factory so the next player build picks up
+    // changed engine options (subtitle appearance). No-op on mobile.
+    fun invalidatePlayerEngineConfig()
+
     fun exportToSyncPayload(): JsonObject
     fun replaceFromSyncPayload(payload: JsonObject)
 }

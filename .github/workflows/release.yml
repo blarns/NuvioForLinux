@@ -12,6 +12,13 @@ name: Release
 # the release is created in one shot, only after BOTH artifacts built, with target_commitish
 # cmp-rewrite (required — the in-app updater only shows releases whose target_commitish matches
 # its release channel branch).
+#
+# prerelease (default true) is the alpha channel. AppUpdater skips GitHub pre-releases unless the
+# user turned on Settings → About → Experimental updates, so a pre-release is never offered to
+# anyone running a stable build. Graduating an alpha to stable is just clearing the pre-release
+# flag on the existing GitHub release — same artifacts, no rebuild. Because of that, keep the tag
+# a plain version (v0.3.0), never v0.3.0-alpha.N: `version` must equal MARKETING_VERSION, and a
+# tag that sorts above the installed version would show a permanent update banner to alpha users.
 on:
   workflow_dispatch:
     inputs:
@@ -21,6 +28,11 @@ on:
         type: string
       dry_run:
         description: "Build artifacts only — no tag, no release"
+        required: true
+        type: boolean
+        default: true
+      prerelease:
+        description: "Publish as a pre-release (alpha). Only users who enabled Experimental updates are offered it."
         required: true
         type: boolean
         default: true
@@ -187,7 +199,16 @@ jobs:
             exit 1
           fi
           {
-            echo "## NuvioForLinux v$v"
+            if [ "${{ inputs.prerelease }}" = "true" ]; then
+              echo "## NuvioForLinux v$v — alpha"
+              echo ""
+              echo "> ⚠️ **This is an alpha.** It is not offered to anyone running a stable build."
+              echo "> The in-app updater skips pre-releases unless you turn on"
+              echo "> **Settings → About → Experimental updates**. Expect rough edges; report what breaks."
+              echo ""
+            else
+              echo "## NuvioForLinux v$v"
+            fi
             cat changelog_section.md
             echo ""
             echo "### ⬇️ Which file do I download?"
@@ -217,8 +238,10 @@ jobs:
           tag_name: v${{ inputs.version }}
           # The in-app updater only surfaces releases whose target_commitish is cmp-rewrite.
           target_commitish: cmp-rewrite
-          name: "NuvioForLinux v${{ inputs.version }}"
+          # Note: AppUpdater.matchesRequestedChannel() also matches on the branch name appearing
+          # in the tag or the name, so never put "cmp-rewrite" in the release title.
+          name: "NuvioForLinux v${{ inputs.version }}${{ inputs.prerelease && ' (alpha)' || '' }}"
           files: dist/*
           draft: false
-          prerelease: false
+          prerelease: ${{ inputs.prerelease }}
           body_path: release_body.md

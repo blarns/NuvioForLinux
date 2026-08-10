@@ -11,10 +11,7 @@ internal expect fun CollectionCardRemoteImage(
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
     animateIfPossible: Boolean = false,
-    // Desktop-only mouse hover-to-focus: [restImageUrl] is the static cover shown at rest and
-    // [hoverImageUrl] the animated "focus" art played while [hovered]. Hover is detected by the
-    // caller on an ancestor of the click overlay (which would otherwise swallow it). Mobile/iOS
-    // ignore these and keep showing [imageUrl].
+    // Desktop fork: collection tiles cross-fade to animated art on hover. Ignored on touch.
     restImageUrl: String? = null,
     hoverImageUrl: String? = null,
     hovered: Boolean = false,

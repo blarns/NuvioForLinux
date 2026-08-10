@@ -3,6 +3,7 @@ package com.nuvio.app.features.details
 import com.nuvio.app.features.streams.StreamBehaviorHints
 import com.nuvio.app.features.streams.StreamItem
 import com.nuvio.app.features.streams.StreamProxyHeaders
+import com.nuvio.app.features.streams.normalizeStreamType
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -50,6 +51,7 @@ internal object MetaDetailsParser {
             language = meta.string("language"),
             website = meta.string("website"),
             hasScheduledVideos = meta.behaviorHints().boolean("hasScheduledVideos") == true,
+            defaultVideoId = meta.behaviorHints().string("defaultVideoId"),
             trailers = meta.trailers(),
             links = links,
             videos = meta.videos(),
@@ -226,6 +228,7 @@ internal object MetaDetailsParser {
                 id = id,
                 title = title,
                 released = video.string("released"),
+                available = video.boolean("available") ?: true,
                 thumbnail = video.string("thumbnail"),
                 seasonPoster = video.string("seasonPoster") ?: video.string("season_poster_path"),
                 season = video.int("season"),
@@ -288,6 +291,7 @@ internal object MetaDetailsParser {
                 externalUrl = externalUrl,
                 addonName = addonName,
                 addonId = "embedded",
+                streamType = normalizeStreamType(obj.string("type")),
                 behaviorHints = StreamBehaviorHints(
                     bingeGroup = hintsObj?.string("bingeGroup"),
                     notWebReady = (hintsObj?.boolean("notWebReady") ?: false) || proxyHeaders != null,

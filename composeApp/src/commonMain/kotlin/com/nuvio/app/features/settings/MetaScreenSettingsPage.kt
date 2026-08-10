@@ -47,8 +47,11 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.nuvio.app.core.build.AppFeaturePolicy
+import com.nuvio.app.core.build.TrailerPlaybackMode
 import com.nuvio.app.core.ui.NuvioActionLabel
 import com.nuvio.app.features.details.MetaEpisodeCardStyle
+import com.nuvio.app.features.details.MetaScreenBackgroundMode
 import com.nuvio.app.features.details.MetaScreenSectionItem
 import com.nuvio.app.features.details.MetaScreenSectionKey
 import com.nuvio.app.features.details.MetaScreenSettingsRepository
@@ -62,14 +65,14 @@ import nuvio.composeapp.generated.resources.settings_meta_actions
 import nuvio.composeapp.generated.resources.settings_meta_actions_description
 import nuvio.composeapp.generated.resources.settings_meta_cast
 import nuvio.composeapp.generated.resources.settings_meta_cast_description
-import nuvio.composeapp.generated.resources.settings_meta_cinematic_background
-import nuvio.composeapp.generated.resources.settings_meta_cinematic_background_description
 import nuvio.composeapp.generated.resources.settings_meta_collection
 import nuvio.composeapp.generated.resources.settings_meta_collection_description
 import nuvio.composeapp.generated.resources.settings_meta_comments
 import nuvio.composeapp.generated.resources.settings_meta_comments_description
 import nuvio.composeapp.generated.resources.settings_meta_details
 import nuvio.composeapp.generated.resources.settings_meta_details_description
+import nuvio.composeapp.generated.resources.settings_meta_hero_trailer_playback
+import nuvio.composeapp.generated.resources.settings_meta_hero_trailer_playback_description
 import nuvio.composeapp.generated.resources.settings_meta_episode_cards
 import nuvio.composeapp.generated.resources.settings_meta_episode_cards_description
 import nuvio.composeapp.generated.resources.settings_meta_episode_style_horizontal
@@ -80,6 +83,14 @@ import nuvio.composeapp.generated.resources.settings_meta_episodes
 import nuvio.composeapp.generated.resources.settings_meta_episodes_description
 import nuvio.composeapp.generated.resources.settings_meta_blur_unwatched_episodes
 import nuvio.composeapp.generated.resources.settings_meta_blur_unwatched_episodes_description
+import nuvio.composeapp.generated.resources.settings_meta_background_mode
+import nuvio.composeapp.generated.resources.settings_meta_background_mode_cinematic
+import nuvio.composeapp.generated.resources.settings_meta_background_mode_cinematic_description
+import nuvio.composeapp.generated.resources.settings_meta_background_mode_description
+import nuvio.composeapp.generated.resources.settings_meta_background_mode_dominant
+import nuvio.composeapp.generated.resources.settings_meta_background_mode_dominant_description
+import nuvio.composeapp.generated.resources.settings_meta_background_mode_normal
+import nuvio.composeapp.generated.resources.settings_meta_background_mode_normal_description
 import nuvio.composeapp.generated.resources.settings_meta_group_label
 import nuvio.composeapp.generated.resources.settings_meta_more_like_this
 import nuvio.composeapp.generated.resources.settings_meta_more_like_this_description
@@ -105,19 +116,29 @@ internal fun LazyListScope.metaScreenSettingsContent(
     isTablet: Boolean,
     uiState: MetaScreenSettingsUiState,
 ) {
+    val showHeroTrailerPlaybackSetting = AppFeaturePolicy.heroTrailerPlaybackSupported &&
+        AppFeaturePolicy.trailerPlaybackMode == TrailerPlaybackMode.IN_APP
     item {
         SettingsSection(
             title = stringResource(Res.string.settings_meta_section_appearance),
             isTablet = isTablet,
         ) {
             SettingsGroup(isTablet = isTablet) {
-                SettingsSwitchRow(
-                    title = stringResource(Res.string.settings_meta_cinematic_background),
-                    description = stringResource(Res.string.settings_meta_cinematic_background_description),
-                    checked = uiState.cinematicBackground,
+                MetaBackgroundModeSelector(
                     isTablet = isTablet,
-                    onCheckedChange = { MetaScreenSettingsRepository.setCinematicBackground(it) },
+                    selectedMode = uiState.backgroundMode,
+                    onModeSelected = MetaScreenSettingsRepository::setBackgroundMode,
                 )
+                if (showHeroTrailerPlaybackSetting) {
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsSwitchRow(
+                        title = stringResource(Res.string.settings_meta_hero_trailer_playback),
+                        description = stringResource(Res.string.settings_meta_hero_trailer_playback_description),
+                        checked = uiState.heroTrailerPlayback,
+                        isTablet = isTablet,
+                        onCheckedChange = { MetaScreenSettingsRepository.setHeroTrailerPlayback(it) },
+                    )
+                }
                 SettingsGroupDivider(isTablet = isTablet)
                 SettingsSwitchRow(
                     title = stringResource(Res.string.settings_meta_tab_layout),
@@ -165,6 +186,71 @@ internal fun LazyListScope.metaScreenSettingsContent(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MetaBackgroundModeSelector(
+    isTablet: Boolean,
+    selectedMode: MetaScreenBackgroundMode,
+    onModeSelected: (MetaScreenBackgroundMode) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                horizontal = if (isTablet) 20.dp else 16.dp,
+                vertical = if (isTablet) 18.dp else 14.dp,
+            ),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = stringResource(Res.string.settings_meta_background_mode),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = stringResource(Res.string.settings_meta_background_mode_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            MetaScreenBackgroundMode.entries.forEach { mode ->
+                FilterChip(
+                    selected = selectedMode == mode,
+                    onClick = { onModeSelected(mode) },
+                    label = {
+                        Text(
+                            text = stringResource(mode.labelRes),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = selectedMode == mode,
+                        borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        selectedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                    ),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ),
+                )
+            }
+        }
+        Text(
+            text = stringResource(selectedMode.descriptionRes),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 @Composable
 private fun MetaSectionReorderableList(
     items: List<MetaScreenSectionItem>,
@@ -182,7 +268,7 @@ private fun MetaSectionReorderableList(
 
     // Count members per group for enforcing max 3
     val groupCounts: Map<Int, Int> = if (tabLayout) {
-        items.mapNotNull { it.tabGroup }.groupBy { it }.mapValues { it.value.size }
+        items.filter { it.tabGroup != null }.groupBy { it.tabGroup!! }.mapValues { it.value.size }
     } else {
         emptyMap()
     }
@@ -377,6 +463,20 @@ private fun TabGroupChip(
         ),
     )
 }
+
+private val MetaScreenBackgroundMode.labelRes: StringResource
+    get() = when (this) {
+        MetaScreenBackgroundMode.Normal -> Res.string.settings_meta_background_mode_normal
+        MetaScreenBackgroundMode.Cinematic -> Res.string.settings_meta_background_mode_cinematic
+        MetaScreenBackgroundMode.DominantColor -> Res.string.settings_meta_background_mode_dominant
+    }
+
+private val MetaScreenBackgroundMode.descriptionRes: StringResource
+    get() = when (this) {
+        MetaScreenBackgroundMode.Normal -> Res.string.settings_meta_background_mode_normal_description
+        MetaScreenBackgroundMode.Cinematic -> Res.string.settings_meta_background_mode_cinematic_description
+        MetaScreenBackgroundMode.DominantColor -> Res.string.settings_meta_background_mode_dominant_description
+    }
 
 @Composable
 private fun MetaEpisodeCardStyleSelector(

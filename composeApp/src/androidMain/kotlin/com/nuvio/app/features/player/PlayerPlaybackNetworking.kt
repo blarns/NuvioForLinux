@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import com.nuvio.app.core.diagnostics.SentryNetworkBreadcrumbInterceptor
 import com.nuvio.app.core.network.IPv4FirstDns
 import okhttp3.OkHttpClient
 import java.net.HttpURLConnection
@@ -55,13 +56,32 @@ internal object PlayerPlaybackNetworking {
             .followRedirects(true)
             .followSslRedirects(true)
             .retryOnConnectionFailure(true)
+            .addInterceptor(SentryNetworkBreadcrumbInterceptor())
             .build()
     }
 
-    fun createHttpDataSourceFactory(defaultHeaders: Map<String, String> = emptyMap()): DataSource.Factory {
+    private val loopbackPlaybackHttpClient: OkHttpClient by lazy {
+        playbackHttpClient.newBuilder()
+            .addInterceptor { chain ->
+                val request = chain.request()
+                val requestChain = if (isLoopbackHost(request.url.host)) {
+                    chain.withReadTimeout(65, TimeUnit.SECONDS)
+                } else {
+                    chain
+                }
+                requestChain.proceed(request)
+            }
+            .build()
+    }
+
+    fun createHttpDataSourceFactory(
+        defaultHeaders: Map<String, String> = emptyMap(),
+        useLongReadTimeout: Boolean = false,
+    ): DataSource.Factory {
         val requestHeaders = sanitizeHeaders(defaultHeaders)
+        val baseClient = if (useLongReadTimeout) loopbackPlaybackHttpClient else playbackHttpClient
         val client = requestHeaders.headerValue("Authorization")?.let { authorization ->
-            playbackHttpClient.newBuilder()
+            baseClient.newBuilder()
                 .addNetworkInterceptor { chain ->
                     val request = chain.request()
                     if (request.header("Authorization") == null) {
@@ -75,7 +95,7 @@ internal object PlayerPlaybackNetworking {
                     }
                 }
                 .build()
-        } ?: playbackHttpClient
+        } ?: baseClient
 
         return OkHttpDataSource.Factory(client).apply {
             setDefaultRequestProperties(requestHeaders)
@@ -88,8 +108,12 @@ internal object PlayerPlaybackNetworking {
     fun createDataSourceFactory(
         context: Context,
         defaultHeaders: Map<String, String> = emptyMap(),
+        useLongReadTimeout: Boolean = false,
     ): DataSource.Factory {
-        return DefaultDataSource.Factory(context, createHttpDataSourceFactory(defaultHeaders))
+        return DefaultDataSource.Factory(
+            context,
+            createHttpDataSourceFactory(defaultHeaders, useLongReadTimeout),
+        )
     }
 
     fun openConnection(
@@ -130,6 +154,11 @@ internal object PlayerPlaybackNetworking {
                 key to value
             }
         }.toMap()
+
+    private fun isLoopbackHost(host: String): Boolean = when (host.lowercase()) {
+        "127.0.0.1", "localhost", "::1" -> true
+        else -> false
+    }
 
     private fun withDefaultUserAgent(headers: Map<String, String>): Map<String, String> {
         val sanitized = sanitizeHeaders(headers)

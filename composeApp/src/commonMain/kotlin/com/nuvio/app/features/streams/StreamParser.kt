@@ -29,7 +29,7 @@ object StreamParser {
             val externalUrl = obj.string("externalUrl")
             val clientResolve = obj.objectValue("clientResolve")?.toClientResolve()
 
-            // Must have at least one playable source
+            // Must have at least one source or external target.
             if (url == null && infoHash == null && externalUrl == null && clientResolve == null) return@mapNotNull null
 
             val hintsObj = obj["behaviorHints"] as? JsonObject
@@ -48,6 +48,7 @@ object StreamParser {
                 addonName = addonName,
                 addonId = addonId,
                 addonLogo = addonLogo,
+                streamType = normalizeStreamType(obj.string("type")),
                 clientResolve = clientResolve,
                 behaviorHints = StreamBehaviorHints(
                     bingeGroup = hintsObj?.string("bingeGroup"),

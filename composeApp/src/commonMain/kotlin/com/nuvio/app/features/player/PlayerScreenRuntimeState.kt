@@ -16,7 +16,7 @@ import com.nuvio.app.features.p2p.P2pStreamingState
 import com.nuvio.app.features.player.skip.NextEpisodeInfo
 import com.nuvio.app.features.player.skip.SkipInterval
 import com.nuvio.app.features.streams.StreamsUiState
-import com.nuvio.app.features.trakt.TraktScrobbleItem
+import com.nuvio.app.features.tracking.TrackingMediaReference
 import com.nuvio.app.features.watched.WatchedUiState
 import com.nuvio.app.features.watchprogress.WatchProgressUiState
 import kotlinx.coroutines.CoroutineScope
@@ -33,6 +33,7 @@ internal class PlayerScreenRuntime(
     val sourceAudioUrl: String? get() = args.sourceAudioUrl
     val sourceHeaders: Map<String, String> get() = args.sourceHeaders
     val sourceResponseHeaders: Map<String, String> get() = args.sourceResponseHeaders
+    val streamType: String? get() = args.streamType
     val providerName: String get() = args.providerName
     val streamTitle: String get() = args.streamTitle
     val streamSubtitle: String? get() = args.streamSubtitle
@@ -53,18 +54,18 @@ internal class PlayerScreenRuntime(
     val torrentInfoHash: String? get() = args.torrentInfoHash
     val torrentFileIdx: Int? get() = args.torrentFileIdx
     val torrentFilename: String? get() = args.torrentFilename
-    val torrentMagnetUri: String? get() = args.torrentMagnetUri
     val torrentTrackers: List<String> get() = args.torrentTrackers
     val initialPositionMs: Long get() = args.initialPositionMs
     val initialProgressFraction: Float? get() = args.initialProgressFraction
+    val externalSubtitles: List<com.nuvio.app.features.streams.StreamSubtitle> get() = args.externalSubtitles
     val isSeries: Boolean get() = parentMetaType == "series"
 
     lateinit var scope: CoroutineScope
     lateinit var hapticFeedback: HapticFeedback
 
     var playerSettingsUiState: PlayerSettingsUiState = PlayerSettingsUiState()
-    var p2pSettingsUiState: P2pSettingsUiState = P2pSettingsUiState()
-    var p2pStreamingState: P2pStreamingState = P2pStreamingState.Idle
+    var p2pSettingsUiState by mutableStateOf(P2pSettingsUiState())
+    var p2pStreamingState by mutableStateOf<P2pStreamingState>(P2pStreamingState.Idle)
     var metaScreenSettingsUiState: MetaScreenSettingsUiState = MetaScreenSettingsUiState()
     var watchedUiState: WatchedUiState = WatchedUiState()
     var watchProgressUiState: WatchProgressUiState = WatchProgressUiState()
@@ -100,12 +101,17 @@ internal class PlayerScreenRuntime(
     var activeSourceAudioUrl by mutableStateOf(sourceAudioUrl)
     var activeSourceHeaders by mutableStateOf(sanitizePlaybackHeaders(sourceHeaders))
     var activeSourceResponseHeaders by mutableStateOf(sanitizePlaybackResponseHeaders(sourceResponseHeaders))
+    var activeStreamType by mutableStateOf(streamType)
     var activeTorrentInfoHash by mutableStateOf(torrentInfoHash)
     var activeTorrentFileIdx by mutableStateOf(torrentFileIdx)
     var activeTorrentFilename by mutableStateOf(torrentFilename)
-    var activeTorrentMagnetUri by mutableStateOf(torrentMagnetUri)
     var activeTorrentTrackers by mutableStateOf(torrentTrackers)
     var p2pResolvedSourceUrl by mutableStateOf<String?>(null)
+    var activeSourceIdentityKey by mutableStateOf(
+        torrentInfoHash?.trim()?.lowercase()?.takeIf { it.isNotBlank() }?.let { hash ->
+            "torrent:$hash:${torrentFileIdx ?: -1}"
+        } ?: sourceUrl.trim().takeIf { it.isNotBlank() }?.let { url -> "url:$url" },
+    )
     var activeStreamTitle by mutableStateOf(streamTitle)
     var activeStreamSubtitle by mutableStateOf(streamSubtitle)
     var activeProviderName by mutableStateOf(providerName)
@@ -146,9 +152,9 @@ internal class PlayerScreenRuntime(
     var previousIsPlaying by mutableStateOf(false)
     var hasRequestedScrobbleStartForCurrentItem by mutableStateOf(false)
     var scrobbleStartRequestGeneration by mutableStateOf(0L)
-    var pendingScrobbleStartAfterSeek by mutableStateOf(false)
+    var pendingSeekScrobbleRestart by mutableStateOf(false)
     var hasSentCompletionScrobbleForCurrentItem by mutableStateOf(false)
-    var currentTraktScrobbleItem by mutableStateOf<TraktScrobbleItem?>(null)
+    var currentTrackingMedia by mutableStateOf<TrackingMediaReference?>(null)
 
     var showSourcesPanel by mutableStateOf(false)
     var showEpisodesPanel by mutableStateOf(false)
@@ -186,7 +192,6 @@ internal class PlayerScreenRuntime(
     var useCustomSubtitles by mutableStateOf(false)
     var preferredAudioSelectionApplied by mutableStateOf(false)
     var preferredSubtitleSelectionApplied by mutableStateOf(false)
-    var activeSubtitleTab by mutableStateOf(SubtitleTab.BuiltIn)
     var autoFetchedAddonSubtitlesForKey by mutableStateOf<String?>(null)
     var trackPreferenceRestoreApplied by mutableStateOf(false)
     var subtitleDelayMs by mutableStateOf(0)

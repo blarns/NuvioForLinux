@@ -35,10 +35,10 @@ import androidx.compose.material.icons.rounded.Replay10
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.VideoLibrary
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.VolumeOff
+import com.nuvio.app.core.ui.NuvioLoadingIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -80,7 +80,6 @@ internal fun PlayerControlsShell(
     episodeTitle: String?,
     playbackSnapshot: PlayerPlaybackSnapshot,
     displayedPositionMs: Long,
-    currentVolumeFraction: Float?,
     metrics: PlayerLayoutMetrics,
     resizeMode: PlayerResizeMode,
     isLocked: Boolean,
@@ -97,6 +96,10 @@ internal fun PlayerControlsShell(
     onVideoSettingsClick: (() -> Unit)? = null,
     onSourcesClick: (() -> Unit)? = null,
     onEpisodesClick: (() -> Unit)? = null,
+    // Fork (desktop): the volume slider is only rendered when onVolumeChange is non-null,
+    // so touch platforms (which use the vertical drag gesture) leave it out.
+    onVolumeChange: ((Float) -> Unit)? = null,
+    currentVolumeFraction: Float? = null,
     onOpenInExternalPlayer: (() -> Unit)? = null,
     onSubmitIntroClick: (() -> Unit)? = null,
     parentalWarnings: List<ParentalWarning> = emptyList(),
@@ -104,7 +107,6 @@ internal fun PlayerControlsShell(
     onParentalGuideAnimationComplete: () -> Unit = {},
     onScrubChange: (Long) -> Unit,
     onScrubFinished: (Long) -> Unit,
-    onVolumeChange: ((Float) -> Unit)? = null,
     horizontalSafePadding: androidx.compose.ui.unit.Dp,
     modifier: Modifier = Modifier,
 ) {
@@ -160,6 +162,7 @@ internal fun PlayerControlsShell(
                 onParentalGuideAnimationComplete = onParentalGuideAnimationComplete,
                 onLockToggle = onLockToggle,
                 onVideoSettingsClick = onVideoSettingsClick,
+                onOpenInExternalPlayer = onOpenInExternalPlayer,
                 onBack = onBack,
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -173,23 +176,16 @@ internal fun PlayerControlsShell(
             )
 
             if (showPlaybackControls) {
-                Row(
+                CenterControls(
+                    snapshot = playbackSnapshot,
+                    metrics = metrics,
+                    onSeekBack = onSeekBack,
+                    onSeekForward = onSeekForward,
+                    onTogglePlayback = onTogglePlayback,
                     modifier = Modifier
                         .align(Alignment.Center)
-                        .fillMaxWidth()
-                        .padding(horizontal = metrics.horizontalPadding)
                         .padding(bottom = metrics.centerLift),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    CenterControls(
-                        snapshot = playbackSnapshot,
-                        metrics = metrics,
-                        onSeekBack = onSeekBack,
-                        onSeekForward = onSeekForward,
-                        onTogglePlayback = onTogglePlayback,
-                    )
-                }
+                )
             }
 
             if (showPlaybackControls) {
@@ -208,7 +204,6 @@ internal fun PlayerControlsShell(
                     onEpisodesClick = onEpisodesClick,
                     onVolumeChange = onVolumeChange,
                     currentVolumeFraction = currentVolumeFraction ?: 1.0f,
-                    onOpenInExternalPlayer = onOpenInExternalPlayer,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
@@ -237,6 +232,7 @@ private fun PlayerHeader(
     onParentalGuideAnimationComplete: () -> Unit,
     onLockToggle: () -> Unit,
     onVideoSettingsClick: (() -> Unit)?,
+    onOpenInExternalPlayer: (() -> Unit)?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -330,10 +326,19 @@ private fun PlayerHeader(
                     if (onSubmitIntroClick != null) {
                         PlayerHeaderIconButton(
                             icon = Icons.Rounded.Flag,
-                            contentDescription = "Submit Intro",
+                            contentDescription = stringResource(Res.string.submit_intro_action),
                             buttonSize = metrics.headerIconSize + 16.dp,
                             iconSize = metrics.headerIconSize,
                             onClick = onSubmitIntroClick,
+                        )
+                    }
+                    if (onOpenInExternalPlayer != null) {
+                        PlayerHeaderIconButton(
+                            icon = Icons.AutoMirrored.Rounded.OpenInNew,
+                            contentDescription = stringResource(Res.string.streams_open_external_player),
+                            buttonSize = metrics.headerIconSize + 16.dp,
+                            iconSize = metrics.headerIconSize,
+                            onClick = onOpenInExternalPlayer,
                         )
                     }
                     PlayerHeaderIconButton(
@@ -350,7 +355,7 @@ private fun PlayerHeader(
                     if (onVideoSettingsClick != null) {
                         PlayerHeaderIconButton(
                             icon = Icons.Rounded.Build,
-                            contentDescription = "Video settings",
+                            contentDescription = stringResource(Res.string.player_action_video_settings),
                             buttonSize = metrics.headerIconSize + 16.dp,
                             iconSize = metrics.headerIconSize,
                             onClick = onVideoSettingsClick,
@@ -454,11 +459,49 @@ private fun SideControlButton(
 }
 
 @Composable
+private fun PlayPauseControlButton(
+    isPlaying: Boolean,
+    isBuffering: Boolean,
+    metrics: PlayerLayoutMetrics,
+    onClick: () -> Unit,
+) {
+    val playPausePainter = appIconPainter(
+        if (isPlaying) AppIconResource.PlayerPause else AppIconResource.PlayerPlay,
+    )
+
+    Box(
+        modifier = Modifier
+            .clip(CircleShape)
+            .clickable(onClick = onClick)
+            .padding(metrics.playButtonPadding),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (isBuffering) {
+            NuvioLoadingIndicator(
+                color = Color.White,
+                modifier = Modifier.size(metrics.playIconSize),
+            )
+        } else {
+            Icon(
+                painter = playPausePainter,
+                contentDescription = if (isPlaying) {
+                    stringResource(Res.string.compose_action_pause)
+                } else {
+                    stringResource(Res.string.detail_btn_play)
+                },
+                tint = Color.White,
+                modifier = Modifier.size(metrics.playIconSize),
+            )
+        }
+    }
+}
+
+// Fork (desktop): mouse-driven volume control shown next to the action pills.
+@Composable
 private fun VolumeSlider(
     volumeFraction: Float,
     onVolumeChange: (Float) -> Unit,
-    metrics: PlayerLayoutMetrics,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     // The external fraction only refreshes with the playback snapshot poll, so following it
     // mid-drag makes the thumb rubber-band toward stale values. Track the drag locally and
@@ -479,15 +522,15 @@ private fun VolumeSlider(
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .width(120.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Icon(
-            imageVector = if (displayedFraction <= 0f) androidx.compose.material.icons.Icons.Rounded.VolumeOff else androidx.compose.material.icons.Icons.Rounded.VolumeUp,
+            imageVector = if (displayedFraction <= 0f) Icons.Rounded.VolumeOff else Icons.Rounded.VolumeUp,
             contentDescription = "Volume",
             tint = Color.White,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(20.dp),
         )
-        androidx.compose.material3.Slider(
+        Slider(
             value = displayedFraction,
             onValueChange = { fraction ->
                 dragFraction = fraction
@@ -495,51 +538,12 @@ private fun VolumeSlider(
             },
             valueRange = 0f..1f,
             modifier = Modifier.height(24.dp),
-            colors = androidx.compose.material3.SliderDefaults.colors(
+            colors = SliderDefaults.colors(
                 thumbColor = Color.White,
                 activeTrackColor = Color.White,
-                inactiveTrackColor = Color.White.copy(alpha = 0.3f)
-            )
+                inactiveTrackColor = Color.White.copy(alpha = 0.3f),
+            ),
         )
-    }
-}
-
-@Composable
-private fun PlayPauseControlButton(
-    isPlaying: Boolean,
-    isBuffering: Boolean,
-    metrics: PlayerLayoutMetrics,
-    onClick: () -> Unit,
-) {
-    val playPausePainter = appIconPainter(
-        if (isPlaying) AppIconResource.PlayerPause else AppIconResource.PlayerPlay,
-    )
-
-    Box(
-        modifier = Modifier
-            .clip(CircleShape)
-            .clickable(onClick = onClick)
-            .padding(metrics.playButtonPadding),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (isBuffering) {
-            CircularProgressIndicator(
-                color = Color.White,
-                strokeWidth = 3.dp,
-                modifier = Modifier.size(metrics.playIconSize),
-            )
-        } else {
-            Icon(
-                painter = playPausePainter,
-                contentDescription = if (isPlaying) {
-                    stringResource(Res.string.compose_action_pause)
-                } else {
-                    stringResource(Res.string.detail_btn_play)
-                },
-                tint = Color.White,
-                modifier = Modifier.size(metrics.playIconSize),
-            )
-        }
     }
 }
 
@@ -559,7 +563,6 @@ private fun ProgressControls(
     onEpisodesClick: (() -> Unit)? = null,
     onVolumeChange: ((Float) -> Unit)? = null,
     currentVolumeFraction: Float = 1.0f,
-    onOpenInExternalPlayer: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val durationMs = playbackSnapshot.durationMs.coerceAtLeast(1L)
@@ -594,6 +597,8 @@ private fun ProgressControls(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // Fork (desktop): a real volume control. Touch platforms drag vertically instead
+            // and pass onVolumeChange = null, which leaves this out entirely.
             if (onVolumeChange != null) {
                 Surface(
                     color = Color.Black.copy(alpha = 0.5f),
@@ -607,7 +612,6 @@ private fun ProgressControls(
                     VolumeSlider(
                         volumeFraction = currentVolumeFraction,
                         onVolumeChange = onVolumeChange,
-                        metrics = metrics,
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
@@ -658,13 +662,6 @@ private fun ProgressControls(
                             label = stringResource(Res.string.compose_player_episodes),
                             icon = Icons.Rounded.VideoLibrary,
                             onClick = onEpisodesClick,
-                        )
-                    }
-                    if (onOpenInExternalPlayer != null) {
-                        PlayerActionPillButton(
-                            label = stringResource(Res.string.streams_open_external_player),
-                            icon = Icons.AutoMirrored.Rounded.OpenInNew,
-                            onClick = onOpenInExternalPlayer,
                         )
                     }
                 }

@@ -2,11 +2,52 @@ package com.nuvio.app.features.watching.domain
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class WatchingPoliciesTest {
     private val show = WatchingContentRef(type = "series", id = "show")
+
+    @Test
+    fun isReleasedByUsesExactInstantForZonedTimestamps() {
+        val exactEpochMs = 1_768_489_200_000L // 2026-01-15T15:00:00Z
+
+        assertFalse(
+            isReleasedBy(
+                todayIsoDate = "2026-01-15",
+                releasedDate = "2026-01-15T15:00:00Z",
+                nowEpochMs = exactEpochMs - 1L,
+            ),
+        )
+        assertTrue(
+            isReleasedBy(
+                todayIsoDate = "2026-01-15",
+                releasedDate = "2026-01-15T15:00:00Z",
+                nowEpochMs = exactEpochMs,
+            ),
+        )
+    }
+
+    @Test
+    fun isReleasedByTreatsDateOnlyValueAsUtcMidnight() {
+        val utcMidnightEpochMs = 1_768_435_200_000L // 2026-01-15T00:00:00Z
+
+        assertFalse(
+            isReleasedBy(
+                todayIsoDate = "2026-01-14",
+                releasedDate = "2026-01-15",
+                nowEpochMs = utcMidnightEpochMs - 1L,
+            ),
+        )
+        assertTrue(
+            isReleasedBy(
+                todayIsoDate = "2026-01-14",
+                releasedDate = "2026-01-15",
+                nowEpochMs = utcMidnightEpochMs,
+            ),
+        )
+    }
 
     @Test
     fun hasWatchedAllMainSeasonEpisodes_ignores_specials() {
@@ -23,6 +64,68 @@ class WatchingPoliciesTest {
         )
 
         assertTrue(result)
+    }
+
+    @Test
+    fun hasWatchedAllMainSeasonEpisodes_ignores_explicitly_unavailable_episodes() {
+        val episodes = listOf(
+            WatchingReleasedEpisode(videoId = "ep1", seasonNumber = 1, episodeNumber = 1, releasedDate = "2026-03-01"),
+            WatchingReleasedEpisode(videoId = "phantom", seasonNumber = 3, episodeNumber = 1, releasedDate = null, available = false),
+        )
+
+        assertEquals(
+            listOf("ep1"),
+            releasedMainSeasonEpisodes(
+                episodes = episodes,
+                todayIsoDate = "2026-07-05",
+            ).map(WatchingReleasedEpisode::videoId),
+        )
+
+        val result = hasWatchedAllMainSeasonEpisodes(
+            episodes = episodes,
+            todayIsoDate = "2026-07-05",
+            isEpisodeWatched = { episode -> episode.videoId == "ep1" },
+        )
+
+        assertTrue(result)
+    }
+
+    @Test
+    fun shouldSurfaceNextEpisode_allows_dated_unavailable_upcoming_episode_only_when_enabled() {
+        assertTrue(
+            shouldSurfaceNextEpisode(
+                watchedSeasonNumber = 1,
+                candidateSeasonNumber = 1,
+                todayIsoDate = "2026-07-05",
+                releasedDate = "2026-07-12",
+                showUnairedNextUp = true,
+                available = false,
+            ),
+        )
+        assertFalse(
+            shouldSurfaceNextEpisode(
+                watchedSeasonNumber = 1,
+                candidateSeasonNumber = 1,
+                todayIsoDate = "2026-07-05",
+                releasedDate = "2026-07-12",
+                showUnairedNextUp = false,
+                available = false,
+            ),
+        )
+    }
+
+    @Test
+    fun shouldSurfaceNextEpisode_keeps_unavailable_phantom_episode_hidden() {
+        assertFalse(
+            shouldSurfaceNextEpisode(
+                watchedSeasonNumber = 1,
+                candidateSeasonNumber = 3,
+                todayIsoDate = "2026-07-05",
+                releasedDate = null,
+                showUnairedNextUp = true,
+                available = false,
+            ),
+        )
     }
 
     @Test
