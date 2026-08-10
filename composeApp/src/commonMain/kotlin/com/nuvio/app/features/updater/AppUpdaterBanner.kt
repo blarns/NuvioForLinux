@@ -58,6 +58,7 @@ import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.core.ui.AppTheme
 import com.nuvio.app.core.ui.appTheme
 import com.nuvio.app.core.ui.nuvio
+import nuvio.composeapp.generated.resources.*
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.action_close
 import nuvio.composeapp.generated.resources.action_continue
@@ -193,6 +194,8 @@ private fun AppUpdateBanner(
         state.isDownloading -> stringResource(Res.string.updates_preparing_download)
         debugTestComplete -> stringResource(Res.string.updates_debug_test_complete)
         state.downloadedApkPath != null -> stringResource(Res.string.updates_message_ready)
+        // Fork-only: this offer is a downgrade back to stable, so "a new version" would be a lie.
+        state.isDowngrade -> stringResource(Res.string.updates_message_return_to_stable)
         else -> stringResource(Res.string.updates_title_available)
     }
     val updateLabel = listOfNotNull(

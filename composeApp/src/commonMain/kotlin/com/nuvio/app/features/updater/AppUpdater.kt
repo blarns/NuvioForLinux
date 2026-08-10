@@ -50,6 +50,9 @@ data class AppUpdaterUiState(
     val showUnknownSourcesDialog: Boolean = false,
     val errorMessage: String? = null,
     val isDebugTest: Boolean = false,
+    // Fork-only: the offered build is OLDER than the installed one, because the user asked to
+    // leave the experimental channel. The updater never surfaces this on its own.
+    val isDowngrade: Boolean = false,
 )
 
 @Serializable
@@ -236,8 +239,7 @@ class AppUpdaterController internal constructor(
 
             val ignoredTag = AppUpdaterPlatform.getIgnoredTag()
             val result = AppUpdaterRepository.getLatestChannelUpdate(
-                allowPrerelease = AppUpdaterPlatform.supportsExperimentalChannel &&
-                    AppUpdaterPlatform.getExperimentalUpdatesEnabled(),
+                allowPrerelease = ExperimentalUpdatesChannel.isEnabled,
             )
 
             result.onSuccess { update ->
@@ -256,6 +258,7 @@ class AppUpdaterController internal constructor(
                         showDialog = shouldShowDialog,
                         showUnknownSourcesDialog = false,
                         errorMessage = null,
+                        isDowngrade = false,
                     )
                 }
 
@@ -288,12 +291,60 @@ class AppUpdaterController internal constructor(
         }
     }
 
+    // Fork-only: the way back off the alpha channel. The normal check can never offer this,
+    // because isRemoteNewer() refuses anything older than what is installed — so this path
+    // deliberately bypasses that comparison. Leaving the channel also turns the opt-in off,
+    // otherwise the next check would immediately re-offer the alpha and loop.
+    fun returnToStableChannel() {
+        if (!AppFeaturePolicy.inAppUpdaterEnabled || !AppUpdaterPlatform.isSupported) return
+
+        scope.launch {
+            _uiState.update { state ->
+                state.copy(isChecking = true, errorMessage = null, isDowngrade = false)
+            }
+
+            AppUpdaterRepository.getLatestChannelUpdate(allowPrerelease = false)
+                .onSuccess { stable ->
+                    val installedIsAheadOfStable =
+                        VersionUtils.isRemoteNewer(AppVersionConfig.VERSION_NAME, stable.tag)
+
+                    if (installedIsAheadOfStable) {
+                        ExperimentalUpdatesChannel.set(false)
+                        _uiState.update { state ->
+                            state.copy(
+                                isChecking = false,
+                                update = stable,
+                                isUpdateAvailable = true,
+                                isDowngrade = true,
+                                isDownloading = false,
+                                downloadProgress = null,
+                                downloadedApkPath = null,
+                                showDialog = true,
+                                showUnknownSourcesDialog = false,
+                                errorMessage = null,
+                            )
+                        }
+                    } else {
+                        _uiState.update { state ->
+                            state.copy(isChecking = false, showDialog = false, isDowngrade = false)
+                        }
+                        NuvioToastController.show(getString(Res.string.updates_already_on_stable))
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update { state -> state.copy(isChecking = false, isDowngrade = false) }
+                    NuvioToastController.show(error.message ?: getString(Res.string.updates_check_failed))
+                }
+        }
+    }
+
     fun dismissDialog() {
         _uiState.update { state ->
             state.copy(
                 showDialog = false,
                 showUnknownSourcesDialog = false,
                 errorMessage = null,
+                isDowngrade = false,
             )
         }
     }

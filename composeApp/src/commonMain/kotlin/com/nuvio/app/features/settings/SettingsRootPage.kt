@@ -18,7 +18,26 @@ import androidx.compose.material.icons.rounded.People
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Policy
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.material.icons.rounded.SettingsBackupRestore
+import androidx.compose.material3.BasicAlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
+import com.nuvio.app.core.ui.NuvioToastController
+import com.nuvio.app.core.ui.NuvioTokens
+import com.nuvio.app.core.ui.nuvio
+import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.getString
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,7 +48,9 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.build.AppVersionConfig
+import androidx.compose.runtime.collectAsState
 import com.nuvio.app.features.updater.AppUpdaterPlatform
+import com.nuvio.app.features.updater.ExperimentalUpdatesChannel
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.compose_about_made_with
 import nuvio.composeapp.generated.resources.compose_about_version_format
@@ -69,6 +90,7 @@ import nuvio.composeapp.generated.resources.updates_debug_test_description
 import nuvio.composeapp.generated.resources.updates_debug_test_title
 import nuvio.composeapp.generated.resources.about_supporters_contributors_subtitle
 import nuvio.composeapp.generated.resources.about_licenses_attributions_subtitle
+import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 
 private const val PRIVACY_POLICY_URL = "https://nuvio.tv/privacy-policy"
@@ -85,6 +107,7 @@ internal fun LazyListScope.settingsRootContent(
     onSupportersContributorsClick: () -> Unit,
     onLicensesAttributionsClick: () -> Unit,
     onCheckForUpdatesClick: (() -> Unit)? = null,
+    onReturnToStableClick: (() -> Unit)? = null,
     onTestUpdateBannerClick: (() -> Unit)? = null,
     onDownloadsClick: () -> Unit,
     onAccountClick: () -> Unit,
@@ -234,9 +257,10 @@ internal fun LazyListScope.settingsRootContent(
                         // Fork-only: opt in to the experimental (alpha) release channel. Off by
                         // default, so pre-releases stay invisible to everyone on a stable build.
                         if (AppUpdaterPlatform.supportsExperimentalChannel) {
-                            var experimentalUpdates by remember {
-                                mutableStateOf(AppUpdaterPlatform.getExperimentalUpdatesEnabled())
-                            }
+                            val experimentalUpdates by ExperimentalUpdatesChannel.enabled.collectAsState()
+                            var showBackupPrompt by remember { mutableStateOf(false) }
+                            val backupScope = rememberCoroutineScope()
+
                             SettingsGroupDivider(isTablet = isTablet)
                             SettingsSwitchRow(
                                 title = stringResource(Res.string.compose_settings_root_experimental_updates_title),
@@ -244,10 +268,51 @@ internal fun LazyListScope.settingsRootContent(
                                 checked = experimentalUpdates,
                                 isTablet = isTablet,
                                 onCheckedChange = { enabled ->
-                                    experimentalUpdates = enabled
-                                    AppUpdaterPlatform.setExperimentalUpdatesEnabled(enabled)
+                                    ExperimentalUpdatesChannel.set(enabled)
+                                    // Offer a backup only on the way IN. Switching off is safe.
+                                    if (enabled && AppUpdaterPlatform.supportsDataBackup) {
+                                        showBackupPrompt = true
+                                    }
                                 },
                             )
+
+                            // Only reachable while ahead of stable; the controller says so and
+                            // toasts instead of offering anything when you are already on stable.
+                            if (experimentalUpdates && onReturnToStableClick != null) {
+                                SettingsGroupDivider(isTablet = isTablet)
+                                SettingsNavigationRow(
+                                    title = stringResource(Res.string.compose_settings_root_return_to_stable_title),
+                                    description = stringResource(Res.string.compose_settings_root_return_to_stable_description),
+                                    icon = Icons.Rounded.SettingsBackupRestore,
+                                    isTablet = isTablet,
+                                    onClick = onReturnToStableClick,
+                                )
+                            }
+
+                            if (showBackupPrompt) {
+                                ExperimentalUpdatesBackupDialog(
+                                    onConfirm = {
+                                        showBackupPrompt = false
+                                        backupScope.launch {
+                                            AppUpdaterPlatform.backupUserData()
+                                                .onSuccess { path ->
+                                                    NuvioToastController.show(
+                                                        getString(Res.string.updates_backup_done, path),
+                                                    )
+                                                }
+                                                .onFailure { error ->
+                                                    NuvioToastController.show(
+                                                        getString(
+                                                            Res.string.updates_backup_failed,
+                                                            error.message.orEmpty(),
+                                                        ),
+                                                    )
+                                                }
+                                        }
+                                    },
+                                    onDismiss = { showBackupPrompt = false },
+                                )
+                            }
                         }
                     }
                     if (onTestUpdateBannerClick != null) {
@@ -306,6 +371,61 @@ internal fun LazyListScope.settingsRootContent(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
+        }
+    }
+}
+
+// Fork-only: offered when the experimental (alpha) channel is switched on. Backup only —
+// restoring is deliberately manual (quit Nuvio, unzip over the data dir), because overwriting
+// storage under a running app is a footgun.
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun ExperimentalUpdatesBackupDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val tokens = MaterialTheme.nuvio
+    BasicAlertDialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = tokens.colors.surfaceDialog,
+            shape = tokens.shapes.dialog,
+        ) {
+            Column(modifier = Modifier.padding(tokens.spacing.dialogPadding)) {
+                Text(
+                    text = stringResource(Res.string.updates_backup_dialog_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = tokens.colors.textPrimary,
+                )
+                Spacer(modifier = Modifier.height(tokens.spacing.controlGap))
+                Text(
+                    text = stringResource(Res.string.updates_backup_dialog_message),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = tokens.colors.textMuted,
+                )
+                Spacer(modifier = Modifier.height(NuvioTokens.Space.s18))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(NuvioTokens.Space.s12, Alignment.End),
+                ) {
+                    Button(
+                        onClick = onDismiss,
+                        shape = tokens.shapes.button,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = tokens.colors.surfaceCard,
+                            contentColor = tokens.colors.textPrimary,
+                        ),
+                    ) {
+                        Text(text = stringResource(Res.string.updates_backup_dialog_skip))
+                    }
+                    Button(
+                        onClick = onConfirm,
+                        shape = tokens.shapes.button,
+                    ) {
+                        Text(text = stringResource(Res.string.updates_backup_dialog_confirm))
+                    }
+                }
+            }
         }
     }
 }

@@ -22,6 +22,11 @@ actual object AppUpdaterPlatform {
         AndroidAppUpdaterPlatform.setExperimentalUpdatesEnabled(enabled)
     }
 
+    actual val supportsDataBackup: Boolean = false
+
+    actual suspend fun backupUserData(): Result<String> =
+        Result.failure(IllegalStateException("Data backup is only available on desktop."))
+
     actual suspend fun downloadApk(
         assetUrl: String,
         assetName: String,

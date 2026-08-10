@@ -2044,6 +2044,11 @@ private fun MainAppContent(
                                         } else {
                                             null
                                         },
+                                        onReturnToStableClick = if (AppFeaturePolicy.inAppUpdaterEnabled) {
+                                            { appUpdaterController.returnToStableChannel() }
+                                        } else {
+                                            null
+                                        },
                                         onTestUpdateBannerClick = if (
                                             AppFeaturePolicy.inAppUpdaterEnabled && AppUpdaterPlatform.isDebugBuild
                                         ) {
@@ -3114,6 +3119,11 @@ private fun MainAppContent(
                         } else {
                             null
                         },
+                        onReturnToStableClick = if (AppFeaturePolicy.inAppUpdaterEnabled) {
+                            { appUpdaterController.returnToStableChannel() }
+                        } else {
+                            null
+                        },
                         onTestUpdateBannerClick = if (
                             AppFeaturePolicy.inAppUpdaterEnabled && AppUpdaterPlatform.isDebugBuild
                         ) {
@@ -3722,6 +3732,7 @@ private fun AppTabHost(
     onSupportersContributorsSettingsClick: () -> Unit = {},
     onLicensesAttributionsSettingsClick: () -> Unit = {},
     onCheckForUpdatesClick: (() -> Unit)? = null,
+    onReturnToStableClick: (() -> Unit)? = null,
     onTestUpdateBannerClick: (() -> Unit)? = null,
     onCollectionsSettingsClick: () -> Unit = {},
     onFolderClick: ((collectionId: String, folderId: String) -> Unit)? = null,
@@ -3790,6 +3801,7 @@ private fun AppTabHost(
                         onSupportersContributorsClick = onSupportersContributorsSettingsClick,
                         onLicensesAttributionsClick = onLicensesAttributionsSettingsClick,
                         onCheckForUpdatesClick = onCheckForUpdatesClick,
+                        onReturnToStableClick = onReturnToStableClick,
                         onTestUpdateBannerClick = onTestUpdateBannerClick,
                         onCollectionsClick = onCollectionsSettingsClick,
                     )

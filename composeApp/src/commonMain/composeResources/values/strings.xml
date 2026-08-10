@@ -461,6 +461,16 @@
     <string name="compose_settings_root_check_updates_title">Check for updates</string>
     <string name="compose_settings_root_experimental_updates_description">Also offer alpha and beta builds. These are unfinished and can break playback or data — leave this off unless you want to help test.</string>
     <string name="compose_settings_root_experimental_updates_title">Experimental updates</string>
+    <string name="compose_settings_root_return_to_stable_description">Go back to the newest stable build and leave the experimental channel. Your package manager may ask you to confirm a downgrade.</string>
+    <string name="compose_settings_root_return_to_stable_title">Return to stable release</string>
+    <string name="updates_backup_dialog_title">Back up your data first?</string>
+    <string name="updates_backup_dialog_message">Alpha builds are unfinished and can change how your data is stored. Nuvio can save a copy of your profiles, addons, library and watch progress to your Downloads folder before you switch.</string>
+    <string name="updates_backup_dialog_confirm">Back up now</string>
+    <string name="updates_backup_dialog_skip">Skip</string>
+    <string name="updates_backup_done">Backup saved to %1$s</string>
+    <string name="updates_backup_failed">Backup failed: %1$s</string>
+    <string name="updates_already_on_stable">You are already on the stable channel.</string>
+    <string name="updates_message_return_to_stable">Go back to this stable build. Your package manager may ask you to confirm a downgrade.</string>
     <string name="compose_settings_root_content_discovery_description">Manage addons and discovery sources.</string>
     <string name="compose_settings_root_content_discovery_description_appstore">Manage addons and choose what appears in Nuvio.</string>
     <string name="compose_settings_root_downloads_description">Manage your downloaded movies and episodes.</string>

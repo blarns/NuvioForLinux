@@ -5,6 +5,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.URI
+import java.nio.file.Files
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 actual object AppUpdaterPlatform {
     // Fork-only store: the official client has no updater, it just ignores this file.
@@ -38,6 +44,31 @@ actual object AppUpdaterPlatform {
 
     actual fun setExperimentalUpdatesEnabled(enabled: Boolean) {
         store.putBoolean("experimental_updates", enabled)
+    }
+
+    actual val supportsDataBackup: Boolean = true
+
+    // Zip the whole data dir (~/.config/nuvio and friends) into Downloads. Small — it is
+    // properties files, not media — so this is fast enough to run on the click.
+    actual suspend fun backupUserData(): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val rootDir = DesktopStorage.rootDir
+            val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(Date())
+            val downloadsDir = File(System.getProperty("user.home"), "Downloads").also { it.mkdirs() }
+            val destFile = File(downloadsDir, "nuvio-backup-$stamp.zip")
+
+            ZipOutputStream(destFile.outputStream().buffered()).use { zip ->
+                Files.walk(rootDir).use { stream ->
+                    stream.filter { Files.isRegularFile(it) }.forEach { path ->
+                        zip.putNextEntry(ZipEntry(rootDir.relativize(path).toString()))
+                        Files.copy(path, zip)
+                        zip.closeEntry()
+                    }
+                }
+            }
+
+            destFile.absolutePath
+        }
     }
 
     actual suspend fun downloadApk(

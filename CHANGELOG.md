@@ -6,6 +6,25 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.1] — 2026-08-10 (alpha)
+
+Two safety valves for the alpha channel, both asked for after 0.3.0 shipped.
+
+### Added
+- **Return to stable release** (Settings → About, shown only while experimental updates are on).
+  The updater only ever offers you something *newer*, so once you were on an alpha there was no
+  way back from inside the app. This fetches the newest stable build and offers it even though it
+  is older, and switches the experimental channel off so you are not immediately re-offered the
+  alpha. Your package manager may ask you to confirm a downgrade.
+- **A backup offer when you turn experimental updates on.** Saves a zip of your Nuvio data —
+  profiles, addons, library, watch progress, settings — to your Downloads folder before you switch.
+  Restoring is deliberately manual: quit Nuvio and unzip it over your data directory.
+
+### Notes
+- Going back to 0.2.3.1 should not lose anything: 0.3.x writes five extra files that older builds
+  simply ignore, removes none, and every store that reads JSON ignores unknown fields. The backup
+  is there because "should not" is not the same as "cannot".
+
 ## [0.3.0] — 2026-08-10 (alpha)
 
 The 1:1 upstream port: this fork's Linux desktop layer rebased onto current
