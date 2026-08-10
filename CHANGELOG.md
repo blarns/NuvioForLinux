@@ -56,6 +56,20 @@ turn on **Settings → About → Experimental updates** and check for updates.
 - Plugins that declare `jvm` or `linux` rather than `desktop` are recognised again.
 - The trailer overlay is a top-anchored card on desktop again, not a small bottom sheet.
 
+## [0.2.3.1] — 2026-08-10
+
+One setting, nothing else. Same app as 0.2.3 in every other respect.
+
+0.3.0 ships as an alpha, so it is published as a pre-release and the updater does not offer it.
+That is the intent — but 0.2.3 had no way to say "actually, I'll take the alpha", because the
+setting that grants that consent only existed in the alpha itself. This release closes that gap
+so the choice is available before 0.3.0 lands.
+
+### Added
+- **Experimental updates** (Settings → About). Off by default, and off is exactly how 0.2.3
+  already behaves: pre-release builds are skipped. Turn it on and the updater will also offer
+  alpha builds; turn it off again and you go back to stable releases only.
+
 ## [0.2.3] — 2026-08-05
 
 ### Fixed
