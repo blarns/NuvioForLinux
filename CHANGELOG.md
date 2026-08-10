@@ -6,6 +6,20 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.3.1] — 2026-08-10
+
+One setting, nothing else. Same app as 0.2.3 in every other respect.
+
+The next release, 0.3.0, rebases this fork's Linux desktop layer onto current upstream. That is a
+large change and it ships as an alpha, so it is published as a pre-release and the updater will
+not offer it to you. Deciding to try it should be your choice — but 0.2.3 has no way to make that
+choice, which is what this release adds.
+
+### Added
+- **Experimental updates** (Settings → About). Off by default, and off is exactly how 0.2.3
+  already behaves: pre-release builds are skipped. Turn it on and the updater will also offer
+  alpha builds; turn it off again and you go back to stable releases only.
+
 ## [0.2.3] — 2026-08-05
 
 A small fix release for the window opening smaller than the screen.

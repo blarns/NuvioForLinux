@@ -19,10 +19,15 @@ import androidx.compose.material.icons.rounded.Style
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.build.AppVersionConfig
+import com.nuvio.app.features.updater.AppUpdaterPlatform
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.compose_about_made_with
 import nuvio.composeapp.generated.resources.compose_about_version_format
@@ -40,6 +45,8 @@ import nuvio.composeapp.generated.resources.compose_settings_root_account_descri
 import nuvio.composeapp.generated.resources.compose_settings_root_appearance_description
 import nuvio.composeapp.generated.resources.compose_settings_root_check_updates_description
 import nuvio.composeapp.generated.resources.compose_settings_root_check_updates_title
+import nuvio.composeapp.generated.resources.compose_settings_root_experimental_updates_description
+import nuvio.composeapp.generated.resources.compose_settings_root_experimental_updates_title
 import nuvio.composeapp.generated.resources.compose_settings_root_content_discovery_description
 import nuvio.composeapp.generated.resources.compose_settings_root_downloads_description
 import nuvio.composeapp.generated.resources.compose_settings_root_downloads_title
@@ -227,6 +234,24 @@ internal fun LazyListScope.settingsRootContent(
                             isTablet = isTablet,
                             onClick = onCheckForUpdatesClick,
                         )
+                        // Fork-only: opt in to the experimental (alpha) release channel. Off by
+                        // default, so pre-releases stay invisible to everyone on a stable build.
+                        if (AppUpdaterPlatform.supportsExperimentalChannel) {
+                            var experimentalUpdates by remember {
+                                mutableStateOf(AppUpdaterPlatform.getExperimentalUpdatesEnabled())
+                            }
+                            SettingsGroupDivider(isTablet = isTablet)
+                            SettingsSwitchRow(
+                                title = stringResource(Res.string.compose_settings_root_experimental_updates_title),
+                                description = stringResource(Res.string.compose_settings_root_experimental_updates_description),
+                                checked = experimentalUpdates,
+                                isTablet = isTablet,
+                                onCheckedChange = { enabled ->
+                                    experimentalUpdates = enabled
+                                    AppUpdaterPlatform.setExperimentalUpdatesEnabled(enabled)
+                                },
+                            )
+                        }
                     }
                 }
             }

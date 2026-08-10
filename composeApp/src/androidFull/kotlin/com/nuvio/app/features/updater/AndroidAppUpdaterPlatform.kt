@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit
 object AndroidAppUpdaterPlatform {
     private const val preferencesName = "nuvio_updater"
     private const val ignoredTagKey = "ignored_release_tag"
+    private const val experimentalUpdatesKey = "experimental_updates"
 
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)
@@ -41,6 +42,13 @@ object AndroidAppUpdaterPlatform {
         preferences().edit().apply {
             if (tag == null) remove(ignoredTagKey) else putString(ignoredTagKey, tag)
         }.apply()
+    }
+
+    fun getExperimentalUpdatesEnabled(): Boolean =
+        preferences().getBoolean(experimentalUpdatesKey, false)
+
+    fun setExperimentalUpdatesEnabled(enabled: Boolean) {
+        preferences().edit().putBoolean(experimentalUpdatesKey, enabled).apply()
     }
 
     suspend fun downloadApk(
