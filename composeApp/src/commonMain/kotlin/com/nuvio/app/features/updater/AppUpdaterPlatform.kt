@@ -18,12 +18,23 @@ expect object AppUpdaterPlatform {
 
     fun setExperimentalUpdatesEnabled(enabled: Boolean)
 
-    // Fork-only: copy the app's data directory somewhere safe before opting into alphas.
-    // Backup only — restoring is a manual "quit Nuvio and unzip this over your data dir",
-    // because overwriting storage under a running app is a footgun.
+    // Fork-only: copy the app's data directory somewhere safe before opting into alphas, and
+    // put it back if an alpha (or the downgrade off one) leaves the app unable to read it.
     val supportsDataBackup: Boolean
 
     suspend fun backupUserData(): Result<String>
+
+    /** Native "open file" dialog for a backup zip. Null when the user cancels. */
+    fun pickBackupFile(): String?
+
+    /**
+     * Unpack a backup and queue it for the next launch, returning how many files were staged.
+     * Deliberately not applied live — see `DesktopRestore`.
+     */
+    suspend fun stageDataRestore(zipPath: String): Result<Int>
+
+    /** Quit the app through the normal shutdown path, so a staged restore takes effect. */
+    fun requestQuit()
 
     suspend fun downloadApk(
         assetUrl: String,

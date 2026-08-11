@@ -20,6 +20,7 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.nuvio.app.features.player.ExternalOpenRequestStore
 import com.nuvio.app.features.player.SleepTimerController
+import com.nuvio.app.core.storage.DesktopRestore
 import com.nuvio.app.core.storage.DesktopStorage
 import com.nuvio.app.desktop.DesktopLegacyPrefsMigration
 import com.nuvio.app.features.player.DesktopScreenshot
@@ -34,8 +35,12 @@ fun main(args: Array<String>) {
     // manager hands off via the x-scheme-handler association) is stashed for the UI to
     // open once a profile is active.
     args.firstOrNull()?.let { parseExternalOpenArg(it) }?.let { ExternalOpenRequestStore.set(it) }
-    // One-time legacy java.util.prefs → ~/.config/nuvio migration. MUST stay the first
-    // statement: nothing may read a DesktopStorage store before this runs.
+    // Swap in a restore staged from Settings → About. MUST come before the migration below:
+    // the "already migrated" flag lives in a store file that a restore replaces, so applying
+    // one afterwards would set that flag back and re-run the migration on the next launch.
+    DesktopRestore.applyPendingIfNeeded()
+    // One-time legacy java.util.prefs → ~/.config/nuvio migration. MUST stay ahead of every
+    // other statement: nothing may read a DesktopStorage store before this runs.
     DesktopLegacyPrefsMigration.runIfNeeded()
     // Fork-only store: window geometry is machine-local; the official client ignores it.
     val windowStore = DesktopStorage.store("nuvio_window")

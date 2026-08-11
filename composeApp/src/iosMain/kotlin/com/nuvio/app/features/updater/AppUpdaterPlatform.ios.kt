@@ -26,6 +26,13 @@ actual object AppUpdaterPlatform {
     actual suspend fun backupUserData(): Result<String> =
         Result.failure(IllegalStateException("Data backup is only available on desktop."))
 
+    actual fun pickBackupFile(): String? = null
+
+    actual suspend fun stageDataRestore(zipPath: String): Result<Int> =
+        Result.failure(IllegalStateException("Data restore is only available on desktop."))
+
+    actual fun requestQuit() = Unit
+
     actual suspend fun downloadApk(
         assetUrl: String,
         assetName: String,

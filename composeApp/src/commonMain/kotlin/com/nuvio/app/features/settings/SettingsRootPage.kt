@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.SettingsBackupRestore
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
@@ -259,6 +260,7 @@ internal fun LazyListScope.settingsRootContent(
                         if (AppUpdaterPlatform.supportsExperimentalChannel) {
                             val experimentalUpdates by ExperimentalUpdatesChannel.enabled.collectAsState()
                             var showBackupPrompt by remember { mutableStateOf(false) }
+                            var pendingRestorePath by remember { mutableStateOf<String?>(null) }
                             val backupScope = rememberCoroutineScope()
 
                             SettingsGroupDivider(isTablet = isTablet)
@@ -289,8 +291,29 @@ internal fun LazyListScope.settingsRootContent(
                                 )
                             }
 
+                            // The other half of the backup, and not gated on the toggle: the
+                            // moment you most need this is right after leaving the alpha
+                            // channel, when the switch is already off again.
+                            if (AppUpdaterPlatform.supportsDataBackup) {
+                                SettingsGroupDivider(isTablet = isTablet)
+                                SettingsNavigationRow(
+                                    title = stringResource(Res.string.compose_settings_root_restore_backup_title),
+                                    description = stringResource(Res.string.compose_settings_root_restore_backup_description),
+                                    icon = Icons.Rounded.FolderOpen,
+                                    isTablet = isTablet,
+                                    // The native file dialog is modal and returns on the same
+                                    // thread Compose dispatches clicks on, so this reads as a
+                                    // plain call rather than a callback.
+                                    onClick = { pendingRestorePath = AppUpdaterPlatform.pickBackupFile() },
+                                )
+                            }
+
                             if (showBackupPrompt) {
-                                ExperimentalUpdatesBackupDialog(
+                                UpdaterConfirmDialog(
+                                    title = stringResource(Res.string.updates_backup_dialog_title),
+                                    message = stringResource(Res.string.updates_backup_dialog_message),
+                                    confirmLabel = stringResource(Res.string.updates_backup_dialog_confirm),
+                                    dismissLabel = stringResource(Res.string.updates_backup_dialog_skip),
                                     onConfirm = {
                                         showBackupPrompt = false
                                         backupScope.launch {
@@ -311,6 +334,41 @@ internal fun LazyListScope.settingsRootContent(
                                         }
                                     },
                                     onDismiss = { showBackupPrompt = false },
+                                )
+                            }
+
+                            pendingRestorePath?.let { zipPath ->
+                                UpdaterConfirmDialog(
+                                    title = stringResource(Res.string.updates_restore_dialog_title),
+                                    message = stringResource(
+                                        Res.string.updates_restore_dialog_message,
+                                        zipPath.substringAfterLast('/'),
+                                    ),
+                                    confirmLabel = stringResource(Res.string.updates_restore_dialog_confirm),
+                                    dismissLabel = stringResource(Res.string.updates_restore_dialog_cancel),
+                                    onConfirm = {
+                                        pendingRestorePath = null
+                                        backupScope.launch {
+                                            AppUpdaterPlatform.stageDataRestore(zipPath)
+                                                .onSuccess {
+                                                    NuvioToastController.show(
+                                                        getString(Res.string.updates_restore_staged),
+                                                    )
+                                                    // Nothing has been swapped in yet; the
+                                                    // staged copy is applied on the next launch.
+                                                    AppUpdaterPlatform.requestQuit()
+                                                }
+                                                .onFailure { error ->
+                                                    NuvioToastController.show(
+                                                        getString(
+                                                            Res.string.updates_restore_failed,
+                                                            error.message.orEmpty(),
+                                                        ),
+                                                    )
+                                                }
+                                        }
+                                    },
+                                    onDismiss = { pendingRestorePath = null },
                                 )
                             }
                         }
@@ -375,12 +433,15 @@ internal fun LazyListScope.settingsRootContent(
     }
 }
 
-// Fork-only: offered when the experimental (alpha) channel is switched on. Backup only —
-// restoring is deliberately manual (quit Nuvio, unzip over the data dir), because overwriting
-// storage under a running app is a footgun.
+// Fork-only: the confirm step for the two data-safety actions around the alpha channel —
+// backing up on the way in, and restoring a backup afterwards.
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
-private fun ExperimentalUpdatesBackupDialog(
+private fun UpdaterConfirmDialog(
+    title: String,
+    message: String,
+    confirmLabel: String,
+    dismissLabel: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -393,13 +454,13 @@ private fun ExperimentalUpdatesBackupDialog(
         ) {
             Column(modifier = Modifier.padding(tokens.spacing.dialogPadding)) {
                 Text(
-                    text = stringResource(Res.string.updates_backup_dialog_title),
+                    text = title,
                     style = MaterialTheme.typography.titleLarge,
                     color = tokens.colors.textPrimary,
                 )
                 Spacer(modifier = Modifier.height(tokens.spacing.controlGap))
                 Text(
-                    text = stringResource(Res.string.updates_backup_dialog_message),
+                    text = message,
                     style = MaterialTheme.typography.bodyLarge,
                     color = tokens.colors.textMuted,
                 )
@@ -416,13 +477,13 @@ private fun ExperimentalUpdatesBackupDialog(
                             contentColor = tokens.colors.textPrimary,
                         ),
                     ) {
-                        Text(text = stringResource(Res.string.updates_backup_dialog_skip))
+                        Text(text = dismissLabel)
                     }
                     Button(
                         onClick = onConfirm,
                         shape = tokens.shapes.button,
                     ) {
-                        Text(text = stringResource(Res.string.updates_backup_dialog_confirm))
+                        Text(text = confirmLabel)
                     }
                 }
             }

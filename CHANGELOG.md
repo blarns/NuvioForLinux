@@ -17,13 +17,29 @@ Two safety valves for the alpha channel, both asked for after 0.3.0 shipped.
   is older, and switches the experimental channel off so you are not immediately re-offered the
   alpha. Your package manager may ask you to confirm a downgrade.
 - **A backup offer when you turn experimental updates on.** Saves a zip of your Nuvio data —
-  profiles, addons, library, watch progress, settings — to your Downloads folder before you switch.
-  Restoring is deliberately manual: quit Nuvio and unzip it over your data directory.
+  profiles, addons, library, watch progress, settings — to your Downloads folder before you switch,
+  as `nuvio-backup-<date>.zip`.
+- **Restore from backup** (Settings → About). Pick a backup zip and Nuvio stages it, then quits;
+  it is swapped in the next time you start, before anything has read a single setting. Your
+  current data is moved aside to `nuvio-restore-previous` rather than deleted, so a restore is
+  itself undoable. Restoring is a replacement, not a merge — anything the backup does not contain
+  is gone.
+- **`nuvio-backup-<date>-restore.sh`**, written next to the backup zip. The case this whole
+  feature exists for is a downgrade going wrong, and after a downgrade you are running an older
+  build with no restore option in it. Quit Nuvio and run the script; it does what the in-app
+  restore does, without needing Nuvio at all. If you have lost the script, the short version is:
+
+  ```sh
+  unzip -o nuvio-backup-<date>.zip -d "${XDG_CONFIG_HOME:-$HOME/.config}/nuvio"
+  ```
 
 ### Notes
 - Going back to 0.2.3.1 should not lose anything: 0.3.x writes five extra files that older builds
   simply ignore, removes none, and every store that reads JSON ignores unknown fields. The backup
   is there because "should not" is not the same as "cannot".
+- The backup deliberately leaves out `nuvio_updater.properties`. It is not your data, and since
+  the backup is taken the moment you opt in, it would otherwise record "experimental updates: on"
+  and put you straight back on the alpha channel the moment you restored it.
 
 ## [0.3.0] — 2026-08-10 (alpha)
 
