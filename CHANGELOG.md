@@ -6,6 +6,23 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Withdrawn] — 2026-08-11
+
+The **0.3.x** alpha line is withdrawn. It was too rough in practice to be worth running, and it is
+not being continued for now. The supported build is **0.2.3.1**.
+
+Only users who turned on Settings → About → Experimental updates were ever offered 0.3.x; a stable
+install was never moved onto it. Nothing is pushed to affected users automatically — the updater
+only ever offers a *newer* build, so going back is a manual step, described in
+[#5](https://github.com/blarns/NuvioForLinux/issues/5):
+
+- **On 0.3.1** — Settings → About → Return to stable release.
+- **On 0.3.0** — that build predates the button. Take 0.3.1 first and then use it, or install
+  0.2.3.1 over the top and turn Experimental updates off.
+
+The v0.3.0 and v0.3.1 releases stay published as pre-releases rather than being deleted: removing
+them would cut 0.3.0 users off from 0.3.1, which is their only in-app route back to stable.
+
 ## [0.3.1] — 2026-08-10 (alpha)
 
 Two safety valves for the alpha channel, both asked for after 0.3.0 shipped.

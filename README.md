@@ -56,6 +56,15 @@ Because the original NuvioTV project was licensed under the **GNU General Public
 If you fork, modify, or distribute this code, you **must** also open-source your modifications under the GPL-3.0.
 
 ## Project status
+
+> [!WARNING]
+> **The 0.3.x alpha is withdrawn — the supported build is
+> [v0.2.3.1](https://github.com/blarns/NuvioForLinux/releases/tag/v0.2.3.1).**
+> If you opted into experimental updates and are running 0.3.0 or 0.3.1, see
+> [#5](https://github.com/blarns/NuvioForLinux/issues/5) for how to get back. Nothing will prompt
+> you — the updater only ever offers a *newer* build. If you never turned experimental updates on,
+> this does not affect you.
+
 > [!NOTE]
 > This community fork exists to give Linux desktop a working Nuvio **today** — the official desktop port targets macOS and Windows first. It's built on the upstream [NuvioMobile](https://github.com/NuvioMedia/NuvioMobile) Kotlin Multiplatform / Compose codebase — the same shared `commonMain` that powers the Android and iOS apps — with a Linux/JVM desktop layer added on top: VLCJ playback, MPRIS media keys, hardware-accelerated video, and `.deb` + AppImage packaging. It's actively used and regularly released (see [Releases](https://github.com/blarns/NuvioForLinux/releases)). Development is fast-moving and AI-assisted, so expect the occasional rough edge — issues and pull requests are very welcome.
 
