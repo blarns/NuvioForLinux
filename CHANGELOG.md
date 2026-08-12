@@ -36,6 +36,20 @@ and 0.3.1 alike — is offered this build by the updater it already has, as an o
   that this build ignores, removed none, and the one shared record that changed only gained a
   field, which is dropped harmlessly on read.
 
+## [Withdrawn] — 2026-08-11
+
+The **0.3.x alpha line** — 0.3.0 and 0.3.1, the 1:1 upstream port — is withdrawn. It was too rough
+in practice to be worth running and is not being continued.
+
+Only users who turned on Settings → About → Experimental updates were ever offered it; a stable
+install was never moved onto an alpha. The releases stay published as pre-releases rather than
+being deleted, so existing installs can still reach them.
+
+Getting off it was originally a manual step, because the updater only ever offers a *newer* build
+([#5](https://github.com/blarns/NuvioForLinux/issues/5)). **0.3.2 supersedes that advice**: it
+outranks both alphas, so every affected install is offered it as an ordinary upgrade with nothing
+to do by hand.
+
 ## [0.2.3.1] — 2026-08-10
 
 One setting, nothing else. Same app as 0.2.3 in every other respect.
