@@ -18,6 +18,7 @@ import kotlinx.serialization.json.put
 
 internal actual object PlayerSettingsStorage {
     private const val showLoadingOverlayKey = "show_loading_overlay"
+    private const val showParentalGuideKey = "show_parental_guide"
     private const val resizeModeKey = "resize_mode"
     private const val holdToSpeedEnabledKey = "hold_to_speed_enabled"
     private const val holdToSpeedValueKey = "hold_to_speed_value"
@@ -80,6 +81,7 @@ internal actual object PlayerSettingsStorage {
     private const val iosGammaKey = "ios_gamma"
     private val syncKeys = listOf(
         showLoadingOverlayKey,
+        showParentalGuideKey,
         resizeModeKey,
         holdToSpeedEnabledKey,
         holdToSpeedValueKey,
@@ -143,6 +145,9 @@ internal actual object PlayerSettingsStorage {
 
     actual fun loadShowLoadingOverlay(): Boolean? = loadBoolean(showLoadingOverlayKey)
     actual fun saveShowLoadingOverlay(enabled: Boolean) = saveBoolean(showLoadingOverlayKey, enabled)
+
+    actual fun loadShowParentalGuide(): Boolean? = loadBoolean(showParentalGuideKey)
+    actual fun saveShowParentalGuide(enabled: Boolean) = saveBoolean(showParentalGuideKey, enabled)
     actual fun loadResizeMode(): String? = loadString(resizeModeKey)
     actual fun saveResizeMode(mode: String) = saveString(resizeModeKey, mode)
     actual fun loadHoldToSpeedEnabled(): Boolean? = loadBoolean(holdToSpeedEnabledKey)
@@ -281,6 +286,7 @@ internal actual object PlayerSettingsStorage {
 
     actual fun exportToSyncPayload(): JsonObject = buildJsonObject {
         loadShowLoadingOverlay()?.let { put(showLoadingOverlayKey, encodeSyncBoolean(it)) }
+        loadShowParentalGuide()?.let { put(showParentalGuideKey, encodeSyncBoolean(it)) }
         loadResizeMode()?.let { put(resizeModeKey, encodeSyncString(it)) }
         loadHoldToSpeedEnabled()?.let { put(holdToSpeedEnabledKey, encodeSyncBoolean(it)) }
         loadHoldToSpeedValue()?.let { put(holdToSpeedValueKey, encodeSyncFloat(it)) }
@@ -344,6 +350,7 @@ internal actual object PlayerSettingsStorage {
     actual fun replaceFromSyncPayload(payload: JsonObject) {
         store.removeAll(syncKeys.map(::scoped))
         payload.decodeSyncBoolean(showLoadingOverlayKey)?.let(::saveShowLoadingOverlay)
+        payload.decodeSyncBoolean(showParentalGuideKey)?.let(::saveShowParentalGuide)
         payload.decodeSyncString(resizeModeKey)?.let(::saveResizeMode)
         payload.decodeSyncBoolean(holdToSpeedEnabledKey)?.let(::saveHoldToSpeedEnabled)
         payload.decodeSyncFloat(holdToSpeedValueKey)?.let(::saveHoldToSpeedValue)

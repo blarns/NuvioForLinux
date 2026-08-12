@@ -89,6 +89,7 @@ import kotlin.math.roundToInt
 internal fun LazyListScope.playbackSettingsContent(
     isTablet: Boolean,
     showLoadingOverlay: Boolean,
+    showParentalGuide: Boolean,
     holdToSpeedEnabled: Boolean,
     holdToSpeedValue: Float,
     preferredAudioLanguage: String,
@@ -111,6 +112,7 @@ internal fun LazyListScope.playbackSettingsContent(
         PlaybackSettingsSection(
             isTablet = isTablet,
             showLoadingOverlay = showLoadingOverlay,
+            showParentalGuide = showParentalGuide,
             holdToSpeedEnabled = holdToSpeedEnabled,
             holdToSpeedValue = holdToSpeedValue,
             preferredAudioLanguage = preferredAudioLanguage,
@@ -249,6 +251,7 @@ private fun subtitleColorLabel(color: Color): String {
 private fun PlaybackSettingsSection(
     isTablet: Boolean,
     showLoadingOverlay: Boolean,
+    showParentalGuide: Boolean,
     holdToSpeedEnabled: Boolean,
     holdToSpeedValue: Float,
     preferredAudioLanguage: String,
@@ -319,6 +322,14 @@ private fun PlaybackSettingsSection(
                     checked = showLoadingOverlay,
                     isTablet = isTablet,
                     onCheckedChange = PlayerSettingsRepository::setShowLoadingOverlay,
+                )
+                SettingsGroupDivider(isTablet = isTablet)
+                SettingsSwitchRow(
+                    title = stringResource(Res.string.settings_playback_parental_guide),
+                    description = stringResource(Res.string.settings_playback_parental_guide_description),
+                    checked = showParentalGuide,
+                    isTablet = isTablet,
+                    onCheckedChange = PlayerSettingsRepository::setShowParentalGuide,
                 )
                 SettingsGroupDivider(isTablet = isTablet)
                 // Player preference picker: Internal / External
