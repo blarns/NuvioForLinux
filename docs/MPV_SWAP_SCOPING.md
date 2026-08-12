@@ -1,8 +1,10 @@
 # MPV Swap — Scoping Document (no implementation)
 
-*Status: scoping only. Decision on file: **stay on VLCJ** until its ceilings demonstrably
-hurt users. This doc sizes the swap so that decision can be revisited cheaply.*
-*Written 2026-06-12 against v0.1.14 (build 83).*
+*Status: **feasibility proven, decision open.** The original call — stay on VLCJ until its
+ceilings demonstrably hurt users — was made without knowing whether the proposed shape worked at
+all. It does; see "Spike results" below. What remains is a scheduling decision, not a technical
+unknown.*
+*Written 2026-06-12 against v0.1.14 (build 83). Revisited 2026-08-12 against v0.3.2.*
 
 ## Context
 
@@ -72,6 +74,65 @@ Keep the entire Compose/Skia side unchanged. Replace only what's behind the
 | Settings parity (hwAccel toggle → `hwdec`, audio output device) | 0.5 day |
 | Testing across debrid/HLS/local + subtitle styles + track switching | 2–3 days |
 | **Total** | **~8–12 focused days**, high regression risk in the player for weeks after |
+
+## Spike results (2026-08-12) — the proposed shape works, headless ✅
+
+A JNA harness against **libmpv 0.37.0** (`libmpv2` on Ubuntu 24.04) exercised the exact path
+proposed above. No window, no GL, no AWT, no display — deliberately, because if it works headless
+it drops into the existing pipeline unchanged.
+
+```
+libmpv loaded via JNA: true
+mpv_initialize -> 0 (ok)
+mpv_render_context_create(sw) -> 0 (ok)
+playback started: true
+mpv_render_context_render -> 0 (ok)
+frame buffer: 921600 bytes, 358045 non-zero (38.9%), mean=94.9
+duration property: 2.04     time-pos property: 1.0
+teardown clean
+```
+
+- **Binding**: direct `Native.load("mpv", …)`, no JNI and no C to maintain, as predicted.
+- **Video**: `MPV_RENDER_API_TYPE_SW` rendered a decoded 640x360 frame into a **caller-owned
+  BGRA buffer** — the same shape VLCJ's `RenderCallback` already hands to the Skia path. The
+  render-param enum values are `SW_SIZE=17`, `SW_FORMAT=18`, `SW_STRIDE=19`, `SW_POINTER=20`.
+- **State**: `mpv_observe_property` and `mpv_get_property` returned `duration` and `time-pos`,
+  which is what the controller's 100 ms poll currently synthesises.
+- **Lifecycle**: `mpv_render_context_free` + `mpv_terminate_destroy` with no crash.
+
+### What the spike does NOT establish
+
+It removes the "does this approach work at all" risk and nothing else. Still unproven:
+
+- Real media. The source was `av://lavfi:testsrc`, not HLS, not a debrid HTTP URL with custom
+  headers, not a TorrServer `/stream` URL. Header passing (`--http-header-fields`) is untested.
+- Performance at 1080p in the real pipeline. The doc already says SW render does not beat VLCJ's
+  copy cost; that remains unmeasured rather than disproven.
+- **Subtitle styling via libass — the single biggest reason to swap — was not exercised at all.**
+- Track switching, seek convergence, external subs, audio passthrough.
+- Packaging: the deb gains `Depends: libmpv2`, but the **AppImage currently bundles libVLC and
+  would need to bundle libmpv instead**, which the original estimate did not cost.
+
+The 8–12 day estimate and the "high regression risk in the player for weeks after" warning both
+still stand. What has changed is that the risk is now ordinary implementation risk.
+
+## Ecosystem check (2026-08-12)
+
+The trigger below — *"upstream shipping a Linux bridge, at which point migrate to official
+instead"* — has **not** fired, and it is worth recording why, because it looks like it has.
+
+Upstream's desktop layer has moved out of `NuvioMedia/NuvioMobile` (3 desktop files left) into
+`NuvioMedia/NuvioDesktop`, which lists Linux support and ships a deb "when available". But its
+native sources are only `native/windows/player_bridge.cpp` and `native/macos/player_bridge.mm`.
+There is **no Linux bridge**. The Kotlin side has Linux *scaffolding* —
+`DesktopHostOs.LINUX -> "linux"` and a `libplayer_bridge.so` lookup — with nothing behind it, and
+the libmpv library-name table reads `"windows" -> libmpv-2.dll`, `else -> emptyList()`. So the
+official desktop app cannot play video on Linux through that path, and "migrate to official
+instead" is not currently an option.
+
+What *has* changed is direction: official desktop (Windows/macOS) and the community
+`UmbraProjects/NuvioDesktop` fork are both on libmpv. Anything mpv-specific in those trees —
+Anime4K shaders, RTX HDR, buffer presets, >100% volume boost — is unreachable from VLCJ.
 
 ## Preconditions and triggers
 
