@@ -13,6 +13,10 @@ only build anyone should be directed to.** See
 user's only in-app route back is to take `v0.3.1` first and use the button there. Deleting
 `v0.3.1` strands them on a build they cannot leave from inside the app.
 
+**That route also closes the next time anything is published** — see hazard 3 below. Manual
+installation of `v0.2.3.1` is the only route that keeps working, which is why
+[#5](https://github.com/blarns/NuvioForLinux/issues/5) leads with it.
+
 The rest of this document still describes how the channels work, and applies again if an
 experimental channel is ever reopened.
 
@@ -43,7 +47,10 @@ So withdrawing a release is an *announcement*, not a mechanism. Plan for every a
 to act manually, and check which builds actually contain the button before assuming there is an
 in-app path.
 
-## Two hazards to decide about before stable reaches 0.2.9
+## Hazards to decide about
+
+Hazards 1 and 2 bite when stable reaches `0.2.9`. **Hazard 3 bites on the very next release of any
+kind**, so read that one first if something is about to be published.
 
 ### 1. Running out of 0.2.x numbers
 
@@ -65,6 +72,32 @@ There is no staged rollout, and no practical undo once people have taken it.
 
 **Treat clearing `prerelease` as the deliberate cutover for the entire stable userbase**, not as
 a tidy-up. This is the thing that would actually break stable users — more than any tag collision.
+
+### 3. The experimental channel resolves by publish date, not by version
+
+`getLatestChannelUpdate` considers exactly one candidate:
+
+```kotlin
+val release = releases.firstOrNull {
+    it.matchesRequestedChannel() && !it.draft && (allowPrerelease || !it.prerelease)
+} ?: throw NoChannelReleaseException()
+```
+
+Three things combine badly here. GitHub's `/releases` returns newest-**created** first, not
+highest-version. `release.yml` hardcodes `target_commitish: cmp-rewrite`, so *every* release
+matches the channel. And `allowPrerelease = true` means "do not filter pre-releases out" — not
+"prefer a pre-release" — so with the experimental toggle on the predicate is satisfied by the
+newest release of any kind. `checkForUpdates` then compares that single candidate against the
+installed version and gives up if it is not newer; it never looks at the second entry.
+
+So publishing a stable `v0.2.3.2` today would tell every `v0.3.0` user with the toggle on that
+they are already up to date, and `v0.3.1` — the build carrying their only in-app way back — would
+become unreachable from inside the app. It costs them nothing on stable and everything on the
+alpha, which is exactly the population least able to notice.
+
+If an experimental channel is ever reopened, make this pick the highest *version* among matching
+releases rather than the first, and paginate past `per_page=20` (the list is 30 releases and
+counting, so the current call already cannot see the whole history).
 
 ## Rules that already exist and should not be undone
 
