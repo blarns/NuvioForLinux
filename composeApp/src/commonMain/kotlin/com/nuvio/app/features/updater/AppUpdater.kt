@@ -58,6 +58,11 @@ private const val gitHubRepo = "NuvioForLinux"
 private const val gitHubApiBase = "https://api.github.com"
 private const val releaseChannelBranch = "cmp-rewrite"
 
+// Published releases that must never be offered to anyone again. The 0.3.x experimental line was
+// withdrawn (https://github.com/blarns/NuvioForLinux/issues/5) but deliberately left on GitHub, so
+// it is still in the API response and still matches the channel — it has to be excluded by tag.
+private val withdrawnReleaseTags = setOf("0.3.0", "0.3.1")
+
 data class AppUpdate(
     val tag: String,
     val title: String,
@@ -82,7 +87,7 @@ data class AppUpdaterUiState(
 )
 
 @Serializable
-private data class GitHubReleaseDto(
+internal data class GitHubReleaseDto(
     @SerialName("tag_name") val tagName: String? = null,
     val name: String? = null,
     val body: String? = null,
@@ -94,7 +99,7 @@ private data class GitHubReleaseDto(
 )
 
 @Serializable
-private data class GitHubAssetDto(
+internal data class GitHubAssetDto(
     val name: String,
     @SerialName("browser_download_url") val browserDownloadUrl: String,
     val size: Long? = null,
@@ -110,7 +115,7 @@ private class NoChannelReleaseException : IllegalStateException(
     "No cmp-rewrite release has been published yet.",
 )
 
-private object VersionUtils {
+internal object VersionUtils {
     fun normalize(raw: String?): String {
         if (raw.isNullOrBlank()) return ""
         return raw.trim().removePrefix("v").removePrefix("V")
@@ -125,6 +130,29 @@ private object VersionUtils {
             .mapNotNull { token -> token.takeWhile { it.isDigit() }.toIntOrNull() }
 
         return parts.takeIf { it.isNotEmpty() }
+    }
+
+    /**
+     * Orders two release tags by version number. An unparseable tag sorts below every parseable
+     * one, so something like a `nightly` tag can never outrank a real version and win the
+     * highest-version pick; two unparseable tags compare equal and fall back to API order.
+     */
+    fun compareVersions(left: String?, right: String?): Int {
+        val leftParts = parseVersionParts(left)
+        val rightParts = parseVersionParts(right)
+
+        if (leftParts == null || rightParts == null) {
+            if (leftParts == null && rightParts == null) return 0
+            return if (leftParts == null) -1 else 1
+        }
+
+        val maxSize = maxOf(leftParts.size, rightParts.size)
+        for (index in 0 until maxSize) {
+            val leftValue = leftParts.getOrElse(index) { 0 }
+            val rightValue = rightParts.getOrElse(index) { 0 }
+            if (leftValue != rightValue) return leftValue.compareTo(rightValue)
+        }
+        return 0
     }
 
     fun isRemoteNewer(remote: String?, local: String?): Boolean {
@@ -147,32 +175,62 @@ private object VersionUtils {
     }
 }
 
+internal fun GitHubReleaseDto.versionTag(): String? =
+    tagName?.takeIf { it.isNotBlank() } ?: name?.takeIf { it.isNotBlank() }
+
+internal fun GitHubReleaseDto.isWithdrawn(): Boolean =
+    VersionUtils.normalize(versionTag()) in withdrawnReleaseTags
+
+internal fun GitHubReleaseDto.matchesRequestedChannel(): Boolean {
+    val channel = releaseChannelBranch
+    if (targetCommitish?.trim()?.equals(channel, ignoreCase = true) == true) {
+        return true
+    }
+
+    return listOf(tagName, name)
+        .filterNotNull()
+        .any { value -> value.contains(channel, ignoreCase = true) }
+}
+
+/**
+ * Chooses the release to offer: the highest **version** on the channel, not the first entry in
+ * the response.
+ *
+ * GitHub orders releases by creation date, which is a different ordering, and only the first
+ * match used to be considered. Publishing a stable `0.2.x` after an alpha `0.3.x` had been cut
+ * therefore made the lower-numbered build the sole candidate, so anyone already on the alpha was
+ * told they were up to date — with nothing forward, and on `0.3.0` nothing back either.
+ *
+ * Returns null when the channel has no offerable release at all.
+ */
+internal fun selectChannelRelease(
+    releases: List<GitHubReleaseDto>,
+    allowPrerelease: Boolean,
+): GitHubReleaseDto? = releases
+    .filter { candidate ->
+        candidate.matchesRequestedChannel() &&
+            !candidate.draft &&
+            (allowPrerelease || !candidate.prerelease) &&
+            !candidate.isWithdrawn()
+    }
+    // maxWithOrNull keeps the first of equal elements, so releases sharing a version fall back to
+    // the API's newest-first order.
+    .maxWithOrNull(
+        Comparator { left, right ->
+            VersionUtils.compareVersions(left.versionTag(), right.versionTag())
+        },
+    )
+
 private object AppUpdaterRepository {
     // allowPrerelease is the fork's experimental (alpha) channel opt-in. With it off — the
     // default — a GitHub pre-release is skipped entirely, so alphas never reach people running
     // a stable build.
     suspend fun getLatestChannelUpdate(allowPrerelease: Boolean): Result<AppUpdate> = runCatching {
-        val response = httpRequestRaw(
-            method = "GET",
-            url = "$gitHubApiBase/repos/$gitHubOwner/$gitHubRepo/releases?per_page=20",
-            headers = mapOf(
-                "Accept" to "application/vnd.github+json",
-                "User-Agent" to "NuvioMobile",
-            ),
-            body = "",
-        )
-        if (response.status !in 200..299) {
-            error("GitHub releases API error: ${response.status}")
-        }
+        val releases = fetchChannelReleases()
+        val release = selectChannelRelease(releases, allowPrerelease)
+            ?: throw NoChannelReleaseException()
 
-        val releases = appUpdaterJson.decodeFromString<List<GitHubReleaseDto>>(response.body)
-        val release = releases.firstOrNull {
-            it.matchesRequestedChannel() && !it.draft && (allowPrerelease || !it.prerelease)
-        } ?: throw NoChannelReleaseException()
-
-        val tag = release.tagName?.takeIf { it.isNotBlank() }
-            ?: release.name?.takeIf { it.isNotBlank() }
-            ?: error("Release has no tag or name")
+        val tag = release.versionTag() ?: error("Release has no tag or name")
 
         val asset = chooseBestApkAsset(release.assets)
             ?: error("No APK asset found in the cmp-rewrite release")
@@ -189,15 +247,40 @@ private object AppUpdaterRepository {
         )
     }
 
-    private fun GitHubReleaseDto.matchesRequestedChannel(): Boolean {
-        val channel = releaseChannelBranch
-        if (targetCommitish?.trim()?.equals(channel, ignoreCase = true) == true) {
-            return true
+    // Picking the highest version means the whole list matters, not just the newest page — so
+    // page until GitHub returns a short page. maxReleasePages is a runaway guard, not a limit we
+    // expect to reach: at 100 per page it covers 500 releases.
+    private const val releasesPerPage = 100
+    private const val maxReleasePages = 5
+
+    private suspend fun fetchChannelReleases(): List<GitHubReleaseDto> {
+        val collected = mutableListOf<GitHubReleaseDto>()
+
+        for (page in 1..maxReleasePages) {
+            val response = httpRequestRaw(
+                method = "GET",
+                url = "$gitHubApiBase/repos/$gitHubOwner/$gitHubRepo/releases" +
+                    "?per_page=$releasesPerPage&page=$page",
+                headers = mapOf(
+                    "Accept" to "application/vnd.github+json",
+                    "User-Agent" to "NuvioMobile",
+                ),
+                body = "",
+            )
+            if (response.status !in 200..299) {
+                // Losing a later page is survivable — the pages already read are the most recent
+                // releases, so keep them instead of failing the check outright. Losing the first
+                // page leaves nothing to choose from.
+                if (collected.isNotEmpty()) break
+                error("GitHub releases API error: ${response.status}")
+            }
+
+            val batch = appUpdaterJson.decodeFromString<List<GitHubReleaseDto>>(response.body)
+            collected += batch
+            if (batch.size < releasesPerPage) break
         }
 
-        return listOf(tagName, name)
-            .filterNotNull()
-            .any { value -> value.contains(channel, ignoreCase = true) }
+        return collected
     }
 
     private fun chooseBestApkAsset(assets: List<GitHubAssetDto>): GitHubAssetDto? {

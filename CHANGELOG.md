@@ -6,6 +6,36 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.2] — 2026-08-12
+
+**This is a stable release, and it is not a continuation of the 0.3.0/0.3.1 alphas.** Those were
+withdrawn ([#5](https://github.com/blarns/NuvioForLinux/issues/5)); the code here is 0.2.3.1 plus
+the updater fixes below, with none of the upstream port in it.
+
+It is numbered 0.3.2 on purpose. The updater only ever offers a build with a *higher* version
+number, so a 0.2.x release would have been invisible to anyone sitting on 0.3.0 or 0.3.1 and left
+them stranded on a withdrawn alpha. 0.3.2 outranks both, which means every install — 0.2.x, 0.3.0
+and 0.3.1 alike — is offered this build by the updater it already has, as an ordinary upgrade. No
+`--allow-downgrades`, no reinstall, no turning the experimental toggle off first.
+
+### Fixed
+- **The updater picks the highest version, not the most recently published release.** GitHub
+  returns releases newest-created first, which is a different ordering, and only the first match
+  was ever considered. Publishing a stable build after an alpha therefore made the *lower*
+  numbered release the sole candidate, and anyone already on the alpha was told they were up to
+  date — with no way forward and, on 0.3.0, no way back either.
+- **The updater reads the whole release list.** It asked for one page of 20 and stopped. With 30
+  releases published that already could not see the full history, and picking the highest version
+  requires all of it.
+- **Withdrawn releases are never offered.** 0.3.0 and 0.3.1 stay published so existing installs
+  can still reach them, but no update check will move anyone onto them, whatever the experimental
+  toggle is set to.
+
+### Notes
+- Coming from 0.3.0 or 0.3.1, your data carries over. The alphas wrote five extra settings files
+  that this build ignores, removed none, and the one shared record that changed only gained a
+  field, which is dropped harmlessly on read.
+
 ## [0.2.3.1] — 2026-08-10
 
 One setting, nothing else. Same app as 0.2.3 in every other respect.
