@@ -13,12 +13,12 @@ the cloud agent can read them.
 
 ## How to report results
 
-Write **`docs/TRACKING_VERIFICATION_RESULTS.md`**, commit it, and push it to **`stable/0.3.2`** —
+Write **`docs/TRACKING_VERIFICATION_RESULTS.md`**, commit it, and push it to **`dev`** —
 the branch this file is on, and where development happens. Do **not** push it to `cmp-rewrite`:
 that branch is release-only, it is what every installed updater resolves against via
 `target_commitish`, and it should move only when a release is cut.
 
-The cloud agent fetches `stable/0.3.2` and reads the file — that is the whole return channel, so
+The cloud agent fetches `dev` and reads the file — that is the whole return channel, so
 the file has to be complete on its own. Append a new run rather than overwriting an old one.
 
 If the branch has been renamed or merged away by the time you read this, push to whichever branch
