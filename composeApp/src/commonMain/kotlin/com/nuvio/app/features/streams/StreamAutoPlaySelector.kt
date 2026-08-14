@@ -193,22 +193,20 @@ object StreamAutoPlaySelector {
         )
     }
 
+    // Do NOT add a "hold back pending debrid candidates" clause here. It was tried in v0.3.2 and
+    // hung auto-play permanently: isPendingDebridAutoPlay() treats a null cache state as pending,
+    // and matchesResolver() treats a null providerId as a match, so any torrent that never got a
+    // debrid cache status at all counted as pending forever. StreamsRepository only clears the
+    // auto-play overlay when !hasPendingDebridCandidate, so nothing ever played — it just span.
+    // Preferring a resolved link over an in-flight one has to be done by ordering readyStreams,
+    // never by making a stream unplayable.
     private fun StreamItem.isAutoPlayable(
         debridEnabled: Boolean,
         activeResolverProviderId: String?,
-    ): Boolean {
-        if (playableDirectUrl != null) return true
-
-        // A torrent whose debrid cache check is still running is not ready yet. Without this the
-        // P2P clause below matches it anyway — it has an info hash — so auto-play would start a
-        // local download for something debrid is about to serve from cache, and would take the
-        // slot ahead of a direct link that is already resolved. Wait for the check to land; the
-        // caller sees hasPendingDebridCandidate and holds.
-        if (isPendingDebridAutoPlay(debridEnabled, activeResolverProviderId)) return false
-
-        return (AppFeaturePolicy.p2pEnabled && needsLocalDebridResolve && p2pInfoHash != null) ||
+    ): Boolean =
+        playableDirectUrl != null ||
+            (AppFeaturePolicy.p2pEnabled && needsLocalDebridResolve && p2pInfoHash != null) ||
             (debridEnabled && isAddonDebridCandidate && isReadyDebridAutoPlay(activeResolverProviderId))
-    }
 
     private fun StreamItem.isReadyDebridAutoPlay(activeResolverProviderId: String?): Boolean =
         when {
