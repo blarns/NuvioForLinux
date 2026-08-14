@@ -13,7 +13,7 @@ synced from upstream, plus one Continue Watching fix.
 
 ### Added
 - **Seven more interface languages**: Bulgarian, Dutch, Hungarian, Japanese, Romanian, Slovak and
-  Vietnamese. Pick one under Settings → General → Language.
+  Vietnamese. Pick one under Settings → Appearance → App Language.
 - **The home screen hero rotates on its own**, moving to the next title every 8 seconds. Swiping it
   yourself restarts the countdown, so it will not jump out from under you straight after.
 - **Content Warnings can be turned off.** Settings → Playback → Content Warnings controls the
