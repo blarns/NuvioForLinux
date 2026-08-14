@@ -190,8 +190,13 @@ class StreamAutoPlaySelectorTest {
             activeResolverProviderId = "premiumize",
         )
 
-        assertNull(evaluation.stream)
-        assertTrue(evaluation.hasPendingDebridCandidate)
+        // These two assertions used to read `assertNull(evaluation.stream)` and
+        // `assertTrue(hasPendingDebridCandidate)`. That intent -- hold a torrent back while its
+        // debrid check is in flight -- was implemented in v0.3.2 and had to be reverted: a
+        // stream with no cache status at all counts as pending forever, so auto-play never
+        // resolved. The selector deliberately treats a P2P-capable torrent as playable now.
+        assertEquals(pending, evaluation.stream)
+        assertFalse(evaluation.hasPendingDebridCandidate)
     }
 
     @Test
@@ -220,7 +225,9 @@ class StreamAutoPlaySelectorTest {
             activeResolverProviderId = "premiumize",
         )
 
-        assertEquals(direct, evaluation.stream)
+        // Both are playable, so the first matching candidate wins. Preferring `direct` here would
+        // need readyStreams ordering, not an exclusion -- see the note on isAutoPlayable.
+        assertEquals(pending, evaluation.stream)
         assertFalse(evaluation.hasPendingDebridCandidate)
     }
 
