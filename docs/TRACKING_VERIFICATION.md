@@ -118,6 +118,25 @@ trusted.
 | SK-04 | Anime with a MAL/Kitsu mapping | Resolves to the right title rather than a near-miss |
 | SK-05 | Disconnect Simkl | Trakt keeps working exactly as before |
 
+## AP — auto-play (run for every slice, and before any release)
+
+Added after **v0.3.2 shipped a hang here**. Auto-play held a torrent back while its debrid cache
+check was in flight, but a stream with no cache status at all counted as pending *permanently*,
+and the screen that waits on that only clears when nothing is pending — so it span forever. It
+compiled, 241 tests passed, and no check in this file would have caught it. These would.
+
+`AP-01` is the one that matters most: it is the exact path a user hits without choosing to, since
+Nuvio auto-resumes on launch after being closed from inside the player.
+
+| ID | Check | Expected |
+|----|-------|----------|
+| AP-01 | Play something, close the window **from inside the player**, relaunch | The app resolves and starts playing within a reasonable time. It must **not** sit on the source-loading screen indefinitely. This is the v0.3.2 failure |
+| AP-02 | Repeat AP-01 with **debrid configured and enabled** | Same — and note in Notes how long resolution took |
+| AP-03 | Repeat AP-01 with **debrid disabled entirely** | Same. The v0.3.2 hang only reproduced with debrid enabled, so both halves need covering |
+| AP-04 | Set Settings → Playback auto-play to a non-Manual mode, open a title with torrent-only sources | Something is selected and plays, or you are dropped back to the stream list. Never an endless spinner |
+| AP-05 | Same as AP-04 with a title that has a **direct/HTTP** source among torrents | Plays. Note in Notes which source it picked |
+| AP-06 | Whatever failed above, if anything: check whether `~/.config/nuvio/nuvio_resume_prompt.properties` has `was_in_player=true` | If it does and the app loops on every launch, that is the v0.3.2 shape recurring — say so loudly |
+
 ## RG — regression sweep (run for every slice)
 
 | ID | Check | Expected |
