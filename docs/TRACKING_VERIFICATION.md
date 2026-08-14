@@ -158,3 +158,16 @@ is simply inert.
 
 Scroll up hard at the top of the Home screen with a mouse wheel and record whether the hero image
 stretches and springs back. Either answer is useful. Record it as `HS-01`.
+
+**Answered on 2026-08-13: a mouse wheel does not drive it.** 24 wheel-up events produced no
+displacement, and the measurement was checked for the obvious lie — wheel-*down* from the same
+position did scroll, so the wheel reaches the scroll chain and simply produces no stretch.
+
+That leaves the feature inert for mouse users, and one question open that decides whether it stays
+in the tree at all:
+
+**`HS-02` — does a laptop trackpad drive it?** Two-finger scroll may report a different
+`NestedScrollSource` than a wheel does. Run the same test on a trackpad at the top of Home and
+record whether the hero stretches. If it does not, the overscroll is dead code on this platform
+and should be reverted rather than shipped; if it does, it is a trackpad-only nicety and worth
+keeping. It has not shipped in any release yet, so there is no rush and no user impact either way.
