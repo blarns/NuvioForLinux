@@ -6,6 +6,25 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.3] — 2026-08-14
+
+**Hotfix for 0.3.2. If you are on 0.3.2, take this update.**
+
+### Fixed
+- **Auto-play could hang forever, leaving the app stuck resolving sources and never playing.**
+  0.3.2 held a torrent back from auto-play while its debrid cache check was in flight, but a
+  stream that never received a cache status at all counted as pending *permanently* rather than
+  briefly, and the screen that waits on that only clears when nothing is pending. There was no
+  timeout out of it.
+
+  It bit hardest after quitting from inside the player: Nuvio remembers it was playing and
+  resolves that item again on the next launch, so an affected install would loop on every start.
+  If you are stuck on 0.3.2 right now, quit Nuvio and delete
+  `~/.config/nuvio/nuvio_resume_prompt.properties` to break the loop, then update.
+
+  Auto-play selection is back to exactly what 0.2.3.1 and every release before 0.3.2 shipped.
+  Nothing else in this release.
+
 ## [0.3.2] — 2026-08-12
 
 **This is a stable release, and it is not a continuation of the 0.3.0/0.3.1 alphas.** Those were
