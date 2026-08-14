@@ -6,6 +6,32 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.4] — 2026-08-14
+
+An ordinary upgrade on top of 0.3.3, carrying the interface translations and home-screen work
+synced from upstream, plus one Continue Watching fix.
+
+### Added
+- **Seven more interface languages**: Bulgarian, Dutch, Hungarian, Japanese, Romanian, Slovak and
+  Vietnamese. Pick one under Settings → General → Language.
+- **The home screen hero rotates on its own**, moving to the next title every 8 seconds. Swiping it
+  yourself restarts the countdown, so it will not jump out from under you straight after.
+- **Content Warnings can be turned off.** Settings → Playback → Content Warnings controls the
+  parental-guidance overlay that appears when playback starts. It stays on unless you turn it off.
+- The home hero now stretches when you pull past the top of the list, and springs back.
+
+### Fixed
+- **Continue Watching no longer loses your place on an episode you had partly watched.** When Trakt
+  reported the same episode as both watched and part-way through, the watched record could win and
+  the episode would drop off the row, or reappear at the start. The part-way record is now kept
+  when it is the more recent of the two.
+
+### Notes
+- Japanese and Vietnamese are drawn with your system's fonts rather than the font bundled with
+  Nuvio, which has no glyphs for either script. They render correctly on a normal desktop install,
+  but will show empty boxes on a minimal system with no CJK fonts installed — `fonts-noto-cjk`
+  covers it on Debian and Ubuntu.
+
 ## [0.3.3] — 2026-08-14
 
 **Hotfix for 0.3.2. If you are on 0.3.2, take this update.**
