@@ -87,7 +87,9 @@ fun <T> NuvioShelfSection(
         Box(modifier = Modifier.fillMaxWidth()) {
             LazyRow(
                 state = rowState,
-                modifier = Modifier.fillMaxWidth().rowWheelScroll(rowState, rowScrollScope),
+                modifier = Modifier.fillMaxWidth()
+                    .rowWheelScroll(rowState, rowScrollScope)
+                    .rowDragScroll(rowState),
                 contentPadding = rowContentPadding,
                 horizontalArrangement = Arrangement.spacedBy(itemSpacing),
             ) {

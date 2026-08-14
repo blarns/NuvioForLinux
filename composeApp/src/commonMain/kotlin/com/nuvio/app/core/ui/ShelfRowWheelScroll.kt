@@ -17,6 +17,19 @@ import kotlinx.coroutines.CoroutineScope
 expect fun Modifier.rowWheelScroll(state: LazyListState, scope: CoroutineScope): Modifier
 
 /**
+ * Lets a horizontal row be scrolled by dragging it with the left mouse button, the way a touch
+ * screen scrolls it.
+ *
+ * Compose's own `scrollable` refuses mouse drags outright — its `canDrag` predicate is
+ * `{ type -> type != PointerType.Mouse }` — so a lazy row cannot be dragged with a mouse at all
+ * without this, and there is no built-in behaviour here to collide with.
+ *
+ * No-op on Android and iOS, where touch already drags the row natively (with a fling this cannot
+ * reproduce).
+ */
+expect fun Modifier.rowDragScroll(state: LazyListState): Modifier
+
+/**
  * Floating left/right scroll-arrow buttons overlaid on a horizontal row so desktop users can scroll
  * it without Shift + wheel. Each arrow only appears when [state] can scroll that direction. Call
  * inside the [BoxScope] that wraps the row. No-op on Android and iOS (touch swipes instead).

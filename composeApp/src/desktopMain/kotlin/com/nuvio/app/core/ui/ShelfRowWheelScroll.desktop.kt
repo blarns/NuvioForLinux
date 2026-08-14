@@ -3,6 +3,8 @@ package com.nuvio.app.core.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -29,11 +31,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 @OptIn(ExperimentalComposeUiApi::class)
 actual fun Modifier.rowWheelScroll(state: LazyListState, scope: CoroutineScope): Modifier =
@@ -57,6 +62,46 @@ actual fun Modifier.rowWheelScroll(state: LazyListState, scope: CoroutineScope):
                     event.changes.forEach { it.consume() }
                     scope.launch { state.scrollBy(delta * pixelsPerUnit) }
                 }
+            }
+        }
+    }
+
+@OptIn(ExperimentalComposeUiApi::class)
+actual fun Modifier.rowDragScroll(state: LazyListState): Modifier =
+    pointerInput(state) {
+        awaitEachGesture {
+            // Watch on the Initial pass so the row sees the press before the poster card under the
+            // cursor does — a drag has to be able to cancel that card's click.
+            val down = awaitFirstDown(pass = PointerEventPass.Initial)
+            // Mouse only: touch and stylus already drag the row natively, with a fling this can't
+            // reproduce. Left button only, so right-click context menus are left alone.
+            if (down.type != PointerType.Mouse) return@awaitEachGesture
+            if (!currentEvent.buttons.isPrimaryPressed) return@awaitEachGesture
+
+            var totalX = 0f
+            var totalY = 0f
+            var dragging = false
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                if (!change.pressed) break
+
+                val delta = change.position - change.previousPosition
+                totalX += delta.x
+                totalY += delta.y
+
+                if (!dragging) {
+                    val slop = viewConfiguration.touchSlop
+                    // A mostly-vertical drag belongs to the page underneath, so abandon the gesture
+                    // rather than fight it. Below the slop, decide nothing yet.
+                    if (abs(totalY) > slop && abs(totalY) >= abs(totalX)) break
+                    if (abs(totalX) <= slop) continue
+                    dragging = true
+                }
+
+                state.dispatchRawDelta(-delta.x)
+                // Consuming is what tells the card underneath this was a drag, not a click.
+                change.consume()
             }
         }
     }

@@ -9,6 +9,8 @@ import kotlinx.coroutines.CoroutineScope
 // Touch scrolls horizontal lists natively, so there is nothing to add on Android.
 actual fun Modifier.rowWheelScroll(state: LazyListState, scope: CoroutineScope): Modifier = this
 
+actual fun Modifier.rowDragScroll(state: LazyListState): Modifier = this
+
 @Composable
 actual fun BoxScope.RowScrollArrows(state: LazyListState, scope: CoroutineScope) {
     // No scroll-arrow affordance on touch — users swipe.

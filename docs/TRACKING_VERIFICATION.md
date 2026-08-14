@@ -146,6 +146,8 @@ Nuvio auto-resumes on launch after being closed from inside the player.
 | RG-03 | Right-click a poster, an episode, a season chip, a Continue Watching card | Context menu opens on each |
 | RG-04 | Leave the mouse still during playback for ~3s, then move it | Controls fade, then return |
 | RG-05 | Startup line: `./Nuvio-*.AppImage 2>&1 \| grep DesktopWindowGeometry` | Paste the whole line into Notes |
+| RG-06 | Press and hold the **left mouse button** on a card row and drag sideways | The row scrolls with the cursor. Release without moving and the card opens as usual — a drag must **not** open it. Dragging mostly *vertically* from a card must still scroll the page, not the row |
+| RG-07 | Right-click a card and drag sideways | The context menu behaves exactly as in `RG-03`; the row does **not** drag. Only the left button scrolls |
 
 ---
 
