@@ -242,11 +242,50 @@ exists in the **skiko 0.144.6 already in the app's jars** — no new dependency:
   produce a Skia `Image` that the existing `drawBehind` can draw, replacing the `makeRaster` call at
   `PlayerEngine.desktop.kt:385` with zero copies
 
-**Still unproven, and it is now the only real risk:** whether Compose Desktop will let mpv render on
-Skiko's GL context and render thread. That is an integration question, not an API gap — the API gap
-is closed. Compose Desktop does not publicly expose its `DirectContext`/GL context, so this likely
-needs a `SkiaLayer`/`SkikoView` seam or a shared GL context, and it must be spiked before the
-migration is scheduled.
+### ✅ Interop spike (2026-08-15) — Skiko draws a foreign GL texture, pixels verified
+
+`scripts/spikes/SkikoInterop.kt` — a `SkiaLayer` (the same component Compose Desktop renders
+through) with a `SkikoRenderDelegate`. Inside `onRender` it creates a GL texture with **raw GL via
+JNA**, fills it with solid magenta, adopts it into Skia and draws it. The texture is created by
+foreign GL rather than by mpv deliberately: mpv rendering into an FBO is already proven by
+`mpv_gl_hwdec.c`; what was unproven was the Skia half.
+
+```
+SPIKE: renderApi=OPENGL
+SPIKE: created foreign GL texture id=1 glError=0
+SPIKE: frame 1 DirectContext=null (via LinuxOpenGLRedrawer.contextHandler.getContext())
+SPIKE: frame 2 DirectContext=FOUND
+SPIKE: adoptTextureFrom + drawImage OK (image 256x256)
+RESULT skiko-interop ok=true apiOk=true pixelsVerified=true (1024/1024 magenta)
+```
+
+Verified by capturing the live window with `java.awt.Robot` and sampling it — "drawImage did not
+throw" is not the same claim as "the texture is on screen".
+
+Three things this establishes:
+
+- **Raw GL calls work on Skiko's render thread**, with its context current, `glError=0`. That is
+  where `mpv_render_context_render` would be called.
+- **`Image.adoptTextureFrom` + `canvas.drawImage` works** on a texture Skia does not own. This is
+  the drop-in replacement for the `makeRaster` copy at `PlayerEngine.desktop.kt:385`.
+- `DirectContext.resetGLAll()` before drawing keeps Skia consistent after foreign GL calls.
+
+### ⚠ Three caveats that shape the implementation
+
+1. **The `DirectContext` is only reachable by reflection.** There is no public accessor. The working
+   path is `SkiaLayer.getRedrawer$skiko()` → `LinuxOpenGLRedrawer.contextHandler` (private field) →
+   `getContext()` (protected). That is skiko **0.144.6** internals and can break on any Compose
+   Desktop bump — it needs a version check and a graceful fallback, not a bare `!!`.
+2. **It is null on the first frame.** The handler creates it lazily during the first draw, so the
+   video surface must tolerate "no context yet" and retry rather than fail.
+3. **`renderApi` must be `OPENGL`.** Skiko falls back to `SOFTWARE_*` on some drivers/VMs, and this
+   whole path is unavailable there. The existing buffer-copy path has to stay as a fallback, which
+   means shipping **both** video paths, not replacing one with the other.
+
+**Still not proven:** this used `SkiaLayer` directly. Compose Desktop owns its own `SkiaLayer`
+inside `ComposeWindow`, so reaching it from a `@Composable` player surface needs one more seam. That
+is a smaller question than the one just answered — the rendering and adoption both work — but it is
+the next thing to spike.
 
 ### What this does to the plan
 
