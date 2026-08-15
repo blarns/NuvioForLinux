@@ -5,10 +5,12 @@ ceilings demonstrably hurt users — was made without knowing whether the propos
 all. It does; see "Spike results" below. What remains is a scheduling decision, not a technical
 unknown.*
 *Written 2026-06-12 against v0.1.14 (build 83). Revisited 2026-08-12 against v0.3.2. **Revised
-2026-08-15 against v0.3.4 — libmpv restores hardware decoding, which VLCJ cannot reach at any
-version, but at 2160p that is worth only ~23%: readback replaces decode as the bottleneck. If the
-goal is 4K, the GPU-render follow-up under "What it does NOT fix" is the load-bearing piece, not an
-optional extra. See the revision section below.***
+2026-08-15 against v0.3.4: libmpv restores hardware decoding, which VLCJ cannot reach at any
+version. But the SW-render design in this document is the wrong plan — at 2160p it is worth only
+~23%, because readback replaces decode as the bottleneck. GPU rendering plus zero-copy `vaapi`
+measures **1.85 s vs 41.2 s — ~22× cheaper** — on the real 4K stream, and the Skia interop
+primitives are already in the shipped skiko. Build it GPU-first. See the two revision sections
+below.***
 
 ## Context
 
@@ -201,6 +203,58 @@ follow-up is now the load-bearing piece, not an optional extra.
 ⚠ A direct VLC-3-vs-mpv measurement on the same 4K stream was attempted and **discarded**: VLC drops
 frames under `--sout` when the network stalls, so the two legs did not process the same frame count.
 The mpv A/B above is frame-accurate (120 = 120) and is the only comparison quoted here.
+
+## ✅ GPU-render spike (2026-08-15) — this is the one that fixes 4K
+
+`MPV_RENDER_API_TYPE_OPENGL` rendering into an FBO, so the frame never leaves the GPU. Offscreen
+EGL, no window, headless — `scripts/spikes/mpv_gl_hwdec.c`. Same 2160p HEVC DV HDR REMUX over its
+real debrid URL, same 120 frames, same machine as every number above:
+
+| path | CPU (120 frames @ 2160p) | vs today |
+| --- | --- | --- |
+| SW render + software decode (≈ ships today) | 41.2 s | — |
+| SW render + `hwdec=auto-copy` | 31.7 s | −23% |
+| GPU render + software decode | 19.1 s | −54% |
+| **GPU render + zero-copy `hwdec=vaapi`** | **1.85 s** | **−96%** |
+
+**~22× cheaper than the current path.** Projected against the ~580% the shipped app burns on this
+file, that is order-of-magnitude tens of percent, not hundreds. The two effects compound: hardware
+decode removes the decode cost, GPU rendering removes the 33 MB/frame readback that otherwise
+replaces it. Neither alone is enough — that is why the SW-render numbers disappointed.
+
+### ⚠ Zero-copy needs the right EGL display — this is the trap
+
+`hwdec=vaapi` reports `hwdec-current=**no**` under `EGL_PLATFORM_SURFACELESS_MESA`, and `hwdec=auto`
+silently degrades to `vaapi-**copy**` — which still downloads every frame and throws the win away
+while looking like it works. It binds properly only with an **X11 platform EGL display**
+(`eglGetPlatformDisplayEXT(EGL_PLATFORM_X11_KHR, XOpenDisplay(NULL), …)`) plus
+`MPV_RENDER_PARAM_X11_DISPLAY`. Then `hwdec-current=vaapi`, no `-copy` suffix. **Always assert on
+`hwdec-current` — the difference between `vaapi` and `vaapi-copy` is the entire benefit.**
+
+### Skia interop: the primitives are already shipped
+
+The remaining question was whether Compose Desktop can draw an mpv-owned GL texture. Every piece
+exists in the **skiko 0.144.6 already in the app's jars** — no new dependency:
+
+- `DirectContext.Companion.makeGL()` — wrap the live GL context
+- `BackendTexture.Companion.makeGL(w, h, isMipmapped, textureId, target, format)` — wrap mpv's texture
+- `Image.Companion.adoptTextureFrom(DirectContext, BackendTexture, SurfaceOrigin, ColorType)` —
+  produce a Skia `Image` that the existing `drawBehind` can draw, replacing the `makeRaster` call at
+  `PlayerEngine.desktop.kt:385` with zero copies
+
+**Still unproven, and it is now the only real risk:** whether Compose Desktop will let mpv render on
+Skiko's GL context and render thread. That is an integration question, not an API gap — the API gap
+is closed. Compose Desktop does not publicly expose its `DirectContext`/GL context, so this likely
+needs a `SkiaLayer`/`SkikoView` seam or a shared GL context, and it must be spiked before the
+migration is scheduled.
+
+### What this does to the plan
+
+The effort table above is for the **SW** design and is now the wrong plan — it costs 8–12 days for
+the −23% row. GPU rendering was filed under "What it does NOT fix" as an optional follow-up; it is
+in fact the whole point. A re-estimate should assume: same JNA binding and controller work, but the
+video path targets `MPV_RENDER_API_TYPE_OPENGL` from the start, plus the Skiko context seam above.
+Build it GPU-first, not SW-first-then-maybe-GPU.
 
 This does not change the effort estimate or the regression-risk warning. It changes the *trigger*:
 the ceilings are no longer only cosmetic (subtitle styling, error reasons) — one of them is now the
