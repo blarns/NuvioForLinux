@@ -149,9 +149,26 @@ mpv --hwdec=auto-copy --vf=format=bgra --vo=null --no-audio --untimed clip.ts
 precisely the shape `MPV_RENDER_API_TYPE_SW` already assumes. So the proposed design does not change
 — the swap simply also buys back ~500% CPU on 4K HEVC that VLCJ cannot reach at any version.
 
+### Confirmed through the real SW render path, not just `--vo=null`
+
+The numbers above were taken with `--vo=null`, which is *not* the path this design uses. Re-run
+against the actual one — `mpv_render_context_create(MPV_RENDER_API_TYPE_SW)` plus
+`mpv_render_context_render` with `SW_SIZE`/`SW_FORMAT=bgra`/`SW_STRIDE`/`SW_POINTER` into a
+caller-owned buffer, i.e. exactly the shape that feeds the Skia path today
+(`scratchpad/mpv_sw_hwdec.c`, ~90 lines of C against `libmpv-dev`):
+
+| `hwdec` | `hwdec-current` reported by mpv | CPU (400 frames) | frames non-blank |
+| --- | --- | --- | --- |
+| `no` | `no` | 23.3 s | 400 / 400 |
+| `auto-copy` | **`vaapi-copy`** | **12.6 s** | 400 / 400 |
+
+**Hardware decoding survives SW rendering** — the two are independent in mpv, which is precisely
+what VLC 3 gets wrong. `hwdec-current` is queried per run so a silent fallback to software cannot
+pass unnoticed. Both legs share the same 200 µs poll in the frame pump, so it cancels out of the
+comparison.
+
 ⚠ Measured at 1080p. At 2160p the decode share is 4× larger so the win should grow, but readback
-grows too — not measured. Also still unmeasured: whether `hwdec=auto-copy` survives the real
-`mpv_render_context` SW path rather than `--vo=null`.
+grows too — not measured.
 
 This does not change the effort estimate or the regression-risk warning. It changes the *trigger*:
 the ceilings are no longer only cosmetic (subtitle styling, error reasons) — one of them is now the
