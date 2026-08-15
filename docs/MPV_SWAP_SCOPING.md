@@ -4,7 +4,9 @@
 ceilings demonstrably hurt users — was made without knowing whether the proposed shape worked at
 all. It does; see "Spike results" below. What remains is a scheduling decision, not a technical
 unknown.*
-*Written 2026-06-12 against v0.1.14 (build 83). Revisited 2026-08-12 against v0.3.2.*
+*Written 2026-06-12 against v0.1.14 (build 83). Revisited 2026-08-12 against v0.3.2. **Revised
+2026-08-15 against v0.3.4 — hardware decoding is now the leading reason to swap; see the revision
+section below.***
 
 ## Context
 
@@ -27,7 +29,8 @@ shape is below.
 |---|---|---|
 | Subtitle styling not applied | Style settings persist/sync but don't render | libass renders styles into the frame (`--sub-*` options, runtime-settable) |
 | No track language codes | Weak preferred-language auto-select | `track-list` property has `lang`, `title`, codec per track |
-| ~30 fps CPU frame copies | Smooth but capped; one full-frame copy per frame | Same copy cost with SW render — **not** improved; see Risks |
+| ~30 fps CPU frame copies | Smooth but capped; one full-frame copy per frame | Copy cost unchanged with SW render — but **decode cost collapses**, see the 2026-08-15 revision below |
+| **No hardware decoding, at all** | VLC 3 forces `avcodec-hw=none` under `vmem`; 4K HEVC is software-decoded at ~500% CPU | `hwdec=auto-copy` hardware-decodes *and* hands back system-memory frames — measured working on stock libmpv 0.37 |
 | Coarse error events | Generic "error" with no reason | `end-file` event carries a reason + `mpv_error` strings |
 | Seek timing quirks | Needed the pending-seek convergence workaround (0.1.12.1) | mpv reports seeking state explicitly (`seeking`, `playback-restart`) |
 | EAC3/passthrough noise | Cosmetic stderr errors at open | mpv's audio output negotiation is quieter and supports passthrough properly |
@@ -115,6 +118,44 @@ It removes the "does this approach work at all" risk and nothing else. Still unp
 
 The 8–12 day estimate and the "high regression risk in the player for weeks after" warning both
 still stand. What has changed is that the risk is now ordinary implementation risk.
+
+## Revision 2026-08-15 — the CPU row above was wrong, and this is now the strongest argument to swap
+
+The "What it does NOT fix" section says *"The CPU frame-copy cost stays (SW render ≈ buffer
+callback)"*. That half is still true and still unimproved. **The half it missed is decode.**
+
+A 2160p HEVC REMUX pegs ~580% CPU on an i7-1255U, and ~500% of that is *software HEVC decode* — not
+copying. Root cause: **VLC 3 silently overrides `avcodec-hw` to `none` whenever the vout is `vmem`**,
+which is exactly the callback surface this fork uses. Proved with a one-variable vlcj A/B (same
+process, same file, same `--avcodec-hw=any`, only the video surface varied): normal vout →
+`hw decoder module matching "any"`, `vmem` → `matching "none"`. It is not configurable around.
+
+mpv does not have this problem. Measured on the same 1080p HEVC clip, same machine, all three
+decoding **and** delivering frames to CPU memory as BGRA/RV32:
+
+| engine | CPU (user+sys) | availability |
+| --- | --- | --- |
+| VLC 3.0.20 (today) | 25.5 s | shipping |
+| VLC 4.0.0-dev + vlcj 5 | 14.0 s | both pre-release — see [`VLCJ5_MIGRATION_SCOPING.md`](VLCJ5_MIGRATION_SCOPING.md) |
+| **libmpv 0.37 `hwdec=auto-copy`** | **14.6 s** | **already installed, stock Ubuntu 24.04** |
+
+```
+mpv --hwdec=auto-copy --vf=format=bgra --vo=null --no-audio --untimed clip.ts
+[vd] Trying hardware decoding via hevc-vaapi-copy.
+[vd] Using hardware decoding (vaapi-copy).
+```
+
+`auto-copy` is the key: it hardware-decodes and copies the frame back to system memory, which is
+precisely the shape `MPV_RENDER_API_TYPE_SW` already assumes. So the proposed design does not change
+— the swap simply also buys back ~500% CPU on 4K HEVC that VLCJ cannot reach at any version.
+
+⚠ Measured at 1080p. At 2160p the decode share is 4× larger so the win should grow, but readback
+grows too — not measured. Also still unmeasured: whether `hwdec=auto-copy` survives the real
+`mpv_render_context` SW path rather than `--vo=null`.
+
+This does not change the effort estimate or the regression-risk warning. It changes the *trigger*:
+the ceilings are no longer only cosmetic (subtitle styling, error reasons) — one of them is now the
+largest CPU cost in the application.
 
 ## Ecosystem check (2026-08-12)
 
