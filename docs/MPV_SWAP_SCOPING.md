@@ -5,8 +5,10 @@ ceilings demonstrably hurt users — was made without knowing whether the propos
 all. It does; see "Spike results" below. What remains is a scheduling decision, not a technical
 unknown.*
 *Written 2026-06-12 against v0.1.14 (build 83). Revisited 2026-08-12 against v0.3.2. **Revised
-2026-08-15 against v0.3.4 — hardware decoding is now the leading reason to swap; see the revision
-section below.***
+2026-08-15 against v0.3.4 — libmpv restores hardware decoding, which VLCJ cannot reach at any
+version, but at 2160p that is worth only ~23%: readback replaces decode as the bottleneck. If the
+goal is 4K, the GPU-render follow-up under "What it does NOT fix" is the load-bearing piece, not an
+optional extra. See the revision section below.***
 
 ## Context
 
@@ -119,7 +121,7 @@ It removes the "does this approach work at all" risk and nothing else. Still unp
 The 8–12 day estimate and the "high regression risk in the player for weeks after" warning both
 still stand. What has changed is that the risk is now ordinary implementation risk.
 
-## Revision 2026-08-15 — the CPU row above was wrong, and this is now the strongest argument to swap
+## Revision 2026-08-15 — the CPU row above was wrong, but the fix is smaller than it first appears
 
 The "What it does NOT fix" section says *"The CPU frame-copy cost stays (SW render ≈ buffer
 callback)"*. That half is still true and still unimproved. **The half it missed is decode.**
@@ -155,7 +157,7 @@ The numbers above were taken with `--vo=null`, which is *not* the path this desi
 against the actual one — `mpv_render_context_create(MPV_RENDER_API_TYPE_SW)` plus
 `mpv_render_context_render` with `SW_SIZE`/`SW_FORMAT=bgra`/`SW_STRIDE`/`SW_POINTER` into a
 caller-owned buffer, i.e. exactly the shape that feeds the Skia path today
-(`scratchpad/mpv_sw_hwdec.c`, ~90 lines of C against `libmpv-dev`):
+(`scripts/spikes/mpv_sw_hwdec.c`, C against `libmpv-dev`):
 
 | `hwdec` | `hwdec-current` reported by mpv | CPU (400 frames) | frames non-blank |
 | --- | --- | --- | --- |
@@ -167,8 +169,38 @@ what VLC 3 gets wrong. `hwdec-current` is queried per run so a silent fallback t
 pass unnoticed. Both legs share the same 200 µs poll in the frame pump, so it cancels out of the
 comparison.
 
-⚠ Measured at 1080p. At 2160p the decode share is 4× larger so the win should grow, but readback
-grows too — not measured.
+### ⚠⚠ At 2160p the win is 23%, not 46% — readback replaces decode as the bottleneck
+
+The 1080p numbers oversell this. Re-run on the **actual problem content** — the 2160p HEVC **Dolby
+Vision** HDR REMUX, streamed over its real debrid HTTP URL with a custom `User-Agent`, 120 frames
+each leg, buffer sized 3840×2160:
+
+| `hwdec` | `hwdec-current` | CPU (120 frames) | vs 1080p |
+| --- | --- | --- | --- |
+| `no` | `no` | 41.2 s | — |
+| `auto-copy` | `vaapi-copy` | **31.7 s (−23%)** | was −46% at 1080p |
+
+Two things this establishes and one it kills:
+
+- ✅ **hwdec works on Dolby Vision 4K.** `hwdec-current=vaapi-copy`, all 120 frames non-blank,
+  `src=3840x2160 fmt=hevc`. DV7 was a plausible fallback trigger; it is not one.
+- ✅ **`http-header-fields` works** on a debrid URL — the last untested item from the original
+  "What the spike does NOT establish" list.
+- ❌ **The CPU case for SW rendering at 4K is much weaker than it looks.** `sys` time *rose* from
+  1.56 s to 4.32 s — that is the GPU→CPU download. At 3840×2160 each frame is 33 MB, so removing
+  decode just promotes readback + 10-bit→BGRA conversion to the dominant cost. Scaled against the
+  ~580% the shipped app burns on this file, the projection is roughly **580% → ~450%**, not the
+  near-elimination that "hardware decoding now works" suggests.
+
+**Implication for sequencing.** If the goal is "4K without the fans", `MPV_RENDER_API_TYPE_SW` does
+not get there — and neither would VLC 4, which has the same readback. The fix that does is GPU
+rendering (`MPV_RENDER_API_TYPE_OPENGL` into a texture shared with Skia, no readback at all), which
+this document lists under "What it does NOT fix" as a separate, much harder follow-up. That
+follow-up is now the load-bearing piece, not an optional extra.
+
+⚠ A direct VLC-3-vs-mpv measurement on the same 4K stream was attempted and **discarded**: VLC drops
+frames under `--sout` when the network stalls, so the two legs did not process the same frame count.
+The mpv A/B above is frame-accurate (120 = 120) and is the only comparison quoted here.
 
 This does not change the effort estimate or the regression-risk warning. It changes the *trigger*:
 the ceilings are no longer only cosmetic (subtitle styling, error reasons) — one of them is now the
