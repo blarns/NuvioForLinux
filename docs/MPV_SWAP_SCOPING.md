@@ -568,3 +568,73 @@ soak is worth doing before trusting it in the player.
 
 **Assert `hwdec-current == "vaapi"` at runtime.** Every failure mode in this whole investigation was
 silent — correct video at 4–8× the CPU. It is the only trustworthy signal.
+
+## ✅ 2026-08-16c — the EGL Redrawer works. Nothing in the plan is unproven now.
+
+The revision above listed one piece with no spike behind it. It now exists and renders:
+`scripts/spikes/EglRedrawerSpike.kt` (+ `EglRedrawerSpikeMain.kt`) drives a real `SkiaLayer` in a
+real window through a real skiko `Redrawer` backed by an EGL window surface.
+
+```
+PASS  egl-redrawer-used         redrawer=EglRedrawer
+PASS  renders-frames            frames=5
+PASS  render-info               EGL/OpenGL visual=0x21 stencil=8
+PASS  top-left-colour           0xFF3FA9C8
+PASS  bottom-right-colour       0xFFC83F7A
+PASS  renders-after-resize      5 -> 10
+PASS  resize-size-propagated    900x592
+PASS  top-left/bottom-right-after-resize
+RESULT egl-redrawer ok=true
+```
+
+And with `NUVIO_EGL_FORCE_FAIL=1`, stock skiko takes over and still renders
+(`redrawer=LinuxOpenGLRedrawer`). That path is tested deliberately because it will otherwise only
+ever run on machines we cannot reproduce.
+
+### ⚠⚠ Correction: skiko renders on the EDT
+
+This document previously assumed a dedicated render thread ("never the EDT"). **That is wrong.**
+`AWTRedrawer.inDrawScope` hard-asserts `SwingUtilities.isEventDispatchThread()`, and skiko's frame
+dispatcher runs on `MainUIDispatcher`. A render thread fails with *"Method should be called from AWT
+event dispatch thread"*.
+
+Consequence for the mpv work: an EGL context is current on exactly one thread, so **the EDT is the
+context thread, and `mpv_render_context_render` has to be called there too.** Budget for that — it
+means the video render shares a thread with UI event handling. The measured GPU render cost
+(1.78 s CPU per 60 frames at 4K) is what makes that acceptable.
+
+### Five more traps, none of them guessable
+
+1. **`Redrawer.update(nanoTime)` must be called before drawing.** `SkiaLayer` records the frame into
+   a `Picture`, and *that* is what invokes the `SkikoRenderDelegate`. Skip it and the context and
+   surface build perfectly and nothing is ever drawn — no error, just a black window.
+2. `onDeviceChosen()` must precede any frame; `inDrawScope` asserts on it.
+3. **`eglGetPlatformDisplayEXT` is an extension, not an exported symbol** — JNA cannot bind it
+   directly (`UnsatisfiedLinkError`); fetch it via `eglGetProcAddress` and call the raw pointer.
+4. **`XWindowAttributes.visual` is at offset 24, not 32.** Guessing the offset segfaults the JVM
+   inside `XVisualIDFromVisual` instead of failing cleanly. Use JNA-platform's real struct.
+5. ⚠ **`@Suppress("INVISIBLE_REFERENCE")` does not cover *receiver* resolution** for Kotlin-internal
+   types. It compiles and silently emits `checkcast error/NonExistentClass`, failing only at
+   runtime. The JAWT access therefore goes through reflection rather than naming `HardwareLayer`.
+
+Also confirmed on the way: Kotlin can reach skiko's internals with
+`@file:Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER")` plus marking our own classes `internal`
+— **no Java source set, no `-Xfriend-paths`, no `java.lang.reflect.Proxy`.** And the app already
+ships `--add-opens=java.base/sun.misc=ALL-UNNAMED` and the `jdk.unsupported` module (VLCJ needs
+Unsafe for its native video buffers), so the global `RenderFactory` hook needs no packaging change.
+
+### Where the plan stands
+
+| Piece | State |
+| --- | --- |
+| Skia on EGL, shipped skiko | ✅ proven |
+| mpv zero-copy `vaapi` on that context | ✅ proven at 4K |
+| Skia adopts + draws mpv's texture | ✅ proven |
+| `RenderFactory` global hook | ✅ proven |
+| EGL `Redrawer` incl. resize + fallback | ✅ proven |
+| Wiring into the app behind a flag | not started |
+| JNA libmpv binding + `MpvPlayerController` | not started (~8–12 days, as scoped) |
+| Sustained interleaved Skia/mpv soak | ⚠ still owed |
+| Packaging (`libmpv2` dep, AppImage bundling) | not started |
+
+**No native artifact is needed anywhere** — the EGL path is pure JNA, which VLCJ already pulls in.
