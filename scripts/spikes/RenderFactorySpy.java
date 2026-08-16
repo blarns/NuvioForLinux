@@ -26,6 +26,38 @@ public class RenderFactorySpy implements RenderFactory {
     /** Object in/out so Kotlin callers never mention the internal RenderFactory type. */
     public static Object wrap(Object original) { return new RenderFactorySpy((RenderFactory) original); }
 
+    /**
+     * Replace RenderFactory.Companion.Default globally, before anything constructs a SkiaLayer.
+     *
+     * This is the hook the APP needs. Per-instance injection (see RenderFactoryInjectSpike) only
+     * works on a layer we construct ourselves; Compose builds its own and realises it before we
+     * could reach it. Default is `private static final`, so Field.set throws and it takes Unsafe.
+     *
+     * @return null on success, else a description of why it failed.
+     */
+    public static String installGlobally() {
+        try {
+            Class<?> companion = Class.forName("org.jetbrains.skiko.RenderFactory$Companion");
+            java.lang.reflect.Field f = companion.getDeclaredField("Default");
+            f.setAccessible(true);
+            RenderFactory original = (RenderFactory) f.get(null);
+
+            java.lang.reflect.Field theUnsafe = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+            theUnsafe.setAccessible(true);
+            sun.misc.Unsafe unsafe = (sun.misc.Unsafe) theUnsafe.get(null);
+
+            Object base = unsafe.staticFieldBase(f);
+            long offset = unsafe.staticFieldOffset(f);
+            unsafe.putObject(base, offset, new RenderFactorySpy(original));
+
+            Object now = f.get(null);
+            if (!(now instanceof RenderFactorySpy)) return "write did not stick, still " + now.getClass().getName();
+            return null;
+        } catch (Throwable e) {
+            return e.getClass().getName() + ": " + e.getMessage();
+        }
+    }
+
     @Override
     public Redrawer createRedrawer(SkiaLayer layer, GraphicsApi renderApi,
                                    SkiaLayerAnalytics analytics, SkiaLayerProperties properties) {
