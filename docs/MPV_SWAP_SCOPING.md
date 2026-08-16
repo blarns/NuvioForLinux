@@ -467,3 +467,73 @@ Kotlin rather than C++. This one is untested speculation, listed for completenes
 
 - mpv doing zero-copy into a GLX context. Closed, measured above.
 - Sharing GL objects between an EGL context and a GLX context. No cross-API share groups.
+
+## ✅ Revision 2026-08-16b — the EGL route works on the SHIPPED skiko. No fork, no separate window.
+
+The revision above concluded the Skia seam tops out at `vaapi-copy` because Skiko is GLX, leaving
+only "mpv owns its own window" (visible product change) or "replace skiko with an EGL fork" (own a
+third-party native library). **Both were wrong.** The shipped `libskiko` can be driven on EGL.
+
+### Why it was thought impossible, and why it isn't
+
+Skia's `GrGLMakeNativeInterface()` on Linux is the GLX implementation, and it opens with
+`if (!glXGetCurrentContext()) return nullptr;`. **That check** — not anything about Skia's GL
+backend, which is API-agnostic — is what forces GLX. It is also why the known workaround is a fork
+built with `skia_use_egl=true`.
+
+But the shipped skiko also exposes:
+
+```kotlin
+GLAssembledInterface.createFromNativePointers(ctx, getProcFnPtr)
+DirectContext.makeGLWithInterface(iface)
+```
+
+which assemble the GL interface from a **caller-supplied** proc-address function and never consult
+GLX. Hand it an `eglGetProcAddress` adapter and Skia rasterises on an EGL context.
+
+⚠ The adapter is required, not optional: Skia's getter is `GrGLFuncPtr(*)(void* ctx, const char*)`
+but `eglGetProcAddress` takes only the name, so passing it directly reads `ctx` as the symbol name.
+
+### The chain, all measured
+
+| # | Claim | Evidence |
+| --- | --- | --- |
+| 1 | Compose's `SkiaLayer` is reachable | `WindowSkiaLayerComponent.getHierarchyRoot()` is public and returns `SkiaLayer`; `SkiaLayer extends JComponent`, so an AWT container walk also finds it |
+| 2 | Its `RenderFactory` is injectable | `renderFactory` is `private final` but read **lazily** at `createRedrawer()` time → `RenderFactoryInjectSpike.kt` — `ok=true renderApi=OPENGL` |
+| 3 | Shipped skiko rasterises on EGL | `EglSkiaSpike.kt` — pixel-exact readback `0xFF3FA9C8` |
+| 4 | mpv gets zero-copy on that same context | `EglSkiaMpvSpike.kt` — `hwdec-current=vaapi` at 3840×2160 |
+| 5 | Frames are real video, not black | mean luma 16 (≠ 0) on the real DV REMUX |
+| 6 | Skia adopts and draws mpv's texture | `adoptTextureFrom` + `drawImage`, sampled non-black |
+| 7 | mpv doesn't poison Skia's GL state | Skia draws correctly *after* mpv, `0xFF3FA9C8` again |
+
+1.78 s CPU for 60 frames at 4K including JVM startup — the fast tier, with Skia compositing on top
+and **no separate window**.
+
+### Three traps that cost time here, and will again
+
+1. ⚠ **libmpv refuses to start under a non-C `LC_NUMERIC`, and the JVM sets a locale.** `mpv_create()`
+   fails with no useful diagnostic from Java. Any JNA binding must `setlocale(LC_NUMERIC, "C")`
+   first. This is not optional and not obvious.
+2. ⚠ **A pixel assert on unseeked media reports false failures.** The first 4K run "failed" at mean
+   luma 0 — that was the film's opening titles, not a decode failure. Hence `SPIKE_START`.
+3. ⚠ **`RenderFactory` and `Redrawer` are Kotlin `internal`** — public in bytecode, unnameable from
+   Kotlin source outside skiko's module. The EGL `Redrawer` needs a Java shim (see
+   `RenderFactorySpy.java`) or `-Xfriend-paths`. Relatedly, Kotlin's all-defaults constructors are
+   `ACC_SYNTHETIC`, so javac silently resolves `new SkiaLayer(...)` to the wrong overload.
+
+### What is left — implementation, not unknowns
+
+- **An EGL `Redrawer`** (Java shim): JAWT for the X11 display/window, `eglCreateWindowSurface`,
+  make-current, `DirectContext` via `makeGLWithInterface`, Skia surface on the default framebuffer,
+  `eglSwapBuffers`, plus frame dispatch, vsync, resize and transparency. ⚠ **This is the one piece
+  with no spike behind it** — reimplementing `LinuxOpenGLRedrawer`'s lifecycle is real work with
+  real risk. Everything else on this list is already proven or ordinary.
+- The JNA libmpv binding and `MpvPlayerController` — as originally scoped (~8–12 days).
+- **Fallbacks stay mandatory.** If EGL or the injection fails on a given machine, the app must fall
+  back to stock GLX Skiko plus the existing buffer-copy video path. Ship both.
+- Packaging: `libmpv2` for the deb, bundling for the AppImage.
+
+### The rule that still holds
+
+**Assert `hwdec-current == "vaapi"` at runtime.** Every failure mode in this whole investigation was
+silent — correct video at 4–8× the CPU. It is the only trustworthy signal.
