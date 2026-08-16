@@ -405,3 +405,61 @@ Anime4K shaders, RTX HDR, buffer presets, >100% volume boost — is unreachable 
   audio passthrough; a VLCJ defect we can't work around; upstream shipping a Linux
   bridge (at which point migrate to official instead — see strategy notes).
 - Until then: VLCJ ships, works, and is user-verified across five releases.
+
+## Follow-up 2026-08-16 — "can we get the fast tier without a separate window?"
+
+### First, the door is properly closed, not just closed for VA-API
+
+On a GLX context mpv gets **no** zero-copy interop from *any* backend. Same harness, same file:
+
+| `hwdec` requested | `hwdec-current` on GLX |
+| --- | --- |
+| `auto` | `vaapi-copy` |
+| `vaapi` | `no` |
+| `vdpau` | `no` |
+| `drm` | `no` |
+
+`hwdec=auto` is the authoritative one: mpv knows exactly which interops it can do against the
+current context, and on GLX it concludes copy is the best available. So 15.34 s is a hard floor for
+*anything* rendered through Skiko's context as shipped — this is not a matter of picking a better
+hwdec.
+
+Skiko 0.144.6 also has exactly two Linux redrawers — `LinuxOpenGLRedrawer` (GLX) and
+`LinuxSoftwareRedrawer`. No EGL, no Vulkan. There is no configuration that changes this.
+
+### But a separate window is not the only escape
+
+The constraint is "Compose renders on GLX", not "video must live in its own window". Three ways to
+break it, none of them cheap:
+
+**(a) Put Compose itself on EGL.** If Skiko used EGL, mpv shares the context, zero-copy works, and
+everything composites normally — no separate window, and the `SkiaLayer` seam above gives us the
+`DirectContext`. This is not hypothetical:
+  - `JetBrains/skiko#918` — Jake Wharton reports having EGL working in a fork; the change is
+    `skia_use_egl=true` in skia-pack plus a `makeEGL()` beside `makeGL()`. Issue is closed with no
+    visible maintainer decision either way.
+  - `silenium-dev/skiko` — a fork that uses EGL/GLES instead of GLX/desktop GL on Linux, feeding
+    `silenium-dev/compose-gl` (render GL content into a composable, `dev.silenium.compose.gl`) and
+    `silenium-dev/mpv-kt` (KMP libmpv wrapper with a Compose `VideoSurface`, GPL-3.0, v0.1.0, very
+    early — 4 stars).
+  - ⚠ Cost: swapping the renderer under the **whole app**, not just video. `libskiko` becomes a
+    third-party native artifact (or a full Skia build we own). Touches every pixel drawn, plus .deb
+    and AppImage packaging. Unverified here.
+
+**(b) X Pixmap bridge.** mpv on its own EGL context renders into an `EGL_KHR_image_pixmap`-backed
+pixmap; Skiko (GLX) binds the same pixmap via `GLX_EXT_texture_from_pixmap`. Both extensions
+confirmed present on this machine. Zero-copy, keeps compositing, no separate window, no forked
+skiko. Sync between the two contexts is the risk, and it is driver-dependent and unproven.
+
+**(c) Custom `Redrawer` via `RenderFactory`.** `SkiaLayer`'s constructor takes a `RenderFactory`,
+and Skia's `DirectContext.makeGL()` wraps *whatever GL context is current* — it does not care
+whether GLX or EGL created it. So an EGL redrawer written in Kotlin/JNA would work in principle
+without forking skiko's native side. Blockers: Compose builds its `SkiaLayer` internally and never
+lets us pass a `RenderFactory` (`RenderFactory.Companion.Default` is a private static final set from
+`makeDefaultRenderFactory()`), and we would need JAWT for the X11 display/window. Essentially (a) in
+Kotlin rather than C++. This one is untested speculation, listed for completeness.
+
+### What is definitively impossible
+
+- mpv doing zero-copy into a GLX context. Closed, measured above.
+- Sharing GL objects between an EGL context and a GLX context. No cross-API share groups.
