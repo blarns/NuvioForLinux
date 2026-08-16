@@ -7,14 +7,19 @@ unknown.*
 *Written 2026-06-12 against v0.1.14 (build 83). Revisited 2026-08-12 against v0.3.2. Revised
 2026-08-15 against v0.3.4.*
 
-> ⚠⚠ **READ THE 2026-08-16 REVISION BEFORE ACTING ON ANYTHING ABOVE IT.** libmpv does restore
-> hardware decoding, which VLCJ cannot reach at any version — that part holds. But **both** designs
-> proposed in this document are now known to be wrong: the SW-render design is worth only ~23% at
-> 2160p, and the GPU-render design that replaced it assumed we could hand mpv's texture to Compose's
-> `DirectContext`. **Skiko on Linux is GLX, mpv's zero-copy VA-API is EGL-only**, so that route tops
-> out at `vaapi-copy` and never reaches the tier that motivated the migration. The earlier sections
-> are kept as-is for their measurements and their reasoning trail, not as a plan. **Decision is open
-> and it is a product decision** — see "Revision 2026-08-16" and the follow-up after it.
+> ⚠⚠ **THE PLAN IS THE 2026-08-16b REVISION AT THE END. Everything before it is superseded.**
+> libmpv restores hardware decoding, which VLCJ cannot reach at any version — that part holds
+> throughout. But the two designs proposed in the body are both wrong: SW-render is worth only ~23%
+> at 2160p, and the GPU-render design that replaced it assumed Compose's `DirectContext` could take
+> mpv's texture — which caps at `vaapi-copy`, because Skiko is GLX and mpv's zero-copy VA-API is
+> EGL-only.
+>
+> **The route that works: drive the shipped Skiko on EGL via `makeGLWithInterface`.** No forked
+> skiko, no separate window, no product change. Whole chain measured — Skia rasterises on EGL,
+> mpv reports `hwdec-current=vaapi` at 4K on the same context, Skia adopts and draws its texture,
+> and `RenderFactory` injection into Compose's own `SkiaLayer` fires. Remaining risk is one piece:
+> writing an EGL `Redrawer`. Earlier sections are kept for their measurements and reasoning trail,
+> not as a plan.
 
 ## Context
 
