@@ -509,7 +509,7 @@ but `eglGetProcAddress` takes only the name, so passing it directly reads `ctx` 
 | 4 | mpv gets zero-copy on that same context | `EglSkiaMpvSpike.kt` — `hwdec-current=vaapi` at 3840×2160 |
 | 5 | Frames are real video, not black | mean luma 16 (≠ 0) on the real DV REMUX |
 | 6 | Skia adopts and draws mpv's texture | `adoptTextureFrom` + `drawImage`, sampled non-black |
-| 7 | mpv doesn't poison Skia's GL state | Skia draws correctly *after* mpv, `0xFF3FA9C8` again |
+| 7 | Skia draws correctly *after* mpv has rendered | `0xFF3FA9C8` again — ⚠ **one alternation, not a loop**; see caveat below |
 
 1.78 s CPU for 60 frames at 4K including JVM startup — the fast tier, with Skia compositing on top
 and **no separate window**.
@@ -531,8 +531,34 @@ and **no separate window**.
 - **An EGL `Redrawer`** (Java shim): JAWT for the X11 display/window, `eglCreateWindowSurface`,
   make-current, `DirectContext` via `makeGLWithInterface`, Skia surface on the default framebuffer,
   `eglSwapBuffers`, plus frame dispatch, vsync, resize and transparency. ⚠ **This is the one piece
-  with no spike behind it** — reimplementing `LinuxOpenGLRedrawer`'s lifecycle is real work with
-  real risk. Everything else on this list is already proven or ordinary.
+  with no spike behind it** — reimplementing `LinuxOpenGLRedrawer`'s lifecycle is real work.
+  Everything else on this list is already proven or ordinary.
+
+  The specific risk is that **every spike here used `eglMakeCurrent(…, EGL_NO_SURFACE, …)` against
+  an FBO.** A Redrawer instead needs a *window* surface, which requires an `EGLConfig` with
+  `EGL_WINDOW_BIT` whose `EGL_NATIVE_VISUAL_ID` matches the visual AWT actually gives the component.
+  That is a different configuration and none of the spikes exercise it — so it was checked directly
+  (`scripts/spikes/eglvisual.c`):
+
+  ```
+  X default visual id=0x21 depth=24
+  window-capable OpenGL configs: 64
+    cfg[6] visual=0x21 alpha=0 depth=24 stencil=8
+  RESULT egl-window-config ok=true count=64 matches-x-default-visual=1 has-alpha-config=1
+  ```
+
+  A config matching the X default visual exists **with depth 24 + stencil 8** (what Skia wants), and
+  alpha configs exist for transparent/undecorated windows. So the window-surface half is plumbing,
+  not a wall. What remains genuinely unproven is JAWT lock/unlock discipline on the EDT and the
+  frame-dispatch/vsync/resize lifecycle.
+
+### ⚠ Caveat on assertion 7 — coexistence is proven for one alternation, not a render loop
+
+`EglSkiaMpvSpike.kt` renders 60 mpv frames, *then* draws with Skia twice. The real pattern is
+interleaved every frame, for hours, with Skia's resource cache warm and mpv reallocating on
+resolution changes. `resetGLAll()` every frame is also not free. Nothing here suggests a problem —
+but "state not clobbered" is stronger than one alternation supports, and a sustained interleaved
+soak is worth doing before trusting it in the player.
 - The JNA libmpv binding and `MpvPlayerController` — as originally scoped (~8–12 days).
 - **Fallbacks stay mandatory.** If EGL or the injection fails on a given machine, the app must fall
   back to stock GLX Skiko plus the existing buffer-copy video path. Ship both.
