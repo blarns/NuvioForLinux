@@ -27,6 +27,11 @@
 //      currentWidth/currentHeight for exactly this; miss it and you either leak a
 //      Surface per frame or never resize.
 
+// ⚠ FORWARD-COMPAT: the INVISIBLE_REFERENCE suppression below is how this file reaches
+// skiko's `internal` RenderFactory/Redrawer/ContextHandler from Kotlin. The compiler warns
+// that this "might compile and work, but the compiler behavior is UNSPECIFIED and WILL NOT
+// BE PRESERVED". Treat a Kotlin or Compose Desktop upgrade as able to break this file --
+// which is survivable, because every failure path falls back to stock GLX skiko.
 @file:Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER")
 
 package com.nuvio.app.desktop.egl
@@ -354,10 +359,14 @@ internal class EglRedrawer(
 
     override val renderInfo: String get() = device?.vendorInfo ?: "EGL (uninitialised)"
 
-    override fun needRender(force: Boolean) {
+    // ⚠ The supertype parameter is `throttledToVsync`, NOT "force" -- it asks whether this
+    // frame should be paced to vsync, which is already handled by eglSwapInterval below.
+    // Treating it as a force flag (the obvious misreading) would bypass frame coalescing
+    // on exactly the calls that want *less* frequent rendering.
+    override fun needRender(throttledToVsync: Boolean) {
         if (disposed) return
         // Coalesce: many invalidations within one event turn into a single frame.
-        if (framePending && !force) return
+        if (framePending) return
         framePending = true
         SwingUtilities.invokeLater { drawFrame() }
     }
@@ -406,6 +415,10 @@ internal class EglRedrawer(
         // AWTRedrawer.inDrawScope requires the analytics lifecycle to have been walked:
         // it hard-asserts that a device was chosen before any frame is drawn.
         onDeviceChosen(dev.vendorInfo)
+        // Logged unconditionally: "installed" only means the factory was replaced. Every
+        // failure here falls back silently and correctly to GLX, which looks identical on
+        // screen, so this is the only line that proves EGL is the path actually in use.
+        EglRenderer.noteActive(dev.vendorInfo)
         return true
     }
 
@@ -503,6 +516,18 @@ object EglRenderer {
     @Volatile
     var status: String = "not attempted"
         private set
+
+    /** Set once the first EGL device is actually created and current. */
+    @Volatile
+    var activeRenderer: String? = null
+        private set
+
+    internal fun noteActive(info: String) {
+        if (activeRenderer == null) {
+            activeRenderer = info
+            println("[nuvio-egl] ACTIVE — rendering through EGL: $info")
+        }
+    }
 
     val isEnabled: Boolean get() = System.getenv("NUVIO_EGL") == "1"
 
