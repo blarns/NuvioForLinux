@@ -17,9 +17,11 @@ unknown.*
 > **The route that works: drive the shipped Skiko on EGL via `makeGLWithInterface`.** No forked
 > skiko, no separate window, no product change. Whole chain measured — Skia rasterises on EGL,
 > mpv reports `hwdec-current=vaapi` at 4K on the same context, Skia adopts and draws its texture,
-> and `RenderFactory` injection into Compose's own `SkiaLayer` fires. Remaining risk is one piece:
-> writing an EGL `Redrawer`. Earlier sections are kept for their measurements and reasoning trail,
-> not as a plan.
+> `RenderFactory` injection into Compose's own `SkiaLayer` fires, and **the EGL `Redrawer` itself now
+> renders a real window, resize and GLX-fallback included** (revision 2026-08-16c). Nothing in the
+> design is unproven; what remains is implementation — wiring it into the app, the libmpv binding,
+> a sustained interleaved soak, and packaging. Earlier sections are kept for their measurements and
+> reasoning trail, not as a plan.
 
 ## Context
 
