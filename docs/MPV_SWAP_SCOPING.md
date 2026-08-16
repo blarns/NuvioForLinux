@@ -299,6 +299,84 @@ This does not change the effort estimate or the regression-risk warning. It chan
 the ceilings are no longer only cosmetic (subtitle styling, error reasons) — one of them is now the
 largest CPU cost in the application.
 
+## ⚠⚠ Revision 2026-08-16 — Skiko is GLX, so the Skia seam cannot reach zero-copy
+
+The section above ends by calling the ComposeWindow seam "a smaller question than the one just
+answered". That was wrong, and not because the seam is hard to reach — it turns out to be *easier*
+than expected (see below). It is wrong because **the context on the other side of it is the wrong
+kind**.
+
+**Skiko's Linux OpenGL redrawer is GLX, not EGL.** `libskiko-linux-x64.so` links `libGLX.so.0` /
+`libGL.so.1` / `libX11.so.6` and exports **zero** EGL symbols (`nm -D | grep -i egl` matches only
+JNI names like `..._1nMakeGL`). mpv's zero-copy VA-API interop goes through
+`EGL_EXT_image_dma_buf_import` and is EGL-only.
+
+Proved by one-variable A/B — `scripts/spikes/mpv_glx_hwdec.c` is `mpv_gl_hwdec.c` with GLX
+substituted for EGL and nothing else changed. Same file, same args, same frame count:
+
+| GL context | `hwdec` requested | `hwdec-current` |
+| --- | --- | --- |
+| EGL (`EGL_PLATFORM_X11_KHR`) | `vaapi` | **`vaapi`** ✅ |
+| GLX (what Skiko gives) | `vaapi` | **`no`** ❌ |
+| GLX | `auto-copy` | `vaapi-copy` |
+
+So the plan's load-bearing assumption — adopt mpv's GL texture into Skiko's `DirectContext` — tops
+out at `vaapi-copy`. It never reaches the tier that motivated the migration.
+
+### What each tier actually costs
+
+Re-measured 2026-08-16 on the real 2160p HEVC Dolby Vision REMUX over its debrid URL, 120
+frames/leg, all three legs back-to-back in one session.
+
+⚠ **Methodology differs from the table earlier in this document.** These are `/usr/bin/time`
+user+sys (so they include network `sys` time); the earlier rows were `/proc` per-thread deltas.
+Compare *within* this table only — the earlier "1.85s" and today's "3.91s" are the same
+configuration measured two different ways.
+
+| path | `hwdec-current` | CPU (120 frames) |
+| --- | --- | --- |
+| GLX + software decode | `no` | 29.08 s |
+| **GLX + `auto-copy` — the ceiling of the Skia-interop route** | `vaapi-copy` | **15.34 s** |
+| **EGL + `vaapi` — needs mpv to own its own context** | `vaapi` | **3.91 s** |
+
+There is **no today-methodology number for the shipping VLC 3 path**, so no honest multiplier can be
+quoted against it. GLX + software decode (29.08 s) is the fair proxy floor: the shipping path does
+strictly more work than that (same software decode, plus the readback and the JVM-side
+`makeRaster` copy).
+
+### The three options this leaves
+
+1. **Skia interop over GLX** — 15.3 s. Roughly halves CPU vs software decode, keeps Compose
+   compositing exactly as it is today, no visible product change. Still needs the ComposeWindow
+   seam spike. Does **not** fix 4K the way the 3.9 s tier does.
+2. **mpv owns its own EGL context** (`--wid` embedding or a dedicated X window) — the 3.9 s tier.
+   Skia is not involved at all, so no `DirectContext`, no reflection, no version fragility. The
+   cost is entirely UI: a heavyweight AWT/X11 child window means Compose cannot draw over the
+   video, so player controls need re-hosting. This document's "Context" section lists that Z-order
+   problem as a thing the fork deliberately avoided — but it is now the only route to the number.
+3. **Pixmap bridge** — mpv renders via EGL into an `EGL_KHR_image_pixmap`-backed image, Skiko binds
+   the same X Pixmap with `GLX_EXT_texture_from_pixmap`. Both extensions are present on this
+   machine (checked via `glxinfo`/`eglinfo`). Zero-copy *and* keeps Compose compositing — but it is
+   by far the most exotic idea in this investigation, driver-dependent, and unproven anywhere.
+
+### Correction to the "still not proven" note above
+
+The seam itself is **not** the five-hop reflection walk that section assumed.
+`androidx.compose.ui.scene.skia.WindowSkiaLayerComponent.getHierarchyRoot()` returns
+`org.jetbrains.skiko.SkiaLayer` **publicly**, and `SkiaLayer extends JComponent` — so it is an
+ordinary recursive `Container.getComponents()` walk from `FrameWindowScope.window`, looking for
+`instanceof SkiaLayer` (assert exactly one, so a popup/dialog scene layer cannot be silently
+picked). Only the `getRedrawer$skiko()` → `contextHandler` → `getContext()` tail is reflection.
+
+That makes option 1 cheap to build. It does not make it fast.
+
+### The one rule that survives all three options
+
+**`hwdec-current` is the only trustworthy signal.** It is what caught this, and it is what will
+catch the next silent degradation. Whichever path gets built must assert it at runtime — not only
+in a spike — because every failure mode here is silent: you still get correct video, just at 4–8×
+the CPU.
+
 ## Ecosystem check (2026-08-12)
 
 The trigger below — *"upstream shipping a Linux bridge, at which point migrate to official
