@@ -22,6 +22,7 @@ import com.nuvio.app.features.player.ExternalOpenRequestStore
 import com.nuvio.app.features.player.SleepTimerController
 import com.nuvio.app.core.storage.DesktopStorage
 import com.nuvio.app.desktop.DesktopLegacyPrefsMigration
+import com.nuvio.app.desktop.egl.EglRenderer
 import com.nuvio.app.features.player.DesktopScreenshot
 import com.nuvio.app.features.player.PlayerControlBridge
 import com.nuvio.app.features.player.PlayerLaunchStore
@@ -44,6 +45,12 @@ fun main(args: Array<String>) {
     ThemeSettingsStorage.applySelectedAppLanguage(
         ThemeSettingsStorage.loadSelectedAppLanguage() ?: AppLanguage.ENGLISH.code,
     )
+    // Opt-in (NUVIO_EGL=1): run Compose's renderer on EGL rather than skiko's GLX, which
+    // is what lets libmpv hardware-decode 4K zero-copy into the same GL context later.
+    // MUST be before application {} — Compose builds and realises its SkiaLayer internally
+    // and there is no hook afterwards. A no-op when disabled, and every failure path falls
+    // back to stock skiko, so the default build renders exactly as before.
+    EglRenderer.install()
     application {
     System.setProperty("compose.interop.blending", "true")
     val mediaTitle by PlayerLaunchStore.currentTitle.collectAsState()
