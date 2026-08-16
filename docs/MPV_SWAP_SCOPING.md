@@ -4,13 +4,17 @@
 ceilings demonstrably hurt users — was made without knowing whether the proposed shape worked at
 all. It does; see "Spike results" below. What remains is a scheduling decision, not a technical
 unknown.*
-*Written 2026-06-12 against v0.1.14 (build 83). Revisited 2026-08-12 against v0.3.2. **Revised
-2026-08-15 against v0.3.4: libmpv restores hardware decoding, which VLCJ cannot reach at any
-version. But the SW-render design in this document is the wrong plan — at 2160p it is worth only
-~23%, because readback replaces decode as the bottleneck. GPU rendering plus zero-copy `vaapi`
-measures **1.85 s vs 41.2 s — ~22× cheaper** — on the real 4K stream, and the Skia interop
-primitives are already in the shipped skiko. Build it GPU-first. See the two revision sections
-below.***
+*Written 2026-06-12 against v0.1.14 (build 83). Revisited 2026-08-12 against v0.3.2. Revised
+2026-08-15 against v0.3.4.*
+
+> ⚠⚠ **READ THE 2026-08-16 REVISION BEFORE ACTING ON ANYTHING ABOVE IT.** libmpv does restore
+> hardware decoding, which VLCJ cannot reach at any version — that part holds. But **both** designs
+> proposed in this document are now known to be wrong: the SW-render design is worth only ~23% at
+> 2160p, and the GPU-render design that replaced it assumed we could hand mpv's texture to Compose's
+> `DirectContext`. **Skiko on Linux is GLX, mpv's zero-copy VA-API is EGL-only**, so that route tops
+> out at `vaapi-copy` and never reaches the tier that motivated the migration. The earlier sections
+> are kept as-is for their measurements and their reasoning trail, not as a plan. **Decision is open
+> and it is a product decision** — see "Revision 2026-08-16" and the follow-up after it.
 
 ## Context
 
