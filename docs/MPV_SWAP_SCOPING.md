@@ -640,3 +640,96 @@ Unsafe for its native video buffers), so the global `RenderFactory` hook needs n
 | Packaging (`libmpv2` dep, AppImage bundling) | not started |
 
 **No native artifact is needed anywhere** — the EGL path is pure JNA, which VLCJ already pulls in.
+
+---
+
+## ✅ Revision 2026-08-17 — the binding, the controller, and the soak are done
+
+Three of the six remaining items are finished and verified. **Nothing in the design is unproven
+any more**, including the one item that was still owed.
+
+### The sustained interleaved soak — GREEN, and it was the last real unknown
+
+The previous coexistence proof was 60 mpv frames *then* two Skia draws: **one** alternation. The
+player interleaves every frame for hours with `resetGLAll()` in between, so that proved much less
+than it appeared to. `scripts/spikes/EglSkiaMpvSoak.kt` now runs the real pattern — mpv renders a
+frame, Skia adopts the texture, draws it, draws a rotating probe rectangle, and the probe is read
+back and verified every iteration.
+
+**30,000 alternations at 3840×2160 with `hwdec-current=vaapi` asserted before the soak began:
+0 probe failures, 0 GL errors, 0 black frames, ~65 alternations/sec.** Skia's cached GL state
+survives sustained interleaving with mpv.
+
+Two findings that only a sustained run could produce:
+
+- ⚠ **`Image` and `BackendTexture` must be `close()`d every frame.** They are native handles behind
+  a Cleaner. Letting GC reclaim them leaked ~1 MB per 1000 iterations at 4K — about 330 MB over a
+  two-hour film. This is mandatory in the render path, not a nicety.
+- ⚠ **RSS is not evidence of a leak on its own.** The run looks like it grows ~55 MB until a GC,
+  after which only **18 MB** is retained across 30,000 4K frames — consistent with Skia's bounded
+  resource cache plus JIT. Always measure after a collection; heap is reclaimed under pressure,
+  native texture memory is not.
+
+### libmpv JNA binding — done
+
+`composeApp/src/desktopMain/kotlin/com/nuvio/app/desktop/mpv/LibMpv.kt` + `MpvHandle.kt`. No native
+artifact anywhere; JNA is already pulled in by VLCJ. 19/19 green in `MpvBindingSpike.kt` against
+libmpv 2.2.0 — event thread, property observation, typed get/set, seeking, teardown.
+
+Pinned in code so they cannot be rediscovered the hard way: `setlocale(LC_NUMERIC, "C")` before the
+library loads (the JVM sets a locale and `mpv_create()` then fails with no diagnostic reaching
+Java), and `dispose()` stopping the event thread *before* `mpv_terminate_destroy` (destroying a
+handle another thread is blocked in `mpv_wait_event` on is a use-after-free).
+
+### `MpvPlayerController` — done
+
+All 15 `PlayerEngineController` methods, plus `MpvEngineOptions` as the mpv counterpart of
+`getVlcjFactory()`. 24/24 green in `MpvControllerSpike.kt` against real H.264.
+
+- ⚠ **`loadfile` takes per-file settings as PROPERTIES, not as its trailing options argument.**
+  mpv 0.38 inserted an `<index>` parameter before `<options>`, so a positional options string is
+  rejected on 0.37 ("invalid parameter") and misread elsewhere. The file silently never loads.
+- ⚠ **Request headers are percent-escaped** with mpv's `%<byte-length>%<item>` form. Header values
+  legitimately contain commas, which is the list separator, so one `Cookie` header would corrupt
+  every header after it. Unlike libVLC — which could only ever send user-agent and referer — mpv
+  sends arbitrary headers, so header-protected sources that failed on VLCJ can work here.
+- `start` is reset to `"none"` on every load, or the next video resumes at the previous one's
+  position. `sub-delay` is in **seconds**. Tracks are read via indexed `track-list/N/…`
+  sub-properties, so there is no JSON parsing and no exposure to schema drift.
+- libVLC's seek-settle tolerance heuristic is **gone**: mpv reports `PLAYBACK_RESTART` when a seek
+  lands, so the optimistic target is held until then and nothing has to be guessed.
+- ⚠ **No `onSnapshot` callback, deliberately.** Snapshot handling spawns the screensaver-inhibitor
+  process, updates Discord and writes Compose state; driving that from mpv's event thread would run
+  it off the main thread at mpv's cadence. Callers poll `currentSnapshot()`, which is a field read.
+
+### ⚠ Two traps for whoever writes the render path
+
+- **`MPV_RENDER_PARAM_SW_STRIDE` is a `size_t*`** — 64-bit on x86_64. An `IntByReference` yields
+  garbage strides that look like corrupted video, not an error.
+- **`arrayOf(MpvRenderParamStruct(...), …)` is not a contiguous C array.** Use `Structure.toArray(n)`
+  on one instance and fill the slots, or mpv reads the terminator immediately and sees no params.
+
+### Status
+
+| Piece | State |
+| --- | --- |
+| EGL `Redrawer` on shipped skiko, wired behind `NUVIO_EGL=1` | ✅ done, verified live |
+| JNA libmpv binding | ✅ done, 19/19 |
+| `MpvPlayerController` + `MpvEngineOptions` | ✅ done, 24/24 |
+| Sustained interleaved Skia/mpv soak | ✅ done, 30k alternations at 4K clean |
+| SOFTWARE render path (`MPV_RENDER_API_TYPE_SW`) into the existing buffer pipeline | not started |
+| GPU render path (`MPV_RENDER_API_TYPE_OPENGL`) on the EGL context | not started |
+| Shared `handleSnapshot` extraction so both engines keep the side effects | not started |
+| Packaging (`libmpv2` dep, AppImage bundling) | not started |
+
+**Build the SOFTWARE path first.** It is the mandatory fallback either way, it drops into the
+existing `ByteBuffer → Image.makeRaster → Canvas` path nearly 1:1, and `mpv_render_context_render`
+with SW params needs no GL context — so **none of the EDT constraint applies** and the controller
+wiring, snapshot side effects and packaging can all be validated without touching the Skia seam.
+Then the GPU path is a render-backend swap on a player already proven end to end.
+
+⚠ Before writing either surface, **extract `handleSnapshot` (`PlayerEngine.desktop.kt:298`) into
+something both engines call.** All the non-playback behaviour lives there — screensaver inhibit,
+Discord presence, `PlayerControlBridge` position/duration for MPRIS, the `nearEnd` flush-frame
+arming — plus `LastFrameStore.update` at line 394 feeds the screenshot hotkey. A parallel mpv
+surface would silently lose every one of them, and no spike can see that.
