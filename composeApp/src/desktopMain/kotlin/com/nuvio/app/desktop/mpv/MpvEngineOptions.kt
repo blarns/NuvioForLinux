@@ -1,0 +1,120 @@
+package com.nuvio.app.desktop.mpv
+
+import com.nuvio.app.features.player.PlayerSettingsStorage
+import kotlin.math.roundToInt
+
+private const val TAG = "NuvioMpvOptions"
+
+/**
+ * How the decoded frame reaches the screen. This is the one setting the whole libmpv
+ * investigation turned on, so it is explicit rather than left to `hwdec=auto`.
+ */
+internal enum class MpvVideoOutput {
+    /**
+     * Zero-copy VA-API into the GL texture Compose already renders through. Requires an EGL
+     * context — `hwdec=vaapi` silently degrades to `no` on GLX, which is exactly the failure
+     * this whole path exists to avoid.
+     */
+    GPU,
+
+    /**
+     * mpv renders into a CPU buffer that reuses the existing frame→ImageBitmap→Canvas path.
+     * Still hardware-*decodes* (`vaapi-copy`), it just reads the frame back, so it is the
+     * middle tier: faster than software decode, slower than GPU.
+     */
+    SOFTWARE,
+}
+
+/**
+ * Builds a configured, initialised [MpvHandle] from the app's player settings — the mpv
+ * counterpart of `getVlcjFactory()`.
+ *
+ * Returns null when libmpv is missing or refuses to start, so callers fall back to VLCJ
+ * rather than leaving the user with no player.
+ */
+internal object MpvEngineOptions {
+
+    fun createHandle(output: MpvVideoOutput): MpvHandle? {
+        val mpv = MpvHandle.create() ?: return null
+
+        // --- video ---------------------------------------------------------------------
+        // vo=libmpv is mandatory for the render-context API: mpv must NOT open its own
+        // window, it hands frames to us instead.
+        mpv.setOption("vo", "libmpv")
+
+        val hwAccel = PlayerSettingsStorage.loadHwAccelEnabled() ?: true
+        val hwdec = when {
+            !hwAccel -> "no"
+            // ⚠ Explicitly `vaapi`, never `auto`: auto silently settles on vaapi-copy, which
+            // reads every 4K frame back over the bus and costs most of the win. The caller
+            // asserts hwdec-current afterwards because this option is a request, not a promise.
+            output == MpvVideoOutput.GPU -> "vaapi"
+            // The software path cannot avoid a readback, so copy-back is the honest choice.
+            else -> "auto-copy"
+        }
+        mpv.setOption("hwdec", hwdec)
+
+        // --- audio ---------------------------------------------------------------------
+        PlayerSettingsStorage.loadAudioOutput()?.takeIf { it.isNotBlank() }?.let {
+            mpv.setOption("ao", it)
+        }
+
+        // --- subtitles -----------------------------------------------------------------
+        applySubtitleStyle(mpv)
+
+        // --- streaming behaviour --------------------------------------------------------
+        // No terminal output and no config files: mpv must behave identically regardless of
+        // whatever the user has in ~/.config/mpv, which would otherwise silently change
+        // decoding behaviour under us.
+        mpv.setOption("terminal", "no")
+        mpv.setOption("config", "no")
+        mpv.setOption("osc", "no")
+        mpv.setOption("input-default-bindings", "no")
+        mpv.setOption("input-vo-keyboard", "no")
+        // mpv renders subtitles into the frame, matching the VLCJ path where libVLC's freetype
+        // module did the same. Auto-loading sidecar .srt files off disk is off: sources are
+        // network streams and the app adds subtitles explicitly via sub-add.
+        mpv.setOption("sub-auto", "no")
+        // Keep the player alive at end-of-file so the UI controls a real handle rather than
+        // a torn-down one; the controller reports isEnded from eof-reached.
+        mpv.setOption("keep-open", "yes")
+        mpv.setOption("idle", "yes")
+        // Network resilience for debrid/CDN links, which drop connections routinely.
+        mpv.setOption("cache", "yes")
+        mpv.setOption("demuxer-max-bytes", "128MiB")
+        mpv.setOption("stream-lavf-o", "reconnect=1,reconnect_streamed=1,reconnect_delay_max=5")
+
+        return try {
+            mpv.initialize()
+            println("$TAG: initialised (output=$output hwdec-request=$hwdec)")
+            mpv
+        } catch (e: Exception) {
+            println("$TAG: mpv_initialize failed: ${e.message}")
+            mpv.dispose()
+            null
+        }
+    }
+
+    private fun applySubtitleStyle(mpv: MpvHandle) {
+        // These settings are stored as libVLC values, since the VLCJ engine wrote them first.
+        // They are translated here rather than migrated, so both engines keep reading the
+        // same stored preference and the user sees the same size on either path.
+        val vlcRelFontSize = PlayerSettingsStorage.loadSubtitleFontSize() ?: 16
+        val color = PlayerSettingsStorage.loadSubtitleColor() ?: 0xFFFFFF
+        val bgOpacity = PlayerSettingsStorage.loadSubtitleBackgroundOpacity() ?: 0
+        val outline = PlayerSettingsStorage.loadSubtitleOutline() ?: 2
+
+        // libVLC's rel-fontsize is INVERSE (text height = video height / value), while mpv's
+        // sub-font-size is a direct size against a 720-high reference. So the translation is a
+        // reciprocal, not a scale factor — treating it as one would make large text tiny.
+        val mpvFontSize = (720.0 / vlcRelFontSize.coerceAtLeast(1)).roundToInt().coerceIn(10, 200)
+        mpv.setOption("sub-font-size", mpvFontSize.toString())
+        mpv.setOption("sub-color", hexColor(0xFF, color))
+        mpv.setOption("sub-back-color", hexColor(bgOpacity.coerceIn(0, 255), 0x000000))
+        mpv.setOption("sub-border-size", outline.coerceAtLeast(0).toString())
+    }
+
+    /** mpv wants `#AARRGGBB`; the stored colour is a plain 0xRRGGBB int. */
+    private fun hexColor(alpha: Int, rgb: Int): String =
+        "#%02X%06X".format(alpha and 0xFF, rgb and 0xFFFFFF)
+}
