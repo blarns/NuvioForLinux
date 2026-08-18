@@ -124,6 +124,14 @@ GLuint egl_shim_make_fbo(int w, int h) {
     return fbo;
 }
 
+// glGetError, so a soak can tell "Skia still draws the right colour" apart from
+// "the GL context is quietly accumulating errors". A single correct frame can hide
+// a context that is already degrading.
+unsigned int egl_shim_gl_error(void) {
+    GLenum (*p_glGetError)(void) = (void *)eglGetProcAddress("glGetError");
+    return p_glGetError ? p_glGetError() : 0xFFFFFFFFu;
+}
+
 // Packed 0xAARRGGBB of one pixel, so the Kotlin side can prove Skia's draw
 // actually landed rather than trusting that no call threw.
 unsigned int egl_shim_read_pixel(GLuint fbo, int x, int y) {
@@ -172,6 +180,9 @@ int mpv_shim_start(const char *file, const char *hwdec, int w, int h, const char
     mpv_set_option_string(g_mpv, "audio", "no");
     mpv_set_option_string(g_mpv, "untimed", "yes");
     mpv_set_option_string(g_mpv, "terminal", "no");
+    // A soak runs far more frames than any test clip contains, so loop rather than
+    // hitting EOF and silently rendering nothing for the rest of the run.
+    mpv_set_option_string(g_mpv, "loop-file", "inf");
     if (hdrs && *hdrs) mpv_set_option_string(g_mpv, "http-header-fields", hdrs);
     // Films open on black, which reads identically to "decode produced nothing".
     // SPIKE_START seeks past the titles so the pixel check means something.
