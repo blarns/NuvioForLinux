@@ -7,6 +7,15 @@
 // fires. That shape matches a live v0.3.4 instance measured at 456 MB of Java heap and ~10 GB
 // resident.
 //
+// ⚠⚠ READ THIS BEFORE QUOTING THE NUMBERS BELOW. They are real but they do NOT transfer to
+// the app. This spike reuses ONE input ByteArray, so it puts no pressure on the Java heap, so
+// no GC ever runs and nothing ever fires the Cleaners that free the native side. The real
+// surface allocates a fresh 33MB ByteArray per frame ON THE HEAP; that churn forces frequent
+// GCs and the native memory is reclaimed anyway. Measured A/B in the app over 150s of 4K:
+// unfixed peaked 2738MB / settled 1644MB, fixed peaked 2951MB / settled 1652MB -- no
+// meaningful difference. Treat this file as a demonstration of the MECHANISM, not of a bug
+// worth shipping a fix for on its own.
+//
 // This reproduces just that loop, with nothing else in it, and compares:
 //   leak  -- exactly what ships today
 //   close -- the same loop with the intermediate Image closed
