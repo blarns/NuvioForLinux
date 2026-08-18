@@ -55,16 +55,22 @@ fun main(args: Array<String>) {
     // render seam. Production keeps vo=libmpv; this is the one deviation, and it is stated.
     handle.setPropertyString("vo", "null")
 
-    val snapshots = AtomicInteger()
-    val last = AtomicReference(PlayerPlaybackSnapshot())
     val errors = AtomicReference<String?>(null)
 
-    val ctrl = MpvPlayerController(
-        mpv = handle,
-        onSnapshot = { snapshots.incrementAndGet(); last.set(it) },
-        onError = { errors.set(it.message) },
-    )
+    val ctrl = MpvPlayerController(mpv = handle, onError = { errors.set(it.message) })
     handle.startEventLoop()
+
+    // The controller has no snapshot callback by design -- side effects must not run on mpv's
+    // event thread -- so this mirrors the surface and polls, which is also what the real 10 Hz
+    // UI loop does.
+    val snapshots = AtomicInteger()
+    val last = AtomicReference(PlayerPlaybackSnapshot())
+    val poller = Thread(null, {
+        while (!Thread.currentThread().isInterrupted) {
+            last.set(ctrl.currentSnapshot()); snapshots.incrementAndGet()
+            try { Thread.sleep(100) } catch (_: InterruptedException) { return@Thread }
+        }
+    }, "spike-poll", 0).apply { isDaemon = true; start() }
 
     // --- load, with a start position and a custom header ------------------------------
     ctrl.loadMedia(
@@ -171,6 +177,7 @@ fun main(args: Array<String>) {
         "isEnded=${last.get().isEnded} pos=${ctrl.currentSnapshot().positionMs}")
 
     // --- teardown -----------------------------------------------------------------------------
+    poller.interrupt()
     check("dispose clean", runCatching { ctrl.dispose(); ctrl.dispose() }.isSuccess)
 
     println("\nsnapshots delivered: ${snapshots.get()}")

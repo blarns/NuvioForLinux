@@ -21,13 +21,18 @@ private const val SEEK_SETTLE_TIMEOUT_MS = 8_000L
  * whenever its video output is the buffer-callback surface this app renders through, so the
  * shipping VLCJ engine decodes 4K in software (~580% CPU). mpv has no such restriction.
  *
- * State comes from **observed properties** rather than polling: mpv pushes `time-pos`,
- * `duration`, `pause` and friends to the event thread, and [currentSnapshot] just reads the
- * last values. The 100 ms UI poll can keep calling it — it is a field read, not an FFI call.
+ * State comes from **observed properties**: mpv pushes `time-pos`, `duration`, `pause` and
+ * friends to the event thread, which only updates fields here. [currentSnapshot] then reads
+ * those fields, so the surface's existing 100 ms poll costs a field read rather than an FFI
+ * round trip.
+ *
+ * ⚠ Deliberately no `onSnapshot` callback. Snapshot handling has real side effects — it
+ * spawns the screensaver-inhibitor process, updates Discord, and writes Compose state — and
+ * driving those from mpv's own event thread would run them off the main thread and at mpv's
+ * cadence. The surface polls instead, which keeps the threading identical to the VLCJ path.
  */
 internal class MpvPlayerController(
     private val mpv: MpvHandle,
-    private val onSnapshot: (PlayerPlaybackSnapshot) -> Unit,
     private val onError: (Exception) -> Unit,
 ) : PlayerEngineController {
 
@@ -52,6 +57,8 @@ internal class MpvPlayerController(
     @Volatile private var currentAudioLevel = PlayerAudioLevel(1.0f, false)
     @Volatile private var lastSourceUrl: String? = null
     @Volatile private var externalSubtitleUri: String? = null
+    /** Track id created by sub-add, so it can be removed by id rather than by selection. */
+    @Volatile private var externalSubtitleId: Int? = null
 
     /** Guards against the duplicate loadMedia calls Compose's LaunchedEffect can produce. */
     private var lastLoadedKey: String? = null
@@ -79,27 +86,33 @@ internal class MpvPlayerController(
         when (ev.id) {
             MpvEventId.FILE_LOADED -> {
                 fileLoaded = true
-                state = state.copy(isLoading = false, isEnded = false)
+                // ⚠ Read `pause` here rather than waiting for a property-change notification.
+                // loadMedia sets pause to the value it usually already has, so mpv has no
+                // change to report and would never announce that playback started — leaving
+                // isPlaying false forever on some load orderings.
+                val paused = mpv.getPropertyBoolean("pause") == true
+                state = state.copy(isLoading = false, isEnded = false, isPlaying = !paused)
                 // hwdec is only meaningful once a video track is actually decoding. This is the
                 // runtime assertion the whole investigation turned on: every failure mode was
                 // silent, producing correct-looking video at several times the CPU cost.
                 hwdecCurrent = mpv.getPropertyString("hwdec-current")
-                println("$TAG: file loaded, hwdec-current=$hwdecCurrent")
-                emit()
+                println("$TAG: file loaded, hwdec-current=$hwdecCurrent paused=$paused")
             }
             MpvEventId.END_FILE -> {
+                // No file is decoding any more either way, so isPlaying must not stay true.
+                fileLoaded = false
                 // eof-reached distinguishes a real end-of-stream from the END_FILE mpv also
                 // emits when a file is replaced or stopped; only the former is "ended".
                 if (mpv.getPropertyBoolean("eof-reached") == true) {
                     state = state.copy(isEnded = true, isPlaying = false)
-                    emit()
+                } else {
+                    state = state.copy(isPlaying = false)
                 }
             }
             MpvEventId.PLAYBACK_RESTART -> {
                 // The seek (or the initial load) has landed and time-pos is trustworthy again.
                 pendingSeekTargetMs.set(-1L)
                 state = state.copy(isLoading = false)
-                emit()
             }
             MpvEventId.PROPERTY_CHANGE -> handlePropertyChange(ev)
         }
@@ -113,27 +126,19 @@ internal class MpvPlayerController(
             }
             "duration" -> {
                 val durMs = ((ev.propertyDouble ?: return) * 1000).toLong().coerceAtLeast(0L)
-                if (durMs != state.durationMs) {
-                    state = state.copy(durationMs = durMs)
-                    emit()
-                }
+                if (durMs != state.durationMs) state = state.copy(durationMs = durMs)
             }
             "pause" -> {
                 val paused = ev.propertyFlag ?: return
                 // Do not report "playing" before a file exists: mpv starts unpaused while idle.
                 state = state.copy(isPlaying = !paused && fileLoaded)
-                emit()
             }
             "eof-reached" -> {
-                if (ev.propertyFlag == true) {
-                    state = state.copy(isEnded = true, isPlaying = false)
-                    emit()
-                }
+                if (ev.propertyFlag == true) state = state.copy(isEnded = true, isPlaying = false)
             }
             "paused-for-cache" -> {
                 // Rebuffering, not an error — this is what drives the spinner.
                 state = state.copy(isLoading = ev.propertyFlag == true)
-                emit()
             }
             "demuxer-cache-time" -> {
                 // Absolute timestamp of the cache end, so it maps straight onto bufferedPosition.
@@ -146,9 +151,6 @@ internal class MpvPlayerController(
             }
         }
     }
-
-    private fun emit() = runCatching { onSnapshot(currentSnapshot()) }
-        .onFailure { println("$TAG: snapshot listener threw: ${it.message}") }
 
     /**
      * Cheap by design — reads cached fields written by the event thread, so the existing
@@ -181,7 +183,6 @@ internal class MpvPlayerController(
         // for seconds while it decodes forward to the precise frame.
         mpv.command("seek", (target / 1000.0).toString(), "absolute+keyframes")
         state = state.copy(positionMs = target)
-        emit()
     }
 
     override fun seekBy(offsetMs: Long) {
@@ -197,6 +198,7 @@ internal class MpvPlayerController(
         // Re-issue the load rather than stop+start: mpv has no separate "reopen" and a stop
         // would drop the per-file options set alongside the original loadfile.
         lastLoadedKey = null
+        fileLoaded = false
         mpv.command("loadfile", url, "replace")
     }
 
@@ -281,12 +283,19 @@ internal class MpvPlayerController(
             externalSubtitleUri = url
             // "select" makes it the active track immediately; "cached" would leave it inactive.
             mpv.command("sub-add", url, "select")
+            // Remember WHICH track this created. sub-add selects it, so sid now names it —
+            // needed because sub-remove without an id targets whatever is selected later.
+            externalSubtitleId = mpv.getPropertyLong("sid")?.toInt()
         }.onFailure { onError(it as Exception) }
     }
 
     override fun clearExternalSubtitle() {
         runCatching {
-            externalSubtitleUri?.let { mpv.command("sub-remove") }
+            // ⚠ Remove BY ID. A bare `sub-remove` targets the currently selected track, so if
+            // the user added an external subtitle and then switched to an embedded one, this
+            // would delete the embedded track instead of the external one.
+            externalSubtitleId?.let { mpv.command("sub-remove", it.toString()) }
+            externalSubtitleId = null
             externalSubtitleUri = null
             mpv.setPropertyString("sid", "no")
         }.onFailure { onError(it as Exception) }
@@ -369,7 +378,6 @@ internal class MpvPlayerController(
 
             mpv.command("loadfile", sourceUrl, "replace")
             state = state.copy(isLoading = true, isEnded = false)
-            emit()
         } catch (e: Exception) {
             println("$TAG: loadMedia exception: ${e.message}")
             onError(e)
