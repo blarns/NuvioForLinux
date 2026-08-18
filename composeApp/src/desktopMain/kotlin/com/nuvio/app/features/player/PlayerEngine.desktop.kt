@@ -122,102 +122,6 @@ internal fun invalidateVlcjFactory() {
 }
 
 // ---------------------------------------------------------------------------
-// ScreensaverInhibitor — keep the desktop awake while video is playing.
-//
-// VLCJ renders via the buffer-callback API (no native video window), so libVLC's
-// own screensaver suppression never engages and the desktop blanks/locks mid-movie.
-// We hold a D-Bus inhibitor over a tiny python3-gi helper for as long as it runs:
-//   • org.gnome.SessionManager.Inhibit(flags=8 idle) — on GNOME/Cinnamon this one
-//     inhibitor covers the screensaver, display power-off AND auto-suspend (all key
-//     off the session idle state).
-//   • org.freedesktop.ScreenSaver.Inhibit — cross-DE fallback (KDE/XFCE/etc.).
-// The inhibitor auto-releases the moment the helper's bus connection drops, so the
-// helper blocks on stdin: closing it releases gracefully, and if the JVM dies/crashes
-// the pipe closes too (EOF) — the screensaver can never be left suppressed forever.
-// ---------------------------------------------------------------------------
-
-private object ScreensaverInhibitor {
-    private const val ITAG = "NuvioScreensaver"
-    private val lock = Any()
-    private var process: Process? = null
-    private var spawnAtMs = 0L
-    private var quickFailures = 0
-    @Volatile private var unavailable = false   // latched once we know the helper can't run here
-
-    private val HELPER_SCRIPT = """
-        import sys, gi
-        from gi.repository import Gio, GLib
-        bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-        def inhibit(dest, path, iface, sig, args):
-            try:
-                bus.call_sync(dest, path, iface, "Inhibit", GLib.Variant(sig, args),
-                              GLib.VariantType("(u)"), Gio.DBusCallFlags.NONE, -1, None)
-            except Exception:
-                pass
-        inhibit("org.gnome.SessionManager", "/org/gnome/SessionManager", "org.gnome.SessionManager",
-                "(susu)", ("Nuvio", 0, "Playing media", 8))
-        inhibit("org.freedesktop.ScreenSaver", "/org/freedesktop/ScreenSaver", "org.freedesktop.ScreenSaver",
-                "(ss)", ("Nuvio", "Playing media"))
-        sys.stdin.read()
-    """.trimIndent()
-
-    fun inhibit() {
-        if (unavailable) return
-        synchronized(lock) {
-            if (unavailable) return
-            val existing = process
-            if (existing != null) {
-                if (existing.isAlive) return   // already inhibiting — no-op (hot path, ~10x/sec)
-                // The helper exited on its own. If it died almost immediately after spawning it's
-                // broken here (no python3-gi, or a bundled-vs-system lib clash) — latch off after a
-                // couple of fast failures so onSnapshot's 10x/sec cadence can't turn a broken helper
-                // into a spawn-crash loop. A helper that ran a while then died (e.g. bus restart) is
-                // retried cleanly.
-                if (System.currentTimeMillis() - spawnAtMs < 2_000L) {
-                    if (++quickFailures >= 2) {
-                        unavailable = true
-                        process = null
-                        println("$ITAG: helper keeps exiting immediately; giving up (screensaver not suppressed)")
-                        return
-                    }
-                } else {
-                    quickFailures = 0
-                }
-                process = null
-            }
-            process = try {
-                spawnAtMs = System.currentTimeMillis()
-                ProcessBuilder("python3", "-c", HELPER_SCRIPT)
-                    // The child must load the SYSTEM glib/gobject/python3-gi, not the bundled
-                    // Ubuntu-22.04 libs the AppImage's AppRun puts on LD_LIBRARY_PATH — that
-                    // mismatch makes `import gi` fail (undefined glib symbol). Harmless under the .deb.
-                    .apply { environment().remove("LD_LIBRARY_PATH") }
-                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-                    .redirectError(ProcessBuilder.Redirect.DISCARD)
-                    .start()
-                    .also { println("$ITAG: screensaver inhibited (playing)") }
-            } catch (e: Exception) {
-                unavailable = true
-                println("$ITAG: inhibitor unavailable (${e.message}); screensaver will not be suppressed")
-                null
-            }
-        }
-    }
-
-    fun release() {
-        synchronized(lock) {
-            val p = process ?: return
-            process = null
-            // Close the helper's stdin → EOF → it exits and the bus connection drops,
-            // auto-releasing the inhibitor. destroyForcibly() is a non-blocking backstop.
-            try { p.outputStream.close() } catch (_: Exception) {}
-            try { p.destroyForcibly() } catch (_: Exception) {}
-            println("$ITAG: screensaver released")
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
 // PlatformPlayerSurface — pure Compose, no AWT/Swing
 //
 // Uses VLCJ's buffer callback API to render each frame into a ByteBuffer,
@@ -278,49 +182,13 @@ actual fun PlatformPlayerSurface(
     // writing mutableStateOf from a non-Compose thread triggers spurious recompositions.
     val lastFrameMs = remember { java.util.concurrent.atomic.AtomicLong(0L) }
 
-    // When playback ends/stops, libVLC drains a few trailing/black frames as the decoder
-    // flushes; painting them makes the video "blink" at the end of an episode/movie. Once
-    // ended, freeze the last good frame and ignore further callbacks until real playback
-    // resumes (e.g. the next episode), so the end transition stays clean.
-    //
-    // frozen alone is racy: the finished event (vlcj event thread) has to beat the flush
-    // frames (render thread) AND any frame conversions already queued on Main. Whether it
-    // wins varies with the libVLC build and thread scheduling — which is how the blink
-    // came back. nearEnd closes the race from the other side: inside the final 2s of the
-    // video, uniformly-black frames are dropped on arrival, no event ordering required.
-    val frozen = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
-    val nearEnd = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
-
-    // Side effects that must run on EVERY snapshot. Hoisted out of the controller so the
-    // 10Hz poll below runs them too: it used to call latestOnSnapshot directly, so all of
-    // this only ever ran on discrete libVLC events and MPRIS position sat frozen between
-    // them (and the nearEnd black-frame filter above was never armed).
+    // Screensaver/Discord/MPRIS side effects and the two frame-gating flags, shared with any
+    // other desktop engine so a second surface cannot silently lose them.
+    val sideEffects = remember { DesktopPlaybackSideEffects() }
+    val frozen = sideEffects.frozen
+    val nearEnd = sideEffects.nearEnd
     val handleSnapshot = remember<(PlayerPlaybackSnapshot) -> Unit> {
-        { snap ->
-            // Freeze frame rendering once ended; re-enable when real playback resumes.
-            if (snap.isEnded) frozen.set(true) else if (snap.isPlaying) frozen.set(false)
-            // Arm black-frame dropping for the final 2s (see nearEnd below).
-            nearEnd.set(snap.durationMs > 0 && snap.positionMs >= snap.durationMs - 2_000)
-            // Keep the desktop awake only while actually playing (idempotent — this fires
-            // ~10x/sec from the poll loop, so it no-ops unless state changed).
-            if (snap.isPlaying) ScreensaverInhibitor.inhibit() else ScreensaverInhibitor.release()
-            // Mirror the now-playing status to Discord (opt-in). update() is cheap and
-            // debounced internally, so calling it at the poll's ~10Hz is fine.
-            if (PlayerSettingsStorage.loadDiscordRichPresenceEnabled() == true) {
-                DiscordRichPresence.update(snap)
-            }
-            // Feed live position/duration to MPRIS and nudge it to re-emit metadata only
-            // when playing-state or duration actually changes (Position is polled by
-            // clients, so it is intentionally NOT signalled every tick).
-            val statusOrDurationChanged =
-                PlayerControlBridge.isPlaying != snap.isPlaying ||
-                    PlayerControlBridge.durationMs != snap.durationMs
-            PlayerControlBridge.positionMs = snap.positionMs
-            PlayerControlBridge.durationMs = snap.durationMs
-            PlayerControlBridge.hasMedia = !snap.isEnded
-            if (statusOrDurationChanged) PlayerControlBridge.onNowPlayingChanged?.invoke()
-            latestOnSnapshot.value(snap)
-        }
+        { snap -> sideEffects.onSnapshot(snap) { latestOnSnapshot.value(it) } }
     }
 
     val renderCallback = remember {
@@ -501,11 +369,10 @@ actual fun PlatformPlayerSurface(
     DisposableEffect(Unit) {
         onDispose {
             println("$TAG: Tearing down media player")
-            // Drop the screensaver inhibitor in case we left mid-playback (navigating
-            // away may not deliver a final paused/stopped snapshot before disposal).
-            ScreensaverInhibitor.release()
-            // Clear the Discord presence for the same reason.
-            DiscordRichPresence.clear()
+            // Drop the screensaver inhibitor and Discord presence in case we left
+            // mid-playback (navigating away may not deliver a final paused/stopped snapshot
+            // before disposal).
+            sideEffects.release()
             // Drop the last captured frame so the screenshot hotkey can't grab a stale
             // frame from a video we already left.
             LastFrameStore.clear()
@@ -962,38 +829,4 @@ private class VlcjPlayerController(
             "Could not reach the source — ${e.message ?: "connection failed"}. Try a different source."
         }
     }
-}
-
-// End-of-stream flush frames are a single solid color across the whole picture:
-// black (zeroed RGB), green (zeroed YUV converted to RGB), or dark grey, depending
-// on the libVLC build. Sample a sparse 5x5 grid (25 pixels) instead of scanning the
-// buffer — cheap enough for the render thread, and only called during the final
-// seconds of playback. BGRA byte order. Returns a short signature string for the
-// dropped frame (for debug logs), or null when the frame is real content.
-private fun flushFrameSignature(bytes: ByteArray, w: Int, h: Int): String? {
-    if (w <= 1 || h <= 1) return null
-    val steps = 5
-    var minB = 255; var maxB = 0
-    var minG = 255; var maxG = 0
-    var minR = 255; var maxR = 0
-    for (yi in 0 until steps) {
-        val y = (h - 1) * yi / (steps - 1)
-        for (xi in 0 until steps) {
-            val x = (w - 1) * xi / (steps - 1)
-            val i = (y * w + x) * 4
-            if (i + 2 >= bytes.size) return null
-            val b = bytes[i].toInt() and 0xFF
-            val g = bytes[i + 1].toInt() and 0xFF
-            val r = bytes[i + 2].toInt() and 0xFF
-            if (b < minB) minB = b; if (b > maxB) maxB = b
-            if (g < minG) minG = g; if (g > maxG) maxG = g
-            if (r < minR) minR = r; if (r > maxR) maxR = r
-        }
-    }
-    // Solid color = negligible spread on every channel across the whole picture.
-    val uniform = (maxB - minB) <= 8 && (maxG - minG) <= 8 && (maxR - minR) <= 8
-    if (!uniform) return null
-    val dark = maxR <= 40 && maxG <= 40 && maxB <= 40
-    val green = maxG >= 60 && maxR <= 40 && maxB <= 40
-    return if (dark || green) "rgb($minR-$maxR,$minG-$maxG,$minB-$maxB)" else null
 }
