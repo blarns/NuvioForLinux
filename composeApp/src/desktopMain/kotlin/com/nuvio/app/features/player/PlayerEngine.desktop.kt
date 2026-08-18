@@ -25,6 +25,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.ui.graphics.asComposeImageBitmap
+import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorInfo
 import org.jetbrains.skia.ColorSpace
@@ -46,6 +48,11 @@ private const val TAG = "NuvioPlayerDesktop"
 // poll trusts it again, and how long to hold the optimistic target at most.
 private const val SEEK_SETTLE_TOLERANCE_MS = 3_000L
 private const val SEEK_SETTLE_TIMEOUT_MS = 8_000L
+
+// How many decoded frames stay alive at once. The newest is on screen; the rest are a margin
+// so a frame is never freed while the renderer could still be drawing it. Each one is ~32MB at
+// 4K, so this is also the cap on the frame path's native memory.
+private const val FRAME_RETAIN = 3
 
 private var vlcjFactory: MediaPlayerFactory? = null
 
@@ -158,6 +165,9 @@ actual fun PlatformPlayerSurface(
     // dispatch to Main only for the ImageBitmap construction.
     var frameBytes by remember { mutableStateOf<ByteArray?>(null) }
 
+    // Decoded frames still in flight, newest last. Only ever touched on Dispatchers.Main.
+    val inFlightFrames = remember { ArrayDeque<Bitmap>() }
+
     val bufferFormatCallback = remember {
         object : BufferFormatCallback {
             override fun getBufferFormat(sourceWidth: Int, sourceHeight: Int): BufferFormat {
@@ -250,8 +260,27 @@ actual fun PlatformPlayerSurface(
                             w,
                             h,
                         )
-                        currentFrame = Image.makeRaster(imageInfo, bytes, w * 4)
-                            .toComposeImageBitmap()
+                        // ⚠ This used to be `Image.makeRaster(...).toComposeImageBitmap()`, which
+                        // leaked NATIVE memory badly: each call allocated ~32MB of Skia memory at
+                        // 4K (twice over — makeRaster and then toComposeImageBitmap's own copy),
+                        // held by a Kotlin wrapper of a few dozen bytes. The JVM therefore felt
+                        // almost no heap pressure, had no reason to GC, and nothing reclaimed the
+                        // native side. Measured: 600 frames (20s of 4K) grew RSS by 38 GB, with
+                        // the Java heap flat at 60 MB — and a live v0.3.4 was found sitting at
+                        // ~10 GB resident against 456 MB of heap.
+                        //
+                        // The fix keeps allocating a fresh Bitmap per frame, so every frame is
+                        // still a distinct object and Skia can never cache a stale generation,
+                        // but frees the one from a few frames ago — by which point it cannot
+                        // still be on screen. Bounded at ~3 frames instead of unbounded.
+                        // scripts/spikes/FrameLeakSpike.kt measures all of this.
+                        val bitmap = Bitmap()
+                        bitmap.allocPixels(imageInfo)
+                        bitmap.installPixels(imageInfo, bytes, w * 4)
+                        currentFrame = bitmap.asComposeImageBitmap()
+                        // Runs only on Dispatchers.Main, so this deque needs no synchronisation.
+                        inFlightFrames.addLast(bitmap)
+                        while (inFlightFrames.size > FRAME_RETAIN) inFlightFrames.removeFirst().close()
                     } catch (e: Exception) {
                         println("$TAG: Frame conversion error: ${e.message}")
                     }
@@ -376,6 +405,10 @@ actual fun PlatformPlayerSurface(
             // Drop the last captured frame so the screenshot hotkey can't grab a stale
             // frame from a video we already left.
             LastFrameStore.clear()
+            // Free the retained decoded frames — otherwise leaving the player strands up to
+            // FRAME_RETAIN native bitmaps (~96MB at 4K) until a GC happens to run.
+            inFlightFrames.forEach { runCatching { it.close() } }
+            inFlightFrames.clear()
             // stop() can block for 500ms–2s while VLC flushes buffers and closes the
             // network connection. Running it on a daemon thread keeps the Compose render
             // thread free so the next screen's buttons remain responsive immediately.
