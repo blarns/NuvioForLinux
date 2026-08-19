@@ -118,7 +118,15 @@ internal fun MpvPlayerSurface(
             }
             LastFrameStore.update(bytes, w, h)
         }
-        onDispose { /* the pump is stopped by MpvSession.dispose(), which owns the ordering */ }
+        // mpv scales to the window while decoding, so the frames above are window-sized and would
+        // make the "S" hotkey save a 4K film at 1080p. libmpv can write the real frame itself.
+        DesktopScreenshot.engineCapture = { file ->
+            session.controller.saveScreenshot(file.absolutePath)
+        }
+        onDispose {
+            DesktopScreenshot.engineCapture = null
+            // The pump itself is stopped by MpvSession.dispose(), which owns the ordering.
+        }
     }
 
     // Fit letterboxes, Fill stretches — both done by mpv while it scales to the window, so the

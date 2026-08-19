@@ -54,6 +54,13 @@ internal object MpvEngineOptions {
         }
         mpv.setOption("hwdec", hwdec)
 
+        // ⚠ The SOFTWARE path does not keep up with 4K on this class of hardware: measured 19.8
+        // render fps against a 24 fps source, with audio drifting seconds ahead. The cost is the
+        // `vaapi-copy` readback of 4K frames, NOT the scale — per-render cost is identical at
+        // 1920x1111 and 960x540, and a 1080p source on the same output size runs 28.7 fps. Fast
+        // scalers (`sws-fast`, `fast-bilinear`) were measured and changed nothing, so they are
+        // deliberately not set. The GPU path, which never reads the frame back, is the fix.
+
         // --- audio ---------------------------------------------------------------------
         PlayerSettingsStorage.loadAudioOutput()?.takeIf { it.isNotBlank() }?.let {
             mpv.setOption("ao", it)

@@ -73,8 +73,10 @@ fun main(args: Array<String>) {
     check("createHandle", handle != null)
     if (handle == null) { report(); return }
 
-    val w = 1280
-    val h = 720
+    // Size matters for more than coverage: the SW path does the scale on the CPU, so
+    // 4K -> window is where it either keeps up with the source frame rate or does not.
+    val w = System.getenv("RENDER_W")?.toIntOrNull() ?: 1280
+    val h = System.getenv("RENDER_H")?.toIntOrNull() ?: 720
     val renderer = MpvSoftwareRenderer.create(handle, w, h)
     check("render context created", renderer != null)
     if (renderer == null) { handle.dispose(); report(); return }
@@ -98,10 +100,18 @@ fun main(args: Array<String>) {
     var nonBlack = 0
     var structured = 0
     val fingerprints = LinkedHashSet<Int>()
-    val deadline = System.currentTimeMillis() + 25_000
+    var renderNanos = 0L
+    val startedMs = System.currentTimeMillis()
+    val deadline = startedMs + 25_000
     while (rendered < 40 && System.currentTimeMillis() < deadline) {
-        if (!renderer.hasNewFrame()) { Thread.sleep(10); continue }
-        if (!renderer.render(buf)) continue
+        if (!renderer.hasNewFrame()) { Thread.sleep(2); continue }
+        // ⚠ Time the call itself. mpv's render BLOCKS until the frame's target display time
+        // unless told otherwise, so an fps figure alone cannot tell "we are too slow" from
+        // "we are being paced by the video clock" — the per-call cost can.
+        val t0 = System.nanoTime()
+        val ok = renderer.render(buf)
+        renderNanos += System.nanoTime() - t0
+        if (!ok) continue
         rendered++
         if (meanLuma(buf, w, h) > 8) nonBlack++
         if (rowVariety(buf, w, h) > 5) structured++
@@ -111,6 +121,13 @@ fun main(args: Array<String>) {
         while (i < buf.size) { fp = fp * 31 + buf[i]; i += 4099 }
         fingerprints += fp
     }
+
+    val renderFps = rendered * 1000.0 / (System.currentTimeMillis() - startedMs).coerceAtLeast(1)
+    // The number that decides whether this path is watchable: the client IS the display, so
+    // rendering slower than the source frame rate makes video fall behind audio without bound.
+    val msPerRender = renderNanos / 1_000_000.0 / rendered.coerceAtLeast(1)
+    check("keeps up with the source frame rate", renderFps >= 23.0,
+        "%.1f render fps at ${w}x$h, %.1f ms per render call".format(renderFps, msPerRender))
 
     check("frames rendered", rendered >= 20, "rendered=$rendered")
     check("frames are not black", nonBlack >= rendered - 2, "nonBlack=$nonBlack/$rendered")

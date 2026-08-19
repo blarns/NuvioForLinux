@@ -49,14 +49,39 @@ internal object DesktopScreenshot {
     private val unsafeChars = Regex("[^a-zA-Z0-9._-]+")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /**
+     * Set by an engine that can write a **source-resolution** frame itself; returns true when it
+     * wrote [File].
+     *
+     * Needed because [LastFrameStore] holds whatever the renderer produced, and that is no longer
+     * always the source frame: the mpv path scales to the window while decoding, so a 4K film
+     * would be screenshotted at window size. libmpv can save the real frame itself, so it does.
+     */
+    @Volatile
+    var engineCapture: ((File) -> Boolean)? = null
+
     fun capture() {
-        val (bytes, w, h) = LastFrameStore.snapshot() ?: run {
+        val engine = engineCapture
+        val fallback = LastFrameStore.snapshot()
+        if (engine == null && fallback == null) {
             NuvioToastController.show("No video frame to capture yet")
             return
         }
         val title = PlayerLaunchStore.currentTitle.value
         scope.launch(Dispatchers.IO) {
-            runCatching { saveFrame(bytes, w, h, title) }
+            runCatching {
+                val target = screenshotFile(title)
+                // Fall through to the stored frame if the engine declines — a screenshot at the
+                // wrong resolution still beats no screenshot.
+                if (engine != null && runCatching { engine(target) }.getOrDefault(false) &&
+                    target.length() > 0L
+                ) {
+                    target
+                } else {
+                    val (bytes, w, h) = fallback ?: error("no video frame to capture")
+                    saveFrame(bytes, w, h, target)
+                }
+            }
                 .onSuccess { file -> NuvioToastController.show("Screenshot saved: ${file.absolutePath}") }
                 .onFailure { e ->
                     println("$TAG: screenshot failed: ${e.message}")
@@ -65,7 +90,18 @@ internal object DesktopScreenshot {
         }
     }
 
-    private fun saveFrame(bytes: ByteArray, w: Int, h: Int, title: String?): File {
+    private fun screenshotFile(title: String?): File {
+        val dir = screenshotDir().also { it.mkdirs() }
+        val safeTitle = (title?.takeIf { it.isNotBlank() } ?: "frame")
+            .replace(unsafeChars, "_")
+            .take(80)
+            .trim('_')
+            .ifBlank { "frame" }
+        val stamp = LocalDateTime.now().format(timestampFormat)
+        return File(dir, "Nuvio-$safeTitle-$stamp.png")
+    }
+
+    private fun saveFrame(bytes: ByteArray, w: Int, h: Int, file: File): File {
         val image = BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
         // BGRA little-endian bytes -> packed 0xRRGGBB ints.
         val pixels = IntArray(w * h)
@@ -78,15 +114,6 @@ internal object DesktopScreenshot {
             si += 4
         }
         image.setRGB(0, 0, w, h, pixels, 0, w)
-
-        val dir = screenshotDir().also { it.mkdirs() }
-        val safeTitle = (title?.takeIf { it.isNotBlank() } ?: "frame")
-            .replace(unsafeChars, "_")
-            .take(80)
-            .trim('_')
-            .ifBlank { "frame" }
-        val stamp = LocalDateTime.now().format(timestampFormat)
-        val file = File(dir, "Nuvio-$safeTitle-$stamp.png")
         ImageIO.write(image, "png", file)
         return file
     }

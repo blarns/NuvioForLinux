@@ -97,7 +97,12 @@ internal class MpvPlayerController(
                 // runtime assertion the whole investigation turned on: every failure mode was
                 // silent, producing correct-looking video at several times the CPU cost.
                 hwdecCurrent = mpv.getPropertyString("hwdec-current")
-                println("$TAG: file loaded, hwdec-current=$hwdecCurrent paused=$paused")
+                // sid is logged because mpv picks a subtitle track on its own and the UI layer may
+                // then override it; without this the two are indistinguishable from a screenshot.
+                println(
+                    "$TAG: file loaded, hwdec-current=$hwdecCurrent paused=$paused " +
+                        "sid=${mpv.getPropertyString("sid")} aid=${mpv.getPropertyString("aid")}",
+                )
             }
             MpvEventId.END_FILE -> {
                 // No file is decoding any more either way, so isPlaying must not stay true.
@@ -279,6 +284,7 @@ internal class MpvPlayerController(
     }
 
     override fun selectSubtitleTrack(index: Int) {
+        println("$TAG: selectSubtitleTrack($index)")
         // A negative index is the UI's "none"; mpv spells that "no", and setting sid to a
         // negative number would be rejected.
         if (index < 0) mpv.setPropertyString("sid", "no")
@@ -413,6 +419,25 @@ internal class MpvPlayerController(
             if (rest.isEmpty()) "" else rest.entries.joinToString(",") {
                 escapeListItem("${it.key}: ${it.value}")
             },
+        )
+    }
+
+    /**
+     * Writes the current frame at its **source** resolution, which the render path cannot do —
+     * mpv scales to the window while decoding, so the delivered frame is window-sized.
+     * "subtitles" includes rendered subtitles, matching what the VLCJ path captured.
+     */
+    fun saveScreenshot(path: String): Boolean =
+        fileLoaded && mpv.command("screenshot-to-file", path, "subtitles")
+
+    /** Diagnostics for the frame pump: audio/video drift and mpv's own dropped-frame counters. */
+    fun pacingReport(): String {
+        val avsync = mpv.getPropertyDouble("avsync")
+        val dropped = mpv.getPropertyLong("frame-drop-count")
+        val delayed = mpv.getPropertyLong("vo-delayed-frame-count")
+        val fps = mpv.getPropertyDouble("estimated-vf-fps")
+        return "avsync=%.3f dropped=%s delayed=%s vf-fps=%.1f".format(
+            avsync ?: 0.0, dropped ?: -1L, delayed ?: -1L, fps ?: 0.0,
         )
     }
 

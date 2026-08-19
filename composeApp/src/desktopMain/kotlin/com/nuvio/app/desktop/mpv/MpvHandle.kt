@@ -106,15 +106,16 @@ internal class MpvHandle private constructor(private var handle: Pointer) {
 
     // --- commands -------------------------------------------------------------------------
 
-    /** Fire-and-forget; failures are logged rather than thrown, matching how callers use it. */
-    fun command(vararg args: String) {
-        if (disposed) return
+    /** Returns false when mpv rejected the command; failures are logged, never thrown. */
+    fun command(vararg args: String): Boolean {
+        if (disposed) return false
         // mpv_command takes a NULL-terminated argv, so the terminator is appended here rather
         // than at every call site.
         val argv = arrayOfNulls<String>(args.size + 1)
         args.forEachIndexed { i, a -> argv[i] = a }
         val rc = mpv.mpv_command(handle, argv)
         if (rc < 0) println("$TAG: command ${args.joinToString(" ")} failed: ${errorString(rc)}")
+        return rc >= 0
     }
 
     // --- events ---------------------------------------------------------------------------

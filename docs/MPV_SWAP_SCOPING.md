@@ -743,22 +743,46 @@ picks an engine once per surface: mpv when the flag is set and it actually start
 and whenever mpv cannot start (missing library, `mpv_initialize` refusing, no render context). The
 VLCJ body is unchanged — only moved behind the dispatcher into `VlcjPlayerSurface`.
 
-### Measured, same stream, same window, same machine
+### ⚠ RETRACTED: the first CPU A/B was not like-for-like
 
-A 4K HEVC BluRay remux over a debrid HTTP link, played from the app's own source list at
-1920×1111, sampled over 30s of steady playback (`/proc/<pid>/stat` utime+stime):
+The first measurement of this path (VLCJ 383% CPU / 6.37 GB RSS vs mpv 183% / 1.60 GB on the same
+4K HEVC remux at 1920x1111) is **not a fair comparison and must not be quoted.** Instrumenting the
+frame pump showed the mpv path was rendering **7.2 fps against a 24 fps source**, with mpv dropping
+~14 frames/s and `avsync` growing ~0.5s every 5s — audio ended up seconds ahead of picture, which
+ben heard before the instrumentation caught it. It used less CPU because it was doing less work.
 
-| Engine | CPU | RSS |
-| --- | --- | --- |
-| VLCJ (shipping) | **383%** | **6.37 GB** |
-| libmpv, SOFTWARE render | **183%** | **1.60 GB** |
+The RSS figures stand on their own (1.6 GB vs 6.37 GB), and the 4K decode really is on the GPU
+(`hwdec-current=vaapi-copy`). The CPU claim has to be re-made on the GPU path.
 
-`hwdec-current=vaapi-copy` in the app, i.e. the decode really is on the GPU. This is the *slower*
-of the two mpv paths — the GPU render path still removes the readback and the per-frame upload.
+### The SOFTWARE path does not keep up with 4K, and the scaler is not why
 
-Everything around playback survived the engine swap: timeline and duration, seek (±10s), pause
-holding the frame, resume-from-position, the source badge, Continue Watching, and the controls
-overlay. Verified by driving the real app, not a spike.
+Measured with `run-mpv-swrender-spike.sh` (`RENDER_W`/`RENDER_H` select the output size):
+
+| Source | Output | Render fps | Per render call |
+| --- | --- | --- | --- |
+| 4K, 30fps | 1920x1111 | 19.8 | 31.3 ms |
+| 4K, 30fps | 960x540 | 18.8 | 31.3 ms |
+| 1080p, 30fps | 1920x1111 | **28.7** | 31.6 ms |
+
+Per-call cost is identical at 1920x1111 and 960x540, so **the CPU scale is not the bottleneck** —
+`sws-fast` and `fast-bilinear` were measured and changed nothing, which is why they are deliberately
+not set. What tracks the failure is the *source* size: it is the `vaapi-copy` readback of 4K frames.
+1080p is comfortable; 4K is not. The GPU path never reads the frame back, which is the fix.
+
+⚠ **Every signalled frame must be RENDERED, even when it will not be delivered to Compose.** mpv
+advances one frame per `mpv_render_context_render` call, so deferring a render does not skip a
+frame — it delays the entire video stream, permanently. The original 30fps throttle deferred
+renders and so guaranteed drift; it now throttles delivery only. (This alone did not rescue 4K,
+because the per-frame cost is the readback, but on 1080p it is the difference between correct and
+slowly drifting.)
+
+### Verified in the real app
+
+Timeline and duration, seek (±10s), pause holding the frame, resume-from-position, the source
+badge, Continue Watching, the controls overlay, and the "S" screenshot hotkey — driven through the
+UI, not a spike. The screenshot needed an engine-side fix: mpv scales to the window while decoding,
+so `LastFrameStore` holds a window-sized frame and a 4K film was being saved at 1080p. libmpv now
+writes it itself via `screenshot-to-file` (`DesktopScreenshot.engineCapture`) — verified 3840x2160.
 
 ### ⚠ Subtitle defaults differ, and it is not an mpv bug
 
@@ -769,8 +793,17 @@ code, not in either engine:
 targets are empty (the default, `SubtitleLanguageOption.NONE`) **and** the engine reports a track as
 selected. `VlcjPlayerController.getSubtitleTracks()` hardcodes `isSelected = false` for every track,
 so that branch has never fired on desktop and libVLC's default subtitle survives by accident.
-`MpvPlayerController` reports selection honestly, so the branch fires and disables the track mpv
-had auto-selected (`--sid=1` — confirmed against the same stream from the mpv CLI).
+`MpvPlayerController` reports selection honestly, so the branch fires.
+
+Confirmed causally, not inferred — the app log shows mpv's own choice and then the override:
+```
+NuvioMpvController: file loaded, hwdec-current=vaapi-copy paused=false sid=1 aid=1
+NuvioMpvController: selectSubtitleTrack(-1)
+```
+⚠ **Scope is NOT established.** Code reading says an install with a non-default preferred subtitle
+language never reaches that call, so it would only affect installs left on the default — but the
+attempt to test that failed (the settings file is rewritten at startup, so hand-editing the profile
+key does not take; it has to be set through the UI). Treat the scope as unverified.
 
 So mpv's behaviour is what the setting actually asks for, and matches what ExoPlayer would do; the
 current desktop behaviour is a side effect of a stub. **This is a product decision, not a fix** —
@@ -788,6 +821,8 @@ accidental default. It must be decided before the mpv path becomes the default.
 | Shared `handleSnapshot` extraction (`DesktopPlaybackSideEffects`) | ✅ done, verified in the app |
 | SOFTWARE render path (`MPV_RENDER_API_TYPE_SW`) | ✅ done, 11/11 |
 | `MpvSession` + `PlatformPlayerSurface` wiring behind `NUVIO_MPV=1` | ✅ done, 17/17 + real-app run |
+| Source-resolution screenshots on the mpv path | ✅ done, verified 3840x2160 |
+| SOFTWARE path at 4K | ❌ **does not keep up** (19.8 fps vs 24) — 1080p is fine |
 | Subtitle-default decision (above) | ⏳ needs a product call |
-| GPU render path (`MPV_RENDER_API_TYPE_OPENGL`) on the EGL context | not started |
+| **GPU render path (`MPV_RENDER_API_TYPE_OPENGL`) on the EGL context** | **not started — now the critical path** |
 | Packaging (`libmpv2` dep, AppImage bundling) | not started |

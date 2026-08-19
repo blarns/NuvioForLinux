@@ -71,8 +71,24 @@ internal class MpvSession private constructor(
     fun startFramePump(onFrame: (ByteArray, Int, Int) -> Unit) {
         if (stopped.get() || pumpThread != null) return
         val t = Thread(null, {
-            var lastFrameMs = 0L
+            var lastDeliveredMs = 0L
+            var windowStartMs = System.currentTimeMillis()
+            var windowFrames = 0
+            // Destination for frames that are rendered but not delivered. They still have to be
+            // rendered — see below — but nobody keeps them, so one buffer is reused.
+            var scratch = ByteArray(0)
             while (!stopped.get()) {
+                // ⚠ Pacing diagnostics, not decoration. The client IS the display here: mpv hands
+                // over one frame per render call, so a pump that cannot keep up with the source
+                // frame rate makes video fall behind audio without bound rather than dropping
+                // frames. `avsync` growing negative is exactly that failure.
+                val nowMs = System.currentTimeMillis()
+                if (nowMs - windowStartMs >= 5_000) {
+                    val fps = windowFrames * 1000.0 / (nowMs - windowStartMs)
+                    println("$TAG: pump %.1f fps  %s".format(fps, controller.pacingReport()))
+                    windowStartMs = nowMs
+                    windowFrames = 0
+                }
                 val packed = requestedSize.get()
                 val w = unpackWidth(packed)
                 val h = unpackHeight(packed)
@@ -81,19 +97,28 @@ internal class MpvSession private constructor(
                 renderer.resize(w, h)
 
                 if (!renderer.hasNewFrame()) {
-                    Thread.sleep(5)
-                    continue
-                }
-                val now = System.currentTimeMillis()
-                if (now - lastFrameMs < MIN_FRAME_INTERVAL_MS) {
-                    // Leave the ready flag set — the frame is not dropped, just deferred.
-                    Thread.sleep(5)
+                    Thread.sleep(2)
                     continue
                 }
 
-                val bytes = ByteArray(w * h * 4)
+                // ⚠ Every signalled frame is RENDERED, even when it will not be delivered.
+                // mpv advances by one frame per render call, so deferring a render does not
+                // "skip" a frame — it delays the whole video stream, and the delay accumulates
+                // until audio is seconds ahead. The throttle therefore limits how often frames
+                // reach Compose (which is what the ~30fps cap was ever for), never how often mpv
+                // is asked to render.
+                val now = System.currentTimeMillis()
+                val deliver = now - lastDeliveredMs >= MIN_FRAME_INTERVAL_MS
+                val bytes = if (deliver) {
+                    ByteArray(w * h * 4)
+                } else {
+                    if (scratch.size < w * h * 4) scratch = ByteArray(w * h * 4)
+                    scratch
+                }
                 if (!renderer.render(bytes)) continue
-                lastFrameMs = now
+                windowFrames++
+                if (!deliver) continue
+                lastDeliveredMs = now
                 try {
                     onFrame(bytes, w, h)
                 } catch (e: Throwable) {
