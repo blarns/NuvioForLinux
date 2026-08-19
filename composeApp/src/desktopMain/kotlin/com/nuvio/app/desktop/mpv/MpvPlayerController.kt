@@ -7,6 +7,7 @@ import com.nuvio.app.features.player.PlayerPlaybackSnapshot
 import com.nuvio.app.features.player.PlayerSettingsUiState
 import com.nuvio.app.features.player.SubtitleStyleState
 import com.nuvio.app.features.player.SubtitleTrack
+import com.nuvio.app.features.player.reportPlaybackFailureAsync
 import java.util.concurrent.atomic.AtomicLong
 
 private const val TAG = "NuvioMpvController"
@@ -101,12 +102,19 @@ internal class MpvPlayerController(
             MpvEventId.END_FILE -> {
                 // No file is decoding any more either way, so isPlaying must not stay true.
                 fileLoaded = false
-                // eof-reached distinguishes a real end-of-stream from the END_FILE mpv also
-                // emits when a file is replaced or stopped; only the former is "ended".
-                if (mpv.getPropertyBoolean("eof-reached") == true) {
-                    state = state.copy(isEnded = true, isPlaying = false)
-                } else {
-                    state = state.copy(isPlaying = false)
+                when {
+                    // The stream failed to open or died mid-play. Reported as an error rather
+                    // than as an end-of-file, otherwise a dead source looks exactly like a
+                    // finished episode: no error, and auto-play would advance past it.
+                    ev.endFileReason == MpvEndFileReason.ERROR -> {
+                        state = state.copy(isLoading = false, isPlaying = false)
+                        reportPlaybackError(mpv.errorString(ev.endFileError))
+                    }
+                    // eof-reached distinguishes a real end-of-stream from the END_FILE mpv also
+                    // emits when a file is replaced or stopped; only the former is "ended".
+                    mpv.getPropertyBoolean("eof-reached") == true ->
+                        state = state.copy(isEnded = true, isPlaying = false)
+                    else -> state = state.copy(isPlaying = false)
                 }
             }
             MpvEventId.PLAYBACK_RESTART -> {
@@ -406,6 +414,16 @@ internal class MpvPlayerController(
                 escapeListItem("${it.key}: ${it.value}")
             },
         )
+    }
+
+    /**
+     * mpv's own message ("loading failed") says nothing the user can act on, so an HTTP source
+     * is probed for the real reason — the same treatment the VLCJ path gets. Runs off mpv's
+     * event thread, which must never block.
+     */
+    private fun reportPlaybackError(mpvMessage: String) {
+        println("$TAG: playback failed: $mpvMessage")
+        reportPlaybackFailureAsync(lastSourceUrl, mpvMessage, TAG) { onError(Exception(it)) }
     }
 
     fun dispose() {

@@ -122,6 +122,15 @@ internal object MpvEventId {
     const val QUEUE_OVERFLOW = 24
 }
 
+/** `mpv_end_file_reason`. Only ERROR means the file actually failed. */
+internal object MpvEndFileReason {
+    const val EOF = 0
+    const val STOP = 2
+    const val QUIT = 3
+    const val ERROR = 4
+    const val REDIRECT = 5
+}
+
 internal object MpvRenderParam {
     const val INVALID = 0
     const val API_TYPE = 1
@@ -165,6 +174,24 @@ internal open class MpvEventProperty(
     @JvmField var name: Pointer? = null,
     @JvmField var format: Int = 0,
     @JvmField var data: Pointer? = null,
+) : Structure(), Structure.ByReference {
+    constructor(p: Pointer) : this() {
+        useMemory(p)
+        read()
+    }
+}
+
+/**
+ * `mpv_event_end_file`, truncated to the two fields this app reads.
+ *
+ * The real struct continues with `int64_t playlist_entry_id` and two more ints. Declaring only
+ * the leading fields is safe because this is only ever mapped onto memory mpv owns and is never
+ * written back or allocated by JNA — the omitted tail is simply not read.
+ */
+@Structure.FieldOrder("reason", "error")
+internal open class MpvEventEndFile(
+    @JvmField var reason: Int = 0,
+    @JvmField var error: Int = 0,
 ) : Structure(), Structure.ByReference {
     constructor(p: Pointer) : this() {
         useMemory(p)

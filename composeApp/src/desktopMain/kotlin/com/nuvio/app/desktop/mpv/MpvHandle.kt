@@ -161,6 +161,17 @@ internal class MpvHandle private constructor(private var handle: Pointer) {
                             } else null,
                         )
                     }
+                    MpvEventId.END_FILE -> {
+                        // The reason is the only way to tell "the stream failed" from "the file
+                        // ended" or "we replaced it" — without it a dead link is indistinguishable
+                        // from a finished episode, and the UI would sit on a spinner forever.
+                        val e = ev.data?.let { MpvEventEndFile(it) }
+                        MpvEventInfo(
+                            id = id,
+                            endFileReason = e?.reason ?: MpvEndFileReason.EOF,
+                            endFileError = e?.error ?: 0,
+                        )
+                    }
                     else -> MpvEventInfo(id = id)
                 }
                 try {
@@ -200,7 +211,7 @@ internal class MpvHandle private constructor(private var handle: Pointer) {
         }
     }
 
-    private fun errorString(code: Int): String =
+    fun errorString(code: Int): String =
         runCatching { mpv.mpv_error_string(code) }.getOrNull() ?: "error $code"
 
     companion object {
@@ -240,4 +251,8 @@ internal data class MpvEventInfo(
     val propertyDouble: Double? = null,
     val propertyLong: Long? = null,
     val propertyFlag: Boolean? = null,
+    /** END_FILE only: an [MpvEndFileReason]. */
+    val endFileReason: Int = MpvEndFileReason.EOF,
+    /** END_FILE only: the mpv error code, meaningful when the reason is ERROR. */
+    val endFileError: Int = 0,
 )
