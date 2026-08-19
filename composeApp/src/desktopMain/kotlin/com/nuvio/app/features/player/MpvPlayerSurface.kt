@@ -16,24 +16,66 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asComposeImageBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import com.nuvio.app.desktop.egl.EglSeam
 import com.nuvio.app.desktop.mpv.MpvSession
 import com.nuvio.app.features.discord.DiscordRichPresence
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.jetbrains.skia.BackendTexture
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorInfo
 import org.jetbrains.skia.ColorSpace
 import org.jetbrains.skia.ColorType
+import org.jetbrains.skia.Image
 import org.jetbrains.skia.ImageInfo
+import org.jetbrains.skia.SurfaceOrigin
 
 private const val TAG = "NuvioPlayerMpv"
+
+private const val GL_TEXTURE_2D = 0x0DE1
+private const val GL_RGBA8 = 0x8058
+
+/**
+ * Draws mpv's frame straight from the GL texture it rendered into — no readback, no copy.
+ *
+ * Runs inside Compose's own draw, which is the only place all three preconditions hold at once:
+ * the EDT, an EGL context that is current, and the Skia [org.jetbrains.skia.DirectContext] that
+ * will do the compositing. [tick] is read purely so the draw scope re-runs when mpv signals a
+ * frame; [requestRedraw] is what schedules that.
+ *
+ * ⚠ `resetGLAll()` is mandatory, not defensive: mpv changes GL state behind Skia's back, and
+ * without it Skia draws with a stale cached view of the context. Equally mandatory is closing the
+ * Image and BackendTexture every frame — both are native handles behind a Cleaner, and leaving
+ * them to GC leaked ~1 MB per 1000 frames at 4K in the soak.
+ */
+private fun DrawScope.drawMpvTexture(session: MpvSession, tick: Int, requestRedraw: () -> Unit) {
+    @Suppress("UNUSED_EXPRESSION") tick   // subscribes this draw scope to mpv's frame signal
+    val ctx = EglSeam.directContext ?: return
+    val w = size.width.toInt()
+    val h = size.height.toInt()
+    if (w <= 0 || h <= 0) return
+
+    val texture = session.renderGpuFrame(w, h, requestRedraw) ?: return
+    ctx.resetGLAll()
+    val backend = BackendTexture.makeGL(w, h, false, texture, GL_TEXTURE_2D, GL_RGBA8)
+    val image = Image.adoptTextureFrom(ctx, backend, SurfaceOrigin.TOP_LEFT, ColorType.RGBA_8888)
+    try {
+        drawContext.canvas.nativeCanvas.drawImage(image, 0f, 0f)
+    } finally {
+        image.close()
+        backend.close()
+    }
+    session.reportGpuSwap()
+}
 
 // Same bound as the VLCJ path: the newest frame is on screen and the rest are a margin so a
 // frame is never freed while the renderer could still be drawing it.
@@ -81,8 +123,14 @@ internal fun MpvPlayerSurface(
         { snap -> sideEffects.onSnapshot(snap) { latestOnSnapshot.value(it) } }
     }
 
+    // Bumped whenever mpv signals a frame on the GPU path; read inside drawBehind so the draw
+    // scope re-runs. The software path drives Compose through `currentFrame` instead.
+    var gpuFrameTick by remember { mutableStateOf(0) }
+
     // --- frames ---------------------------------------------------------------------------
     DisposableEffect(Unit) {
+        // No-op on the GPU path — frames are rendered from the draw scope, on the EDT, because
+        // that is the only thread where Compose's EGL context is current.
         session.startFramePump { bytes, w, h ->
             // Playback ended — hold the last good frame rather than painting drain frames.
             if (frozen.get()) return@startFramePump
@@ -155,6 +203,10 @@ internal fun MpvPlayerSurface(
                 }
             }
             .drawBehind {
+                if (session.isGpu) {
+                    drawMpvTexture(session, gpuFrameTick) { scope.launch(Dispatchers.Main) { gpuFrameTick++ } }
+                    return@drawBehind
+                }
                 val frame = currentFrame ?: return@drawBehind
                 drawImage(
                     image = frame,

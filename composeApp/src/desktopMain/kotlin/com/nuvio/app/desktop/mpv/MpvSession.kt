@@ -29,11 +29,23 @@ private const val MIN_FRAME_INTERVAL_MS = 33L
  */
 internal class MpvSession private constructor(
     private val handle: MpvHandle,
-    private val renderer: MpvSoftwareRenderer,
+    private val renderer: MpvSoftwareRenderer?,
     val controller: MpvPlayerController,
+    /** True when frames go straight into a GL texture Compose samples — no readback, no copy. */
+    val isGpu: Boolean,
 ) {
     /** Set by the surface so engine errors reach the UI's own error handling. */
     @Volatile var onError: ((Exception) -> Unit)? = null
+
+    /**
+     * The GL renderer, built on the FIRST DRAW rather than here.
+     *
+     * ⚠ Creating it probes the live GL context, so it has to happen on the EDT with Compose's
+     * EGL context current. Composition runs on the EDT too, but the context is only guaranteed
+     * current inside a frame — so this is created from the draw scope, where both hold.
+     */
+    @Volatile private var gpu: MpvGpuRenderer? = null
+    @Volatile private var gpuFailed = false
 
     /** Requested render size, packed as `width shl 32 or height` so it can never be read torn. */
     private val requestedSize = AtomicLong(pack(INITIAL_WIDTH, INITIAL_HEIGHT))
@@ -59,6 +71,41 @@ internal class MpvSession private constructor(
         handle.setPropertyBoolean("keepaspect", keep)
     }
 
+    // --- GPU path ---------------------------------------------------------------------------
+
+    /**
+     * Renders the pending frame into the session's texture and returns its GL id, or null when
+     * there was nothing new (in which case the caller redraws the previous texture).
+     *
+     * ⚠ EDT only, from inside a Compose draw — that is the only place the EGL context is current.
+     * [onFrameAvailable] is how a new frame gets a redraw scheduled at all.
+     */
+    fun renderGpuFrame(width: Int, height: Int, onFrameAvailable: () -> Unit): Int? {
+        if (!isGpu || stopped.get() || gpuFailed) return null
+        val renderer = gpu ?: run {
+            val created = MpvGpuRenderer.create(handle, com.nuvio.app.desktop.egl.EglSeam.xDisplay, width, height)
+            if (created == null) {
+                // Nothing to fall back to at this point — the handle was configured for the GPU
+                // tier — so this is latched and logged rather than retried every frame.
+                gpuFailed = true
+                println("$TAG: GL render context unavailable; no video will be drawn")
+                return null
+            }
+            created.onFrameAvailable = onFrameAvailable
+            gpu = created
+            created
+        }
+        // A false return means "no new frame", not "nothing to draw" — the previous frame is
+        // still in the texture and must be redrawn, or the video flickers between real frames.
+        renderer.render(width, height)
+        return renderer.textureId.takeIf { it != 0 }
+    }
+
+    /** Tells mpv the frame reached the screen; its timing depends on it. EDT only. */
+    fun reportGpuSwap() {
+        gpu?.reportSwap()
+    }
+
     /**
      * Starts the frame pump. [onFrame] is called on the pump thread with a freshly allocated
      * BGRA buffer and its dimensions; it must not block.
@@ -69,6 +116,7 @@ internal class MpvSession private constructor(
      * source size, so this is ~8 MB per frame at 1080p instead of the VLCJ path's ~33 MB at 4K.
      */
     fun startFramePump(onFrame: (ByteArray, Int, Int) -> Unit) {
+        val renderer = this.renderer ?: return   // GPU path: frames are pulled from the draw scope
         if (stopped.get() || pumpThread != null) return
         val t = Thread(null, {
             var lastDeliveredMs = 0L
@@ -144,7 +192,18 @@ internal class MpvSession private constructor(
             }
         }
         pumpThread = null
-        renderer.dispose()
+        renderer?.dispose()
+        // ⚠ The GL renderer deletes GL objects, so it can only be torn down where the EGL
+        // context is current — the EDT. Compose disposes on the EDT already; the branch is for
+        // any other caller (an error path, a test) so teardown can never happen off-thread.
+        gpu?.let { g ->
+            if (javax.swing.SwingUtilities.isEventDispatchThread()) {
+                g.dispose()
+            } else {
+                runCatching { javax.swing.SwingUtilities.invokeAndWait { g.dispose() } }
+            }
+        }
+        gpu = null
         controller.dispose()   // disposes the handle too
         println("$TAG: disposed")
     }
@@ -165,11 +224,20 @@ internal class MpvSession private constructor(
                 println("$TAG: libmpv not available — falling back to VLCJ")
                 return null
             }
-            val handle = MpvEngineOptions.createHandle(MpvVideoOutput.SOFTWARE) ?: return null
-            val renderer = MpvSoftwareRenderer.create(handle, INITIAL_WIDTH, INITIAL_HEIGHT)
-            if (renderer == null) {
-                handle.dispose()
-                return null
+            // ⚠ The GPU tier needs Compose to be rendering through EGL, and needs it to be
+            // rendering ALREADY — `isActive` is only true once a frame has been drawn and the
+            // Skia context published. On GLX, `hwdec=vaapi` degrades to `no` (software decode)
+            // with no error, so guessing wrong here is worse than staying on the copy path.
+            val useGpu = com.nuvio.app.desktop.egl.EglRenderer.isActive
+            val output = if (useGpu) MpvVideoOutput.GPU else MpvVideoOutput.SOFTWARE
+            val handle = MpvEngineOptions.createHandle(output) ?: return null
+            // The GL render context is built on the first draw (see [renderGpuFrame]); only the
+            // software renderer can be created here, off a live GL context.
+            val renderer = if (useGpu) null else {
+                MpvSoftwareRenderer.create(handle, INITIAL_WIDTH, INITIAL_HEIGHT) ?: run {
+                    handle.dispose()
+                    return null
+                }
             }
             // The controller has to exist before the session and the session has to exist before
             // the error sink can be reached, so the lambda closes over the (mutable) session
@@ -179,9 +247,9 @@ internal class MpvSession private constructor(
                 mpv = handle,
                 onError = { e -> session?.onError?.invoke(e) },
             )
-            session = MpvSession(handle, renderer, controller)
+            session = MpvSession(handle, renderer, controller, isGpu = useGpu)
             handle.startEventLoop()
-            println("$TAG: created (libmpv ${MpvHandle.apiVersion()})")
+            println("$TAG: created (libmpv ${MpvHandle.apiVersion()}, ${if (useGpu) "GPU" else "SOFTWARE"} render)")
             return session
         }
 

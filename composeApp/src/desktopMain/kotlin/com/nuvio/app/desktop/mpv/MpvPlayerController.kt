@@ -266,6 +266,19 @@ internal class MpvPlayerController(
         }
     }.getOrDefault(emptyList())
 
+    /**
+     * ⚠ `isSelected` is reported as **false even for the track mpv has selected**, deliberately,
+     * to match the VLCJ path.
+     *
+     * `PlayerScreenRuntimeTrackActions` turns subtitles off when no preferred subtitle language is
+     * set *and* the engine reports a track selected. `VlcjPlayerController` hardcodes false, so
+     * that branch has never fired on desktop and the container's default subtitle plays — which is
+     * the behaviour desktop users have. Reporting honestly here silently turned embedded subtitles
+     * off on every default install, so the stub is mirrored on purpose rather than by accident.
+     *
+     * Nothing in the UI reads this: `SubtitleModal` marks the active row from the screen's own
+     * `selectedIndex`, so the menu still shows the user's choice correctly.
+     */
     override fun getSubtitleTracks(): List<SubtitleTrack> = runCatching {
         tracks("sub").map {
             SubtitleTrack(
@@ -273,7 +286,7 @@ internal class MpvPlayerController(
                 id = it.id.toString(),
                 label = it.label("Subtitle"),
                 language = it.lang,
-                isSelected = it.selected,
+                isSelected = false,
                 isForced = false,
             )
         }

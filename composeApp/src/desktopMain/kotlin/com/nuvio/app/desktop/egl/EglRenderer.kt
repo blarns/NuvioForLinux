@@ -267,6 +267,8 @@ internal class EglDevice private constructor(
                 return null to "eglCreateWindowSurface failed (0x%x)".format(Egl.lib.eglGetError())
             }
             val dev = EglDevice(dpy, chosen, ctx, surf, xDisplay, chosenStencil, "EGL/OpenGL visual=0x%x stencil=%d".format(wantVisual, chosenStencil))
+            // mpv's VA-API interop needs the same X11 display this context was made on.
+            EglSeam.publishXDisplay(xDisplay)
             return dev to null
         }
     }
@@ -293,7 +295,10 @@ internal class EglContextHandler(
 
     override fun makeContext(): DirectContext {
         val iface = GLAssembledInterface.createFromNativePointers(0L, Egl.getProcFnPtr)
-        return DirectContext.makeGLWithInterface(iface)
+        // Published so the mpv GPU path can adopt textures into the very context Compose
+        // draws with — there is no other way to reach it, and using a second context would
+        // mean copying the frame, which is the whole thing this path exists to avoid.
+        return DirectContext.makeGLWithInterface(iface).also { EglSeam.publishContext(it) }
     }
 
     private fun isSizeChanged(width: Int, height: Int): Boolean {
@@ -528,6 +533,9 @@ object EglRenderer {
             println("[nuvio-egl] ACTIVE — rendering through EGL: $info")
         }
     }
+
+    /** True once Compose is really drawing through EGL — see [EglSeam] for why this gates mpv. */
+    val isActive: Boolean get() = activeRenderer != null && EglSeam.directContext != null
 
     val isEnabled: Boolean get() = System.getenv("NUVIO_EGL") == "1"
 
