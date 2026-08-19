@@ -840,9 +840,13 @@ Same 4K HEVC remux, same window (1920×1111), same machine, 30s of steady playba
 | libmpv, SOFTWARE render (`vaapi-copy`) | 183%, **but only rendering 7 of every 24 frames** | 1.60 GB |
 | **libmpv, GPU render (`vaapi`)** | **26.6%** | **1.11 GB** |
 
-Unlike the software figure, this one is like-for-like: playback runs at real time (the timeline
-advances 31s in 31.2s of wall clock), colours are correct, and the controls overlay composites
-normally on top.
+Unlike the software figure, this one is like-for-like — **verified by counting presented frames,
+not by watching the clock**: 24.0 presented fps against a 24 fps source, `dropped=0`, `delayed=0`,
+`avsync=0.000`, sustained. ⚠ Real-time timeline advance proves nothing on its own: it is driven by
+the audio clock, and the software path advanced it perfectly while presenting 7 frames in 24.
+
+Window resize during playback is also verified (1920x1111 → 1280x699 → 1600x879): the
+texture/FBO/Image set is rebuilt with no artefacts and no change in pacing.
 
 ### How it fits together
 
@@ -885,5 +889,7 @@ marks the active row from the screen's own `selectedIndex`.
 | Subtitle default | ✅ matched to VLCJ |
 | Source-resolution screenshots on the mpv path | ✅ done |
 | Packaging (`libmpv2` dep, AppImage bundling) | not started |
-| Long soak of the in-app GPU path (leaks, resize, engine switching) | not started |
+| Window resize on the GPU path | ✅ verified |
+| End of episode on the GPU path (`frozen`/`nearEnd` are software-pump only) | ⚠ not tested |
+| Long soak of the in-app GPU path (leaks over a film, engine switching) | not started |
 | Making either flag the default | not started — both still opt-in |
