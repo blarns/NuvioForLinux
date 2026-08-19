@@ -733,3 +733,61 @@ something both engines call.** All the non-playback behaviour lives there — sc
 Discord presence, `PlayerControlBridge` position/duration for MPRIS, the `nearEnd` flush-frame
 arming — plus `LastFrameStore.update` at line 394 feeds the screenshot hotkey. A parallel mpv
 surface would silently lose every one of them, and no spike can see that.
+
+---
+
+## Revision 2026-08-19 — the surface is wired, and measured against VLCJ
+
+The libmpv engine now runs **inside the app**, opt-in via `NUVIO_MPV=1`. `PlatformPlayerSurface`
+picks an engine once per surface: mpv when the flag is set and it actually starts, VLCJ otherwise
+and whenever mpv cannot start (missing library, `mpv_initialize` refusing, no render context). The
+VLCJ body is unchanged — only moved behind the dispatcher into `VlcjPlayerSurface`.
+
+### Measured, same stream, same window, same machine
+
+A 4K HEVC BluRay remux over a debrid HTTP link, played from the app's own source list at
+1920×1111, sampled over 30s of steady playback (`/proc/<pid>/stat` utime+stime):
+
+| Engine | CPU | RSS |
+| --- | --- | --- |
+| VLCJ (shipping) | **383%** | **6.37 GB** |
+| libmpv, SOFTWARE render | **183%** | **1.60 GB** |
+
+`hwdec-current=vaapi-copy` in the app, i.e. the decode really is on the GPU. This is the *slower*
+of the two mpv paths — the GPU render path still removes the readback and the per-frame upload.
+
+Everything around playback survived the engine swap: timeline and duration, seek (±10s), pause
+holding the frame, resume-from-position, the source badge, Continue Watching, and the controls
+overlay. Verified by driving the real app, not a spike.
+
+### ⚠ Subtitle defaults differ, and it is not an mpv bug
+
+On the mpv path, embedded subtitles that VLCJ plays by default are **off**. The cause is in shared
+code, not in either engine:
+
+`PlayerScreenRuntimeTrackActions.kt` turns subtitles off when the preferred-subtitle-language
+targets are empty (the default, `SubtitleLanguageOption.NONE`) **and** the engine reports a track as
+selected. `VlcjPlayerController.getSubtitleTracks()` hardcodes `isSelected = false` for every track,
+so that branch has never fired on desktop and libVLC's default subtitle survives by accident.
+`MpvPlayerController` reports selection honestly, so the branch fires and disables the track mpv
+had auto-selected (`--sid=1` — confirmed against the same stream from the mpv CLI).
+
+So mpv's behaviour is what the setting actually asks for, and matches what ExoPlayer would do; the
+current desktop behaviour is a side effect of a stub. **This is a product decision, not a fix** —
+either honour the setting (subtitles off unless a preferred language is set) or reproduce VLCJ's
+accidental default. It must be decided before the mpv path becomes the default.
+
+### Status
+
+| Piece | State |
+| --- | --- |
+| EGL `Redrawer` on shipped skiko, wired behind `NUVIO_EGL=1` | ✅ done, verified live |
+| JNA libmpv binding | ✅ done, 19/19 |
+| `MpvPlayerController` + `MpvEngineOptions` | ✅ done, 24/24 |
+| Sustained interleaved Skia/mpv soak | ✅ done, 30k alternations at 4K clean |
+| Shared `handleSnapshot` extraction (`DesktopPlaybackSideEffects`) | ✅ done, verified in the app |
+| SOFTWARE render path (`MPV_RENDER_API_TYPE_SW`) | ✅ done, 11/11 |
+| `MpvSession` + `PlatformPlayerSurface` wiring behind `NUVIO_MPV=1` | ✅ done, 17/17 + real-app run |
+| Subtitle-default decision (above) | ⏳ needs a product call |
+| GPU render path (`MPV_RENDER_API_TYPE_OPENGL`) on the EGL context | not started |
+| Packaging (`libmpv2` dep, AppImage bundling) | not started |
