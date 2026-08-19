@@ -54,6 +54,13 @@ internal class MpvGpuRenderer private constructor(
 
     private val frameReady = AtomicBoolean(false)
 
+    /**
+     * Frames actually rendered. ⚠ Not decoration: a path that presents a third of the frames
+     * still advances the timeline in real time, because the clock is the audio — so this is the
+     * only thing that distinguishes "cheap" from "not keeping up".
+     */
+    val framesRendered = java.util.concurrent.atomic.AtomicLong(0)
+
     /** Invoked when mpv signals a frame, so the surface can ask Compose to redraw. */
     @Volatile var onFrameAvailable: (() -> Unit)? = null
 
@@ -105,6 +112,7 @@ internal class MpvGpuRenderer private constructor(
             println("$TAG: render failed rc=$rc")
             return null
         }
+        framesRendered.incrementAndGet()
         return image
     }
 

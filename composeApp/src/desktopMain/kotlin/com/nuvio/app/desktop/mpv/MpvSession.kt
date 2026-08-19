@@ -111,6 +111,32 @@ internal class MpvSession private constructor(
         gpu?.reportSwap()
     }
 
+    private var pacingWindowStartMs = 0L
+    private var pacingWindowFrames = 0L
+
+    /**
+     * Logs presented fps alongside mpv's own drift and drop counters, once every 5s.
+     *
+     * ⚠ This exists because the obvious check is wrong: the timeline advances in real time even
+     * when two thirds of the frames never reach the screen, since the clock is the audio. Only
+     * `frame-drop-count` staying flat and `avsync` staying near zero prove the path keeps up.
+     */
+    fun logPacing() {
+        val renderer = gpu ?: return
+        val now = System.currentTimeMillis()
+        if (pacingWindowStartMs == 0L) {
+            pacingWindowStartMs = now
+            pacingWindowFrames = renderer.framesRendered.get()
+            return
+        }
+        if (now - pacingWindowStartMs < 5_000) return
+        val frames = renderer.framesRendered.get()
+        val fps = (frames - pacingWindowFrames) * 1000.0 / (now - pacingWindowStartMs)
+        println("$TAG: gpu %.1f fps  %s".format(fps, controller.pacingReport()))
+        pacingWindowStartMs = now
+        pacingWindowFrames = frames
+    }
+
     /**
      * Starts the frame pump. [onFrame] is called on the pump thread with a freshly allocated
      * BGRA buffer and its dimensions; it must not block.

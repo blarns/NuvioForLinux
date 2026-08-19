@@ -257,6 +257,7 @@ internal fun MpvPlayerSurface(
         while (true) {
             delay(100)
             handleSnapshot(session.controller.currentSnapshot())
+            if (session.isGpu) session.logPacing()
         }
     }
 
