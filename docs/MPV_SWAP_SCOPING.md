@@ -893,3 +893,35 @@ marks the active row from the screen's own `selectedIndex`.
 | End of episode on the GPU path (`frozen`/`nearEnd` are software-pump only) | ⚠ not tested |
 | Long soak of the in-app GPU path (leaks over a film, engine switching) | not started |
 | Making either flag the default | not started — both still opt-in |
+
+---
+
+## Revision 2026-08-19c — end of episode on the GPU path
+
+**mpv does not blank the frame at EOF.** Asked directly, with pixels read back through the software
+renderer (`run-mpv-swrender-spike.sh`, now 14 checks): last frame while playing had mean luma 127,
+the frame rendered *after* `isEnded` had mean luma 127. `keep-open=yes` holds the picture. So a
+black screen at the end of a Frieren episode is the episode's own fade-out, not a dropped frame —
+there is no equivalent of libVLC's flush-frame garbage to filter here.
+
+The GPU draw still gates on `frozen` (the flag `DesktopPlaybackSideEffects` already maintains):
+once playback has ended it redraws the existing texture instead of asking mpv for another frame.
+
+**Two real bugs found and fixed at EOS**, neither of which the software path could have shown:
+
+- ⚠ **Playback was stuck at end-of-file forever.** `END_FILE` cleared `fileLoaded` and set
+  `isEnded`, and *nothing ever cleared them* — so after an episode ended the UI stayed in its ended
+  state, and seek/play did nothing. `PLAYBACK_RESTART` now restores `fileLoaded`, clears `isEnded`
+  and re-reads `pause`; `eof-reached` going false also clears `isEnded`.
+- ⚠ **`play()` at EOF did nothing at all.** With `keep-open=yes`, clearing `pause` while
+  `eof-reached` is set leaves mpv sitting on the last frame. Play now seeks off the end first,
+  which is what libVLC does implicitly when it replays finished media. Verified in the app:
+  `play() at EOF — restarting from the beginning`, position 24:30 → 00:02, frames flowing again.
+
+Also observed working end-to-end: the "Next Episode" card appears at EOS, and autoplay advanced
+S1E2 → S1E3 on its own.
+
+⚠ Still unverified: after that replay the stream stalled at 00:02 with no spinner. The link had
+been open for over an hour and had taken 150 rapid seeks, so a dead debrid URL is the likely
+cause rather than the engine — but it was not isolated, and `pacingReport()` should grow
+`pause` / `core-idle` / `paused-for-cache` before the next attempt so a stall names its own reason.

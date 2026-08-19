@@ -60,14 +60,20 @@ private val MPV_TEXTURE_COLOR_TYPE: ColorType =
  * ⚠ `resetGLAll()` is mandatory, not defensive: mpv changes GL state behind Skia's back, and
  * without it Skia draws with a stale cached view of the context.
  */
-private fun DrawScope.drawMpvTexture(session: MpvSession, tick: Int, requestRedraw: () -> Unit) {
+private fun DrawScope.drawMpvTexture(
+    session: MpvSession,
+    tick: Int,
+    frozen: Boolean,
+    requestRedraw: () -> Unit,
+) {
     @Suppress("UNUSED_EXPRESSION") tick   // subscribes this draw scope to mpv's frame signal
     val ctx = EglSeam.directContext ?: return
     val w = size.width.toInt()
     val h = size.height.toInt()
     if (w <= 0 || h <= 0) return
 
-    val image = session.renderGpuFrame(ctx, MPV_TEXTURE_COLOR_TYPE, w, h, requestRedraw) ?: return
+    val image = session.renderGpuFrame(ctx, MPV_TEXTURE_COLOR_TYPE, w, h, frozen, requestRedraw)
+        ?: return
     // ⚠ mpv changed GL state behind Skia's back; without this Skia draws against a stale
     // cached view of the context.
     ctx.resetGLAll()
@@ -205,7 +211,7 @@ internal fun MpvPlayerSurface(
             }
             .drawBehind {
                 if (session.isGpu) {
-                    drawMpvTexture(session, gpuFrameTick) {
+                    drawMpvTexture(session, gpuFrameTick, frozen.get()) {
                         scope.launch(Dispatchers.Main) { gpuFrameTick++ }
                     }
                     return@drawBehind

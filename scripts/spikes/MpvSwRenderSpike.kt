@@ -143,6 +143,32 @@ fun main(args: Array<String>) {
     check("renders after resize", resizedOk && meanLuma(small, 640, 360) > 8,
         "mean=${meanLuma(small, 640, 360)}")
 
+    // --- what does mpv render at END OF FILE? -----------------------------------------------
+    // The player holds the last frame at EOS (`keep-open=yes`), but "holds" is only true if mpv
+    // does not push a black frame as the file ends — and if it does, both render paths would
+    // display it, which is what the VLCJ path's flush-frame filter exists to prevent.
+    renderer.resize(w, h)
+    val big = ByteArray(w * h * 4)
+    val duration = ctrl.currentSnapshot().durationMs
+    if (duration > 3_000) {
+        ctrl.seekTo(duration - 2_000)
+        // Last luma seen while still playing, then whatever mpv gives once it has ended.
+        var lastPlayingLuma = -1
+        val endBy = System.currentTimeMillis() + 20_000
+        while (System.currentTimeMillis() < endBy && !ctrl.currentSnapshot().isEnded) {
+            if (renderer.hasNewFrame() && renderer.render(big)) lastPlayingLuma = meanLuma(big, w, h)
+            Thread.sleep(20)
+        }
+        check("reaches end of file", ctrl.currentSnapshot().isEnded,
+            "snapshot=${ctrl.currentSnapshot()}")
+        Thread.sleep(500)
+        // Render once more, the way a redraw after EOS would.
+        val renderedAfterEof = renderer.render(big)
+        val afterLuma = meanLuma(big, w, h)
+        check("mpv does not blank the frame at EOF", afterLuma > 8 || lastPlayingLuma <= 8,
+            "last-playing=$lastPlayingLuma after-eof=$afterLuma rendered=$renderedAfterEof")
+    }
+
     check("dispose clean", runCatching {
         renderer.dispose(); renderer.dispose(); ctrl.dispose()
     }.isSuccess)

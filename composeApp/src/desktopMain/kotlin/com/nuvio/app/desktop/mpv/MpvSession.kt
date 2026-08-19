@@ -85,9 +85,14 @@ internal class MpvSession private constructor(
         colorType: org.jetbrains.skia.ColorType,
         width: Int,
         height: Int,
+        frozen: Boolean,
         onFrameAvailable: () -> Unit,
     ): org.jetbrains.skia.Image? {
         if (!isGpu || stopped.get() || gpuFailed) return null
+        // Playback has ended: keep redrawing the last real frame rather than asking mpv for
+        // another one. This is the GPU counterpart of the VLCJ path's `frozen` gate — without it
+        // the video area goes black behind the "next episode" card instead of holding the frame.
+        if (frozen) gpu?.currentImage()?.let { return it }
         val renderer = gpu ?: run {
             val created = MpvGpuRenderer.create(handle, com.nuvio.app.desktop.egl.EglSeam.xDisplay, width, height)
             if (created == null) {

@@ -76,6 +76,9 @@ internal class MpvGpuRenderer private constructor(
 
     fun hasNewFrame(): Boolean = !disposed && frameReady.get()
 
+    /** The frame already in the texture, without asking mpv for a new one. */
+    fun currentImage(): Image? = if (disposed) null else image
+
     /**
      * Renders the current frame into the internal texture, resizing it when the surface changed.
      * Returns false when there was nothing to draw or the render failed.

@@ -125,7 +125,13 @@ internal class MpvPlayerController(
             MpvEventId.PLAYBACK_RESTART -> {
                 // The seek (or the initial load) has landed and time-pos is trustworthy again.
                 pendingSeekTargetMs.set(-1L)
-                state = state.copy(isLoading = false)
+                // ⚠ Also the way back from end-of-file. `keep-open=yes` leaves the file loaded at
+                // EOF, so a seek backwards resumes it — but END_FILE had cleared `fileLoaded` and
+                // set `isEnded`, and nothing else ever cleared them. The player then stayed
+                // "ended" forever: the picture never updated and play/seek did nothing.
+                fileLoaded = true
+                val paused = mpv.getPropertyBoolean("pause") == true
+                state = state.copy(isLoading = false, isEnded = false, isPlaying = !paused)
             }
             MpvEventId.PROPERTY_CHANGE -> handlePropertyChange(ev)
         }
@@ -147,7 +153,13 @@ internal class MpvPlayerController(
                 state = state.copy(isPlaying = !paused && fileLoaded)
             }
             "eof-reached" -> {
-                if (ev.propertyFlag == true) state = state.copy(isEnded = true, isPlaying = false)
+                // Both directions: mpv clears this when a seek moves off the end, and the UI has
+                // to leave its ended state with it.
+                state = if (ev.propertyFlag == true) {
+                    state.copy(isEnded = true, isPlaying = false)
+                } else {
+                    state.copy(isEnded = false)
+                }
             }
             "paused-for-cache" -> {
                 // Rebuffering, not an error — this is what drives the spinner.
@@ -183,7 +195,16 @@ internal class MpvPlayerController(
 
     // --- transport ---------------------------------------------------------------------------
 
-    override fun play() { mpv.setPropertyBoolean("pause", false) }
+    override fun play() {
+        // ⚠ At end-of-file with `keep-open=yes`, clearing `pause` does nothing at all — mpv sits
+        // on the last frame. Pressing play on a finished episode therefore has to seek off the
+        // end first, which is also what libVLC does implicitly when it replays finished media.
+        if (mpv.getPropertyBoolean("eof-reached") == true) {
+            println("$TAG: play() at EOF — restarting from the beginning")
+            mpv.command("seek", "0", "absolute")
+        }
+        mpv.setPropertyBoolean("pause", false)
+    }
 
     /** Idempotent by construction: this sets the pause flag, it does not toggle it. */
     override fun pause() { mpv.setPropertyBoolean("pause", true) }
@@ -192,6 +213,7 @@ internal class MpvPlayerController(
         val target = positionMs.coerceAtLeast(0L)
         pendingSeekTargetMs.set(target)
         pendingSeekStartedAtMs = System.currentTimeMillis()
+        println("$TAG: seekTo($target)")
         // "absolute" + "keyframes" is mpv's fast seek; exact seeking on a 4K remux can stall
         // for seconds while it decodes forward to the precise frame.
         mpv.command("seek", (target / 1000.0).toString(), "absolute+keyframes")
