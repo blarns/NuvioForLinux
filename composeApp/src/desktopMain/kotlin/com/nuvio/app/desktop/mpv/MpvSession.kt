@@ -80,7 +80,13 @@ internal class MpvSession private constructor(
      * ⚠ EDT only, from inside a Compose draw — that is the only place the EGL context is current.
      * [onFrameAvailable] is how a new frame gets a redraw scheduled at all.
      */
-    fun renderGpuFrame(width: Int, height: Int, onFrameAvailable: () -> Unit): Int? {
+    fun renderGpuFrame(
+        ctx: org.jetbrains.skia.DirectContext,
+        colorType: org.jetbrains.skia.ColorType,
+        width: Int,
+        height: Int,
+        onFrameAvailable: () -> Unit,
+    ): org.jetbrains.skia.Image? {
         if (!isGpu || stopped.get() || gpuFailed) return null
         val renderer = gpu ?: run {
             val created = MpvGpuRenderer.create(handle, com.nuvio.app.desktop.egl.EglSeam.xDisplay, width, height)
@@ -95,10 +101,9 @@ internal class MpvSession private constructor(
             gpu = created
             created
         }
-        // A false return means "no new frame", not "nothing to draw" — the previous frame is
-        // still in the texture and must be redrawn, or the video flickers between real frames.
-        renderer.render(width, height)
-        return renderer.textureId.takeIf { it != 0 }
+        // The same Image comes back when there is no new frame — the previous one is still in
+        // the texture and must be redrawn, or the video flickers between real frames.
+        return renderer.render(ctx, colorType, width, height)
     }
 
     /** Tells mpv the frame reached the screen; its timing depends on it. EDT only. */

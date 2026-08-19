@@ -1,0 +1,38 @@
+#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  SIGSEGV (0xb) at pc=0x00007d70a258a626, pid=37881, tid=37916
+#
+# JRE version: OpenJDK Runtime Environment (21.0.11+10) (build 21.0.11+10-1-24.04.2-Ubuntu)
+# Java VM: OpenJDK 64-Bit Server VM (21.0.11+10-1-24.04.2-Ubuntu, mixed mode, sharing, tiered, compressed oops, compressed class ptrs, g1 gc, linux-amd64)
+# Problematic frame:
+# C  0x00007d6fd04a12d4
+#
+# Core dump will be written. Default location: Core dumps may be processed with "/usr/lib/systemd/systemd-coredump %P %u %g %s %t 9223372036854775808 %h %d" (or dumping to /home/benld/NuvioForLinux/composeApp/core.37881)
+#
+# If you would like to submit a bug report, please visit:
+#   https://bugs.launchpad.net/ubuntu/+source/openjdk-21
+# The crash happened outside the Java Virtual Machine in native code.
+# See problematic frame for where to report the bug.
+#
+
+---------------  S U M M A R Y ------------
+
+Command Line: -Dcompose.application.configure.swing.globals=true -Dcompose.application.resources.dir=/home/benld/NuvioForLinux/composeApp/build/compose/tmp/prepareAppResources --add-opens=java.base/sun.misc=ALL-UNNAMED -Dfile.encoding=UTF-8 -Duser.country=US -Duser.language=en -Duser.variant com.nuvio.app.MainKt
+
+Host: 12th Gen Intel(R) Core(TM) i7-1255U, 12 cores, 62G, Linux Mint 22.3 Zena
+Time: Wed Aug 19 02:03:46 2026 CDT elapsed time: 316.759011 seconds (0d 0h 5m 16s)
+
+---------------  T H R E A D  ---------------
+
+Current thread (0x00007d71f4c9db50):  JavaThread "AWT-EventQueue-0" [_thread_in_native, id=37916, stack(0x00007d711df74000,0x00007d711e074000) (1024K)]
+
+Stack: [0x00007d711df74000,0x00007d711e074000],  sp=0x00007d711e06d9f8,  free space=998k
+Native frames: (J=compiled Java code, j=interpreted, Vv=VM code, C=native code)
+C  0x00007d6fd04a12d4
+C  0x00007d70a262e86b
+C  0x00007d70a1b7cf35
+C  0x00007d70a17ae5be
+C  0x00007d70a17af524
+C  0x00007d70a17b0758
+C  [libmpv.so+0x17d067]

@@ -4,6 +4,11 @@ import com.nuvio.app.desktop.egl.Egl
 import com.nuvio.app.desktop.egl.Gl
 import com.sun.jna.Memory
 import com.sun.jna.Pointer
+import org.jetbrains.skia.BackendTexture
+import org.jetbrains.skia.ColorType
+import org.jetbrains.skia.DirectContext
+import org.jetbrains.skia.Image
+import org.jetbrains.skia.SurfaceOrigin
 import java.util.concurrent.atomic.AtomicBoolean
 
 private const val TAG = "NuvioMpvGpuRender"
@@ -30,10 +35,22 @@ internal class MpvGpuRenderer private constructor(
 
     @Volatile private var disposed = false
 
-    /** The texture mpv renders into, and the FBO that wraps it. Both are ours to delete. */
-    var textureId: Int = 0
-        private set
+    /** The texture mpv renders into, and the FBO that wraps it. */
+    private var textureId: Int = 0
     private var fboId: Int = 0
+
+    /**
+     * Skia's view of that texture, built ONCE per texture rather than per frame.
+     *
+     * ⚠ `adoptTextureFrom` means what it says: Skia takes **ownership** and deletes the GL
+     * texture when the image is closed. Wrapping the texture fresh every frame and closing the
+     * old image therefore destroyed the texture mpv was still rendering into, and Skia then
+     * handed the recycled id to the UI — which looked like wrong colours and a corrupted
+     * overlay, not like a use-after-free. One image per texture, closed only on resize/teardown.
+     */
+    private var image: Image? = null
+    private var backend: BackendTexture? = null
+    private var adopted = false
 
     private val frameReady = AtomicBoolean(false)
 
@@ -58,14 +75,16 @@ internal class MpvGpuRenderer private constructor(
      *
      * EDT only, with the EGL context current.
      */
-    fun render(w: Int, h: Int): Boolean {
-        if (disposed || w <= 0 || h <= 0) return false
-        if (!ensureTarget(w, h)) return false
+    fun render(ctx: DirectContext, colorType: ColorType, w: Int, h: Int): Image? {
+        if (disposed || w <= 0 || h <= 0) return null
+        if (!ensureTarget(ctx, colorType, w, h)) return null
 
         // ADVANCED_CONTROL is set, so mpv expects the client to ask whether a frame is actually
         // pending rather than assuming the update callback means "render now".
-        val flags = mpv.mpv_render_context_update(ctx)
-        if (flags and MPV_RENDER_UPDATE_FRAME == 0L) return false
+        // No new frame is not an error: the previous one is still in the texture and gets
+        // redrawn, which is what keeps the picture up during Compose's own repaints.
+        val flags = mpv.mpv_render_context_update(this.ctx)
+        if (flags and MPV_RENDER_UPDATE_FRAME == 0L) return image
         frameReady.set(false)
 
         val fbo = MpvOpenGLFbo(fboId, width, height, 0).apply { write() }
@@ -76,16 +95,21 @@ internal class MpvGpuRenderer private constructor(
             MpvRenderParam.OPENGL_FBO to fbo.pointer,
             MpvRenderParam.FLIP_Y to flip,
         )
-        val rc = mpv.mpv_render_context_render(ctx, params)
+        val rc = mpv.mpv_render_context_render(this.ctx, params)
+        // ⚠ mpv leaves ITS framebuffer bound. Everything Compose draws afterwards — the whole
+        // controls overlay — would go into mpv's video texture instead of the window, which
+        // looks like a corrupted UI rather than like a GL error. Rebinding the default
+        // framebuffer here is not optional.
+        Gl.bindFramebuffer(0)
         if (rc < 0) {
             println("$TAG: render failed rc=$rc")
-            return false
+            return null
         }
-        return true
+        return image
     }
 
-    /** (Re)creates the texture/FBO pair when the surface size changes. EDT only. */
-    private fun ensureTarget(w: Int, h: Int): Boolean {
+    /** (Re)creates the texture/FBO/Image set when the surface size changes. EDT only. */
+    private fun ensureTarget(ctx: DirectContext, colorType: ColorType, w: Int, h: Int): Boolean {
         if (textureId != 0 && w == width && h == height) return true
         releaseTarget()
         width = w
@@ -117,15 +141,30 @@ internal class MpvGpuRenderer private constructor(
         }
         textureId = tex
         fboId = fbo
-        println("$TAG: render target ${w}x$h (tex=$tex fbo=$fbo)")
+        val bt = BackendTexture.makeGL(w, h, false, tex, Gl.TEXTURE_2D, Gl.RGBA8)
+        backend = bt
+        image = Image.adoptTextureFrom(ctx, bt, SurfaceOrigin.TOP_LEFT, colorType)
+        adopted = true
+        println("$TAG: render target ${w}x$h (tex=$tex fbo=$fbo, colorType=$colorType)")
         return true
     }
 
     private fun releaseTarget() {
+        // Order matters: the FBO references the texture, and closing the image is what DELETES
+        // that texture (Skia adopted it), so the FBO goes first — and the texture must NOT also
+        // be deleted here, which would be a double free.
         Gl.deleteFramebuffer(fboId)
-        Gl.deleteTexture(textureId)
         fboId = 0
+        if (adopted) {
+            runCatching { image?.close() }
+        } else if (textureId != 0) {
+            Gl.deleteTexture(textureId)
+        }
+        runCatching { backend?.close() }
+        image = null
+        backend = null
         textureId = 0
+        adopted = false
     }
 
     /**

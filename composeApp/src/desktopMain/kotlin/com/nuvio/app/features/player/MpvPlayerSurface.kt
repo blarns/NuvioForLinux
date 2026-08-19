@@ -29,20 +29,25 @@ import com.nuvio.app.features.discord.DiscordRichPresence
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.jetbrains.skia.BackendTexture
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorInfo
 import org.jetbrains.skia.ColorSpace
 import org.jetbrains.skia.ColorType
-import org.jetbrains.skia.Image
 import org.jetbrains.skia.ImageInfo
-import org.jetbrains.skia.SurfaceOrigin
 
 private const val TAG = "NuvioPlayerMpv"
 
-private const val GL_TEXTURE_2D = 0x0DE1
-private const val GL_RGBA8 = 0x8058
+
+/**
+ * How Skia is told to read the texture mpv rendered into.
+ *
+ * Overridable for one reason: a wrong choice here is a *colour* bug, not an error — the picture
+ * plays perfectly with the channels swapped, which is what shipped in the first GPU build. Being
+ * able to flip it without a rebuild is what makes it a one-minute check on other hardware.
+ */
+private val MPV_TEXTURE_COLOR_TYPE: ColorType =
+    if (System.getenv("NUVIO_MPV_TEXTURE") == "bgra") ColorType.BGRA_8888 else ColorType.RGBA_8888
 
 /**
  * Draws mpv's frame straight from the GL texture it rendered into — no readback, no copy.
@@ -53,9 +58,7 @@ private const val GL_RGBA8 = 0x8058
  * frame; [requestRedraw] is what schedules that.
  *
  * ⚠ `resetGLAll()` is mandatory, not defensive: mpv changes GL state behind Skia's back, and
- * without it Skia draws with a stale cached view of the context. Equally mandatory is closing the
- * Image and BackendTexture every frame — both are native handles behind a Cleaner, and leaving
- * them to GC leaked ~1 MB per 1000 frames at 4K in the soak.
+ * without it Skia draws with a stale cached view of the context.
  */
 private fun DrawScope.drawMpvTexture(session: MpvSession, tick: Int, requestRedraw: () -> Unit) {
     @Suppress("UNUSED_EXPRESSION") tick   // subscribes this draw scope to mpv's frame signal
@@ -64,16 +67,14 @@ private fun DrawScope.drawMpvTexture(session: MpvSession, tick: Int, requestRedr
     val h = size.height.toInt()
     if (w <= 0 || h <= 0) return
 
-    val texture = session.renderGpuFrame(w, h, requestRedraw) ?: return
+    val image = session.renderGpuFrame(ctx, MPV_TEXTURE_COLOR_TYPE, w, h, requestRedraw) ?: return
+    // ⚠ mpv changed GL state behind Skia's back; without this Skia draws against a stale
+    // cached view of the context.
     ctx.resetGLAll()
-    val backend = BackendTexture.makeGL(w, h, false, texture, GL_TEXTURE_2D, GL_RGBA8)
-    val image = Image.adoptTextureFrom(ctx, backend, SurfaceOrigin.TOP_LEFT, ColorType.RGBA_8888)
-    try {
-        drawContext.canvas.nativeCanvas.drawImage(image, 0f, 0f)
-    } finally {
-        image.close()
-        backend.close()
-    }
+    // The Image is owned by the renderer and lives as long as its texture, so nothing is closed
+    // here — and nothing may be, since Compose draws into a RECORDING canvas that is replayed
+    // after this function returns.
+    drawContext.canvas.nativeCanvas.drawImage(image, 0f, 0f)
     session.reportGpuSwap()
 }
 
@@ -204,7 +205,9 @@ internal fun MpvPlayerSurface(
             }
             .drawBehind {
                 if (session.isGpu) {
-                    drawMpvTexture(session, gpuFrameTick) { scope.launch(Dispatchers.Main) { gpuFrameTick++ } }
+                    drawMpvTexture(session, gpuFrameTick) {
+                        scope.launch(Dispatchers.Main) { gpuFrameTick++ }
+                    }
                     return@drawBehind
                 }
                 val frame = currentFrame ?: return@drawBehind
