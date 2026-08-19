@@ -826,3 +826,64 @@ accidental default. It must be decided before the mpv path becomes the default.
 | Subtitle-default decision (above) | ⏳ needs a product call |
 | **GPU render path (`MPV_RENDER_API_TYPE_OPENGL`) on the EGL context** | **not started — now the critical path** |
 | Packaging (`libmpv2` dep, AppImage bundling) | not started |
+
+---
+
+## Revision 2026-08-19b — the GPU path works, and it is the whole point
+
+`hwdec-current=vaapi` — zero-copy — **inside the app**, drawing into Compose's own Skia context.
+Same 4K HEVC remux, same window (1920×1111), same machine, 30s of steady playback:
+
+| Engine / path | CPU | RSS |
+| --- | --- | --- |
+| VLCJ (shipping) | 383% | 6.37 GB |
+| libmpv, SOFTWARE render (`vaapi-copy`) | 183%, **but only rendering 7 of every 24 frames** | 1.60 GB |
+| **libmpv, GPU render (`vaapi`)** | **26.6%** | **1.11 GB** |
+
+Unlike the software figure, this one is like-for-like: playback runs at real time (the timeline
+advances 31s in 31.2s of wall clock), colours are correct, and the controls overlay composites
+normally on top.
+
+### How it fits together
+
+- `EglRedrawer` already builds Compose's EGL context; `EglSeam` publishes the Skia `DirectContext`
+  and the X11 display so mpv can share them. No second context — that would mean a copy.
+- `Gl` resolves the few GL entry points through `eglGetProcAddress`, never by `dlopen`ing libGL,
+  which is how a process ends up back on GLX's dispatch table.
+- The mpv render context is created **on the first draw**, not at session creation: it probes the
+  live GL context, so it needs the EDT *and* a current context, and only the draw scope has both.
+- The tier is chosen from `EglRenderer.isActive`. On GLX `hwdec=vaapi` degrades to software with no
+  error, so when EGL is not live the session stays on the software renderer.
+
+### ⚠ Two GL-lifetime traps, both of which look like something else
+
+- **`Image.adoptTextureFrom` means ADOPT.** Skia takes ownership and deletes the GL texture when
+  the image is closed. Wrapping mpv's texture fresh every frame and closing the previous image
+  destroys the texture mpv is still rendering into; Skia then hands the recycled id to the UI. It
+  presents as **wrong colours and a corrupted overlay**, not as a use-after-free, and it cost two
+  builds chasing a non-existent channel-order bug. Adopt once per texture, close on resize/teardown.
+- **mpv leaves its own framebuffer bound after rendering.** Everything Compose draws next lands in
+  the video texture instead of the window. Rebind the default framebuffer after every render.
+
+Also: nothing may be closed inside the draw scope. Compose draws into a **recording canvas** that
+skiko replays afterwards, so a handle freed in `drawBehind` is freed before it is used.
+
+### Subtitles: matched to VLCJ, on purpose
+
+`MpvPlayerController.getSubtitleTracks()` now reports `isSelected = false` for every track,
+mirroring `VlcjPlayerController`'s stub deliberately. Reporting honestly made the app's "no
+preferred subtitle language" branch disable the track mpv had auto-selected, which silently turned
+embedded subtitles off on default installs. Nothing in the UI reads the flag — `SubtitleModal`
+marks the active row from the screen's own `selectedIndex`.
+
+### Status
+
+| Piece | State |
+| --- | --- |
+| **GPU render path on the EGL context** | ✅ **done — `vaapi`, 26.6% CPU on 4K in the app** |
+| SOFTWARE render path | ✅ done — fine at 1080p, cannot keep up with 4K (the fallback) |
+| Subtitle default | ✅ matched to VLCJ |
+| Source-resolution screenshots on the mpv path | ✅ done |
+| Packaging (`libmpv2` dep, AppImage bundling) | not started |
+| Long soak of the in-app GPU path (leaks, resize, engine switching) | not started |
+| Making either flag the default | not started — both still opt-in |
