@@ -234,7 +234,11 @@ internal class MpvPlayerController(
         // end first, which is also what libVLC does implicitly when it replays finished media.
         if (mpv.getPropertyBoolean("eof-reached") == true) {
             println("$TAG: play() at EOF — restarting from the beginning")
-            mpv.command("seek", "0", "absolute")
+            // ⚠ Through seekTo, not a bare `seek` command. seekTo is what records that a seek is
+            // outstanding, which is what puts a spinner up when one does not land — and an EOF
+            // replay is precisely where that was first seen (a stream that never resumed, with
+            // no spinner). A second code path issuing seeks would skip that bookkeeping.
+            seekTo(0L)
         }
         mpv.setPropertyBoolean("pause", false)
     }
@@ -268,6 +272,10 @@ internal class MpvPlayerController(
         // would drop the per-file options set alongside the original loadfile.
         lastLoadedKey = null
         fileLoaded = false
+        // A retry re-opens the stream, which takes as long as the original open did — so it has
+        // to say "loading" the way loadMedia does, or the UI sits on the error's frozen frame
+        // with no sign that anything is happening.
+        state = state.copy(isLoading = true, isEnded = false)
         mpv.command("loadfile", url, "replace")
     }
 

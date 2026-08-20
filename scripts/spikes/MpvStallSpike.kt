@@ -258,6 +258,27 @@ fun main(args: Array<String>) {
     check("frames flow again after the stall", frames.get() > framesBefore,
         "frames ${framesBefore} -> ${frames.get()}")
 
+    // --- 4. the EOF replay, which reaches its seek through play() -----------------------------
+    // ⚠ The reported stall happened after an end-of-file REPLAY, and that path never calls
+    // seekTo: `play()` seeks internally when `eof-reached` is set. If it issues that seek without
+    // recording one is outstanding, the spinner signal is never armed and the original symptom
+    // returns on the exact path that produced it. So: play to the end, cut the source off, and
+    // press play.
+    if (durationMs > 20_000) {
+        ctrl.seekTo(durationMs - 3_000)
+        val reachedEof = waitFor(60_000) { handle.getPropertyBoolean("eof-reached") == true }
+        check("reaches end of file", reachedEof, "snapshot=${ctrl.currentSnapshot()}")
+        if (reachedEof) {
+            // The back-cache is 1 MiB, so position 0 was evicted long ago: replaying has to go
+            // back to the network, and the network is about to go quiet.
+            server.credit.set(0)
+            ctrl.play()
+            Thread.sleep(3_000)
+            check("a replay from EOF into a dead source shows a spinner",
+                ctrl.currentSnapshot().isLoading, "snapshot=${ctrl.currentSnapshot()}")
+        }
+    }
+
     watching.set(false)
     check("isLoading never contradicted mpv for longer than a poll", violations.get() == 0,
         "violations=${violations.get()} worst=${worstViolationMs.get()}ms")
