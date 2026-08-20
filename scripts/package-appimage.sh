@@ -15,6 +15,19 @@
 #   4. AppRun points VLCJ at the bundled VLC via LD_LIBRARY_PATH + VLC_PLUGIN_PATH
 #   5. appimagetool packs AppDir -> Nuvio-<version>-x86_64.AppImage
 #
+# ⚠ libmpv is deliberately NOT bundled. The experimental mpv engine (NUVIO_MPV=1) needs client
+# API 2.x, i.e. libmpv.so.2, which first appeared in mpv 0.36 — Ubuntu 22.04 and Debian 12 ship
+# 0.34/0.35 (libmpv.so.1), so the staged 22.04 bundle CANNOT supply one, and taking this host's
+# 24.04 copy instead would drag the AppImage's glibc floor from 2.35 up to 2.38, which is the
+# exact thing build-vlc-bundle.sh exists to prevent. So: mpv uses the HOST's libmpv when the user
+# has it, and VLCJ (bundled, always present) is used when they do not.
+#
+# ⚠ The risk that creates, and it is REAL, not theoretical: AppRun puts the bundled 22.04
+# libraries FIRST on LD_LIBRARY_PATH, so a host libmpv resolves any same-soname library against
+# the bundle. ffmpeg is safe (soname 58 vs 60 — they cannot shadow each other), but libva is NOT:
+# measured with the 22.04 bundle in front, mpv reported hwdec-current=no — silent software decode
+# of 4K. libva is now excluded from both bundling paths, which restored hwdec-current=vaapi.
+#
 # Tools (extracted, NOT run as AppImages — the host's AppImageLauncher deletes them on exec):
 #   appimage-build/tools/appimagetool.AppDir/usr/bin/appimagetool
 #   appimage-build/tools/excludelist            (AppImage/pkg2appimage)
@@ -109,6 +122,11 @@ else
       [ -n "${SEEN[$base]:-}" ] && continue
       SEEN[$base]=1
       case "$path" in "$APPDIR"/*) continue ;; esac       # already ours
+      # ⚠ Never libva — see the note at the top of this file and in build-vlc-bundle.sh. A
+      # bundled libva against the host's VA driver silently drops hardware decoding to none.
+      case "$base" in libva.so*|libva-drm.so*|libva-x11.so*|libva-glx.so*)
+        skipped=$((skipped+1)); continue ;;
+      esac
       is_excluded "$base" && { skipped=$((skipped+1)); continue; }
       cp -aL "$path" "$APPDIR/usr/lib/$base" && copied=$((copied+1))
     done < <(ldd "$sofile" 2>/dev/null)

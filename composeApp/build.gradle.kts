@@ -673,7 +673,12 @@ tasks.matching { it.name == "prepareAppResources" }.configureEach {
 
 val patchDebRecommends = tasks.register<PatchDebRecommendsTask>("patchDebRecommends") {
     debDirectory.set(layout.buildDirectory.dir("compose/binaries/main/deb"))
-    recommends.set("fonts-noto-color-emoji")
+    // ⚠ libmpv is a RECOMMENDS, not a Depends. The mpv engine is still opt-in behind
+    // NUVIO_MPV=1 and VLCJ is the default, so making every user install libmpv for a disabled
+    // feature would be wrong — this graduates to Depends if and when mpv becomes the default.
+    // `libmpv2` specifically: 22.04 and Debian 12 ship libmpv1 (client API 1.x), which this
+    // binding refuses, so an alternative dep on it would install something unusable.
+    recommends.set("fonts-noto-color-emoji, libmpv2")
     extraDepends.set("vlc-plugin-base | vlc")
     executables.set("torrserver")
 }

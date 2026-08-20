@@ -216,9 +216,27 @@ internal class MpvHandle private constructor(private var handle: Pointer) {
         runCatching { mpv.mpv_error_string(code) }.getOrNull() ?: "error $code"
 
     companion object {
-        /** True when libmpv is present and loadable — checked before any attempt to use it. */
+        /**
+         * True when libmpv is present, loadable, and NEW ENOUGH — checked before any attempt to
+         * use it.
+         *
+         * ⚠ The version half is not paranoia. Ubuntu 22.04 and Debian 12 ship mpv 0.34/0.35,
+         * whose library is `libmpv.so.1` with client API 1.x; this binding's structs and render
+         * API are 2.x. On such a machine `Native.load("mpv")` can still succeed through the
+         * `libmpv.so` symlink, and the mismatch would surface as corrupt event data rather than
+         * as a load error. Falling back to VLCJ is the right answer there.
+         */
         val isAvailable: Boolean by lazy {
-            runCatching { MpvLibrary.INSTANCE.mpv_client_api_version() != 0 }
+            runCatching {
+                val v = MpvLibrary.INSTANCE.mpv_client_api_version()
+                val major = (v shr 16) and 0xFFFF
+                if (major < 2) {
+                    println("$TAG: libmpv client API $major.x is too old (2.x required) — using VLCJ")
+                    false
+                } else {
+                    true
+                }
+            }
                 .onFailure { println("$TAG: libmpv unavailable: ${it.message}") }
                 .getOrDefault(false)
         }

@@ -925,3 +925,106 @@ S1E2 → S1E3 on its own.
 been open for over an hour and had taken 150 rapid seeks, so a dead debrid URL is the likely
 cause rather than the engine — but it was not isolated, and `pacingReport()` should grow
 `pause` / `core-idle` / `paused-for-cache` before the next attempt so a stall names its own reason.
+
+---
+
+## Revision 2026-08-20 — the stall, the soak, and packaging
+
+### The stall is understood, and it was two defects (not the dead link)
+
+Reproduced deterministically instead of waiting for it to happen again: `MpvStallSpike.kt` serves a
+local file over an HTTP server that hands out a **shared byte budget** and then goes quiet without
+closing the socket — a dead link as mpv sees it, as opposed to a closed connection (an error) or a
+truncated one (an end of file). Run it with `scripts/spikes/run-mpv-stall-spike.sh <big file>`.
+
+Two things were wrong, and neither needed a dead debrid URL:
+
+- ⚠ **An unlanded seek was reported as normal playback.** `seekTo` moves the timeline to the target
+  immediately, mpv reports `paused-for-cache` as **null** while it re-opens the demuxer, and nothing
+  else said "waiting" — so the picture froze on the old frame with no spinner, which is exactly what
+  was seen at 00:02. A seek outstanding for more than 400 ms now reports `isLoading`, and keeps
+  doing so past the 8 s settle timeout that stops the timeline lying about the position.
+- ⚠ **`isLoading` was cleared unconditionally** on `FILE_LOADED` and `PLAYBACK_RESTART`.
+  `paused-for-cache` is an *observed* property: it only notifies on a **change**, so clearing the
+  flag while mpv was already starved left the UI contradicting mpv with no further event able to
+  correct it. Both now read mpv's live state.
+
+`pacingReport()` gained `pause` / `core-idle` / `paused-for-cache` / `cache-buffering-state` /
+`demuxer-cache-time` / `eof-reached`, and the GPU pacing line prints **STALLED** when five seconds
+pass with no frame while the player believes it is playing. A stall now names its own reason.
+
+The spike was checked against the *unfixed* code — two checks fail there — because a green test
+that cannot fail proves nothing. It also refuses to run on a file small enough to be served whole,
+which is how its first run reported green on a scenario that never happened.
+
+### The soak: the production GPU path, created and destroyed 12 times at 4K
+
+`scripts/spikes/run-mpv-gpu-soak.sh <file> [second-file] [cycles]` drives the **production**
+`MpvGpuRenderer` / `MpvPlayerController` / `MpvEngineOptions` against a real X11-platform EGL
+context from the soak shim — not a copy of them. Each cycle plays one source, then issues a second
+`loadfile` **on the same controller and the same render context** (what the surface does on a source
+change, and where the end-of-file latches were originally found), then tears the whole thing down.
+
+What is measured, in order of sharpness:
+
+- **GL texture ids** — a probe id taken after each cycle. Ids that climb mean textures were never
+  deleted; the driver reuses ids that were. Flat at 1 across every cycle.
+- **Threads and fds**, by name from `/proc/self/task/*/comm` so a leak is attributed, not just
+  counted. Flat. The +3 threads seen at first are JVM GC threads spinning up under load — which is
+  precisely why the names are printed.
+- **Post-GC RSS**, last and least: RSS is a poor leak signal here (see the frame-path false alarm).
+
+⚠ It also caught a real teardown defect: freeing the render context under a *playing* file makes mpv
+re-initialise its video output against a context that no longer exists and report that as a playback
+**ERROR** — i.e. leaving the player would surface as a failed stream. `MpvSession.dispose()` now
+stops playback first.
+
+### Packaging
+
+**The deb.** `libmpv2` is a **Recommends**, not a Depends: mpv is still opt-in behind `NUVIO_MPV=1`
+and VLCJ is the default, so a hard dependency would force libmpv on every user for a disabled
+feature. It graduates to Depends when the flag does. ⚠ `PatchDebRecommendsTask` only adds a
+`Recommends:` field when none exists, so this had to extend the existing string — a second
+`recommends.set(...)` would silently do nothing.
+
+⚠ **`libmpv2`, not `libmpv2 | libmpv1`.** 22.04 and Debian 12 ship mpv 0.34/0.35, whose library is
+`libmpv.so.1` with client API 1.x; this binding is 2.x. `MpvHandle.isAvailable` now rejects a major
+version below 2 rather than trusting a load that can succeed through a `libmpv.so` symlink and then
+misread every event struct.
+
+⚠ **`Native.load("mpv")` resolves `libmpv.so` — which ships in `libmpv-dev`, not in `libmpv2`.**
+Every measurement in this project ran against a symlink no packaged install has. The soname is now
+tried explicitly, and the binding spike loads that leg directly rather than trusting JNA's
+versioned-name search to cover it.
+
+**The AppImage does NOT bundle libmpv, and it must not.** API 2.x means `libmpv.so.2`, which first
+appeared in mpv 0.36; the staged 22.04 bundle cannot supply one, and taking this host's 24.04 copy
+would drag the AppImage's glibc floor from 2.35 to 2.38 — the exact thing `build-vlc-bundle.sh`
+exists to prevent. So mpv uses the **host's** libmpv when the user has it, and VLCJ (bundled,
+always present) when they do not.
+
+⚠ **That is only safe because of a bug this uncovered.** AppRun puts the bundled 22.04 libraries
+first on `LD_LIBRARY_PATH`, so a host libmpv resolves same-soname libraries against the bundle.
+Measured with the bundle in front: **`hwdec-current=no`** — 4K decoded in software, no error
+anywhere, the precise silent failure this whole project exists to eliminate. Bisected to the
+bundled **libva**: it dlopens the *host's* VA driver (`/usr/lib/.../dri/*_drv_video.so`) and an old
+libva against a newer driver fails the handshake silently. Removing `libva.so.2` / `libva-drm` /
+`libva-x11` from the bundle restored `hwdec-current=vaapi` on the same run, so both bundling paths
+now exclude them. It costs VLC nothing: libVLC already refuses hardware decode through the `vmem`
+output this app renders with, which is why the mpv engine exists at all.
+
+Acceptance for a packaged build is therefore **not "it launches"** — it is `hwdec-current=vaapi` in
+the log. `LD_LIBRARY_PATH="$BUNDLE/vlc:$BUNDLE/lib" run-mpv-gpu-soak.sh <4k> <1080> 3` reproduces
+the check without building an AppImage: 13/13 green after the fix, `hwdec=vaapi` in every cycle.
+
+### Status after this revision
+
+| Piece | State |
+| --- | --- |
+| Stall diagnosis + spinner correctness | ✅ 19/19, and 2 checks fail with the fix reverted |
+| GPU soak, 12 × 4K create/dispose + source switch | ✅ 13/13 — tex ids flat, fds flat, threads flat |
+| Teardown no longer reports a playback error | ✅ covered by the soak |
+| deb: `libmpv2` Recommends | ✅ verified on the built artifact with `dpkg-deb -f` |
+| AppImage: host libmpv, libva never bundled | ✅ verified by the bundle-env run above |
+| An in-app soak over a real film (Compose lifecycle) | ⬜ needs a human driving the UI |
+| Defaults: `NUVIO_MPV=1` / `NUVIO_EGL=1` still opt-in | ⬜ ben's call |

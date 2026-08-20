@@ -60,6 +60,14 @@ docker run --rm \
         [ -n "${SEEN[$b]:-}" ] && continue; SEEN[$b]=1
         case "$path" in /out/*) continue;; esac
         case "$b" in libvlc*.so*) continue;; esac   # libvlc/libvlccore already in /out/vlc
+        # ⚠ NEVER bundle libva. It dlopens the HOST driver (/usr/lib/.../dri/*_drv_video.so),
+        # and an old bundled libva against a newer host driver fails the handshake SILENTLY:
+        # measured on 24.04 with the 22.04 bundle ahead on LD_LIBRARY_PATH, mpv reported
+        # hwdec-current=no — i.e. 4K decoded in software at several times the CPU, no error
+        # anywhere. Removing these three restored hwdec-current=vaapi on the same run.
+        # Costs VLC nothing here: libVLC already refuses hardware decode through the vmem
+        # video output this app renders with, which is why the mpv engine exists at all.
+        case "$b" in libva.so*|libva-drm.so*|libva-x11.so*|libva-glx.so*) continue;; esac
         is_excl "$b" && continue
         cp -aL "$path" "/out/lib/$b"
       done < <(ldd "$so" 2>/dev/null)
