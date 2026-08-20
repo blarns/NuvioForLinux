@@ -23,6 +23,7 @@ import com.nuvio.app.features.streams.StreamBadgeSettingsRepository
 import com.nuvio.app.features.streams.StreamItem
 import com.nuvio.app.features.streams.StreamParser
 import com.nuvio.app.features.streams.StreamsUiState
+import com.nuvio.app.features.streams.shouldSkipStreamReload
 import com.nuvio.app.core.concurrency.NuvioBlockingDispatcher
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -138,9 +139,14 @@ object PlayerStreamsRepository {
         val requestKey = "$type::$videoId::$season::$episode"
         val current = stateFlow.value
         if (
-            !forceRefresh &&
-            requestKeyHolder() == requestKey &&
-            (current.groups.isNotEmpty() || current.emptyStateReason != null || current.isAnyLoading)
+            shouldSkipStreamReload(
+                forceRefresh = forceRefresh,
+                sameRequestKey = requestKeyHolder() == requestKey,
+                hasSettledGroups = current.groups.any { !it.isLoading },
+                hasEmptyStateReason = current.emptyStateReason != null,
+                isAnyLoading = current.isAnyLoading,
+                isLoadJobActive = jobHolder()?.isActive == true,
+            )
         ) {
             return
         }

@@ -5,6 +5,20 @@ import kotlinx.coroutines.runBlocking
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.getString
 
+/**
+ * The label for a stream an addon gave no name to.
+ *
+ * ⚠ Resolved ONCE and never allowed to throw, rather than per read. [StreamItem.streamLabel] is
+ * read from the stream fan-out's sort comparator, which runs inside the load job — so the
+ * previous `runBlocking { getString(...) }` in the getter did a blocking resource read for every
+ * unnamed stream on every re-sort, and any failure propagated into the middle of that job. A
+ * throw there cancelled the whole load silently and left every source pinned at "loading": a
+ * spinner nothing would ever complete. A cached value with a plain fallback cannot do either.
+ */
+private val defaultStreamLabel: String by lazy {
+    runCatching { runBlocking { getString(Res.string.stream_default_name) } }.getOrDefault("Stream")
+}
+
 data class StreamItem(
     val name: String? = null,
     val title: String? = null,
@@ -24,7 +38,7 @@ data class StreamItem(
     val badges: List<StreamBadge> = emptyList(),
 ) {
     val streamLabel: String
-        get() = name ?: runBlocking { getString(Res.string.stream_default_name) }
+        get() = name ?: defaultStreamLabel
 
     val streamSubtitle: String?
         get() = description

@@ -547,11 +547,18 @@ fun HomeScreen(
                         }
                     }
                 }.awaitAll()
-                batch.forEach { candidate -> processedFreshContentIds += candidate.content.id }
+                // ⚠ Only candidates that actually got an answer count as processed. Marking an
+                // unavailable one processed is what removed it from the row: processed with no
+                // entry reads as "resolved to nothing".
+                batch.forEachIndexed { index, candidate ->
+                    if (batchResults[index] !is NextUpResolution.Unavailable) {
+                        processedFreshContentIds += candidate.content.id
+                    }
+                }
 
                 val resolvedBeforeBatch = freshResults.size
-                batchResults.filterNotNull().forEach { (contentId, item) ->
-                    freshResults[contentId] = item
+                batchResults.filterIsInstance<NextUpResolution.Resolved>().forEach { resolved ->
+                    freshResults[resolved.contentId] = resolved.entry
                 }
                 val batchResolvedCount = freshResults.size - resolvedBeforeBatch
                 if (batchResolvedCount > 0) {
@@ -613,12 +620,16 @@ fun HomeScreen(
                         }
                     }
                 }.awaitAll()
-                batch.forEach { candidate -> processedFreshContentIds += candidate.content.id }
+                batch.forEachIndexed { index, candidate ->
+                    if (batchResults[index] !is NextUpResolution.Unavailable) {
+                        processedFreshContentIds += candidate.content.id
+                    }
+                }
 
                 val resolvedBeforeBatch = freshResults.size
-                batchResults.filterNotNull().forEach { (contentId, item) ->
+                batchResults.filterIsInstance<NextUpResolution.Resolved>().forEach { resolved ->
                     if (cachedResolvedNextUpItems.size + freshResults.size < HomeContinueWatchingMaxRecentProgressItems) {
-                        freshResults[contentId] = item
+                        freshResults[resolved.contentId] = resolved.entry
                     }
                 }
                 if (freshResults.size > resolvedBeforeBatch) {
@@ -1005,7 +1016,7 @@ private suspend fun resolveHomeNextUpCandidate(
     showUnairedNextUp: Boolean,
     dismissedNextUpKeys: Set<String>,
     isTraktProgressActive: Boolean,
-): Pair<String, Pair<Long, ContinueWatchingItem>>? {
+): NextUpResolution {
     val contentId = completedEntry.content.id
     val meta = try {
         MetaDetailsRepository.fetch(
@@ -1016,7 +1027,12 @@ private suspend fun resolveHomeNextUpCandidate(
         if (error is CancellationException) throw error
         null
     }
-    if (meta == null) return null
+    // ⚠ "Could not ask" is NOT "there is nothing to watch next". This used to return null for
+    // both, and the caller marked the candidate processed either way — so a single failed
+    // metadata fetch made the show vanish from Continue Watching, and the empty result was
+    // written to the snapshot cache, which made it stick. Reporting it as unavailable leaves
+    // the row where it is and lets the next pass try again.
+    if (meta == null) return NextUpResolution.Unavailable
 
     val resolvedProgressEntries = if (isTraktProgressActive) {
         remapTraktProgressEntries(watchProgressEntries, contentId)
@@ -1037,15 +1053,16 @@ private suspend fun resolveHomeNextUpCandidate(
         preferFurthestEpisode = preferFurthestEpisode,
         showUnairedNextUp = showUnairedNextUp,
     )
-    if (action == null) return null
-    if (action.resumePositionMs != null) return null
+    // Below here the metadata answered and simply says there is nothing to line up next —
+    // a real result, and the row should go.
+    if (action == null) return NextUpResolution.NoNextUp
+    if (action.resumePositionMs != null) return NextUpResolution.NoNextUp
 
-    val nextEpisode = meta.videoForSeriesAction(action)
-    if (nextEpisode == null) return null
+    val nextEpisode = meta.videoForSeriesAction(action) ?: return NextUpResolution.NoNextUp
     val item = completedEntry.toContinueWatchingSeed(meta)
         .toUpNextContinueWatchingItem(nextEpisode)
     if (nextUpDismissKey(item.parentMetaId, item.nextUpSeedSeasonNumber, item.nextUpSeedEpisodeNumber) in dismissedNextUpKeys) {
-        return null
+        return NextUpResolution.NoNextUp
     }
 
     val sortTimestamp = if (item.isReleaseAlert) {
@@ -1053,7 +1070,27 @@ private suspend fun resolveHomeNextUpCandidate(
     } else {
         completedEntry.markedAtEpochMs
     }
-    return contentId to (sortTimestamp to item)
+    return NextUpResolution.Resolved(contentId, sortTimestamp to item)
+}
+
+/**
+ * What one Continue Watching "what's next" lookup came back with.
+ *
+ * The distinction that matters is [Unavailable] vs [NoNextUp]: only the latter means the row
+ * should disappear. Collapsing them into a null made every transient addon failure look like
+ * "you've finished this show".
+ */
+private sealed interface NextUpResolution {
+    data class Resolved(
+        val contentId: String,
+        val entry: Pair<Long, ContinueWatchingItem>,
+    ) : NextUpResolution
+
+    /** The metadata answered: there is no next episode to offer. */
+    data object NoNextUp : NextUpResolution
+
+    /** The metadata could not be fetched. Keep whatever is on screen and retry later. */
+    data object Unavailable : NextUpResolution
 }
 
 private fun MetaDetails.videoForSeriesAction(action: SeriesPrimaryAction): MetaVideo? {

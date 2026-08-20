@@ -55,10 +55,27 @@ private const val SEEK_SETTLE_TIMEOUT_MS = 8_000L
 // 4K, so this is also the cap on the frame path's native memory.
 private const val FRAME_RETAIN = 3
 
+@Volatile
 private var vlcjFactory: MediaPlayerFactory? = null
 
-private fun getVlcjFactory(): MediaPlayerFactory {
-    return vlcjFactory ?: run {
+/**
+ * Returns the shared factory with a use already counted against it.
+ *
+ * ⚠ Get-and-retain must be ONE atomic step. Split apart, a settings change could run
+ * [invalidateVlcjFactory] in the gap: it sees a use count of zero, calls `release()` on the
+ * native factory, and the player then gets built from freed memory — a JVM crash, not an
+ * exception. The window is narrow (changing subtitle appearance exactly as a video opens) but
+ * the failure is fatal, and the lock costs nothing on a path that runs once per video.
+ */
+private fun acquireVlcjFactory(): MediaPlayerFactory = synchronized(factoryLock) {
+    val factory = vlcjFactory ?: buildVlcjFactory().also { vlcjFactory = it }
+    factoryUsers[factory] = (factoryUsers[factory] ?: 0) + 1
+    factory
+}
+
+/** Caller must hold [factoryLock]. */
+private fun buildVlcjFactory(): MediaPlayerFactory {
+    run {
         val hwAccel = PlayerSettingsStorage.loadHwAccelEnabled() ?: true
         val audioOutput = PlayerSettingsStorage.loadAudioOutput()
         // Subtitle appearance (libVLC freetype module). Values are the raw VLC options;
@@ -75,9 +92,7 @@ private fun getVlcjFactory(): MediaPlayerFactory {
             add("--freetype-background-opacity=$subBgOpacity")
             add("--freetype-outline-thickness=$subOutline")
         }.toTypedArray()
-        val factory = MediaPlayerFactory(*args)
-        vlcjFactory = factory
-        factory
+        return MediaPlayerFactory(*args)
     }
 }
 
@@ -86,12 +101,6 @@ private fun getVlcjFactory(): MediaPlayerFactory {
 // release() at invalidation time.
 private val factoryLock = Any()
 private val factoryUsers = HashMap<MediaPlayerFactory, Int>()
-
-private fun retainFactory(factory: MediaPlayerFactory) {
-    synchronized(factoryLock) {
-        factoryUsers[factory] = (factoryUsers[factory] ?: 0) + 1
-    }
-}
 
 private fun releaseFactory(factory: MediaPlayerFactory) {
     val shouldRelease = synchronized(factoryLock) {
@@ -355,7 +364,7 @@ private fun VlcjPlayerSurface(
         }
     }
 
-    val playerFactory = remember { getVlcjFactory().also { retainFactory(it) } }
+    val playerFactory = remember { acquireVlcjFactory() }
     val mediaPlayer = remember {
         println("$TAG: Creating EmbeddedMediaPlayer with buffer callbacks")
         val player = playerFactory.mediaPlayers().newEmbeddedMediaPlayer()
@@ -452,6 +461,15 @@ private fun VlcjPlayerSurface(
             playerController = null
             PlayerControlBridge.controller = null
             PlayerControlBridge.isPlaying = false
+            // ⚠ Also hasMedia. Without it MPRIS kept reporting a Paused player forever after
+            // the user left playback — stale title, stale length, frozen position — because its
+            // "Stopped" branch needs both this and a null controller. The system media widget
+            // and playerctl went on offering Nuvio as a paused player whose Play button did
+            // nothing, until the app was restarted.
+            PlayerControlBridge.hasMedia = false
+            // Push the Stopped status out now rather than waiting for a poll that will never
+            // come again — this surface is going away.
+            PlayerControlBridge.onNowPlayingChanged?.invoke()
             DiscordRichPresence.clear()
         }
     }
@@ -668,8 +686,19 @@ private class VlcjPlayerController(
         }
     }
 
-    private fun bestPositionMs() =
-        lastGoodPositionMs.get().takeIf { it > 0L } ?: currentState.positionMs
+    // ⚠ An outstanding seek wins over the last confirmed position.
+    //
+    // Seeking while paused resumes briefly around setTime(), which makes libVLC fire `paused`
+    // afterwards — and that handler calls this. Without the pending-target term it answered with
+    // lastGoodPositionMs, which is only refreshed while playing and therefore still held the
+    // position from BEFORE the pause. The scrubber snapped back to where the user paused while
+    // the picture showed the frame they had seeked to, and only corrected itself once they
+    // pressed play again.
+    private fun bestPositionMs(): Long {
+        val pending = pendingSeekTargetMs.get()
+        if (pending >= 0L) return pending
+        return lastGoodPositionMs.get().takeIf { it > 0L } ?: currentState.positionMs
+    }
 
     private fun bestDurationMs() =
         lastGoodDurationMs.get().takeIf { it > 0L } ?: currentState.durationMs

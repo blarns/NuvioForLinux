@@ -299,7 +299,7 @@ object DownloadsRepository {
         val handle = DownloadsPlatformDownloader.start(
             request = request,
             onProgress = { downloadedBytes, totalBytes ->
-                mutateItem(item.id) { current ->
+                mutateItem(item.id, persist = false) { current ->
                     if (current.status != DownloadStatus.Downloading) {
                         current
                     } else {
@@ -348,7 +348,18 @@ object DownloadsRepository {
         activeHandles[item.id] = handle
     }
 
-    private fun mutateItem(downloadId: String, transform: (DownloadItem) -> DownloadItem) {
+    /**
+     * @param persist whether this change is worth writing to disk. Progress ticks are not:
+     * they arrive continuously during a download and the only thing lost by skipping them is a
+     * byte count, which the next status change (completed / failed / paused) writes anyway.
+     * Persisting each one re-encoded every download and rewrote the whole store — see the note
+     * on the throttle in DownloadsPlatformDownloader.
+     */
+    private fun mutateItem(
+        downloadId: String,
+        persist: Boolean = true,
+        transform: (DownloadItem) -> DownloadItem,
+    ) {
         var changed = false
         val updated = _uiState.value.items.map { item ->
             if (item.id == downloadId) {
@@ -361,7 +372,7 @@ object DownloadsRepository {
 
         if (changed) {
             publish(updated)
-            persist()
+            if (persist) persist()
         }
     }
 

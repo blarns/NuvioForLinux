@@ -76,9 +76,20 @@ internal object DesktopLegacyPrefsMigration {
     fun runIfNeeded() {
         val machineStore = DesktopStorage.store("nuvio_machine")
         if (machineStore.getBoolean(DONE_FLAG) == true) return
+        // ⚠ The done-flag is set ONLY on success. It used to be set unconditionally, outside
+        // this runCatching, so any transient failure — an I/O error, a locked prefs backing
+        // store, a BackingStoreException — permanently stranded the user's addons, profiles,
+        // watch progress and Trakt auth in the legacy location. The migration never ran again
+        // and the only trace was one line on stderr, which a launcher-started app discards.
+        // Leaving the flag unset means the next launch simply tries again; the migration
+        // already skips keys that are present, so a partial run resumes rather than clobbers.
         runCatching { migrate() }
-            .onFailure { System.err.println("LegacyPrefsMigration: failed: ${it.message}") }
-        machineStore.putBoolean(DONE_FLAG, true)
+            .onSuccess { machineStore.putBoolean(DONE_FLAG, true) }
+            .onFailure { error ->
+                System.err.println(
+                    "LegacyPrefsMigration: failed (${error.message}); will retry on next launch",
+                )
+            }
     }
 
     private fun migrate() {

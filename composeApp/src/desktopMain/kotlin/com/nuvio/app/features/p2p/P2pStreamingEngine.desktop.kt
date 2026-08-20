@@ -641,13 +641,43 @@ actual object P2pStreamingEngine {
     // via its HTTP API on 127.0.0.1:PORT.
     // -----------------------------------------------------------------------
     private class TorrServerBinary {
-        private var process: Process? = null
+        @Volatile private var process: Process? = null
         private val startMutex = Mutex()
         private val healthClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(2))
             .build()
 
         val baseUrl: String get() = "http://127.0.0.1:$PORT"
+
+        init {
+            // ⚠ A JVM exiting does NOT kill processes it started with ProcessBuilder — they are
+            // reparented to init and carry on. Nothing on the quit path stopped TorrServer
+            // either: shutdown() defers the stop into a coroutine, and the window-close handler
+            // never called it at all. So closing Nuvio after using P2P left a torrent daemon
+            // running in the background, still connected to the swarm and still advertising the
+            // user's IP, until they noticed and killed it by hand. This hook is the backstop
+            // that makes that impossible regardless of how the app exits.
+            runCatching {
+                Runtime.getRuntime().addShutdownHook(
+                    Thread(null, { runCatching { destroyNow() } }, "torrserver-shutdown", 0),
+                )
+            }
+        }
+
+        /**
+         * Kills the child immediately, without the graceful HTTP shutdown [stop] tries first.
+         *
+         * Called from the JVM shutdown hook, where there is no time budget for a polite
+         * request-and-wait and the only thing that matters is that the process is gone.
+         */
+        fun destroyNow() {
+            val proc = process ?: return
+            process = null
+            runCatching { proc.destroy() }
+            runCatching {
+                if (!proc.waitFor(2, TimeUnit.SECONDS)) proc.destroyForcibly()
+            }.onFailure { runCatching { proc.destroyForcibly() } }
+        }
 
         suspend fun start() = startMutex.withLock {
             withContext(Dispatchers.IO) {

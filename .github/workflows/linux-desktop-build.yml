@@ -1,10 +1,13 @@
 name: Linux Desktop Build & Test
 
+# cmp-rewrite is the default branch and where all work lands; the release workflow targets it
+# too. The previous filter listed only main/develop — develop does not exist and main is not the
+# working branch — so this workflow was configured, correct, and never once executed.
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ cmp-rewrite, main, develop ]
   pull_request:
-    branches: [ main, develop ]
+  workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true

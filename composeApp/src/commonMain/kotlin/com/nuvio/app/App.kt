@@ -1613,7 +1613,7 @@ private fun MainAppContent(
                         type = route.type,
                         id = route.id,
                         onBack = {
-                            navController.popBackStack()
+                            navController.popBackStackSafely()
                         },
                         onPlay = onPlay,
                         onPlayManually = onPlayManually,
@@ -1685,7 +1685,7 @@ private fun MainAppContent(
                         initialProfilePhoto = route.personPhoto,
                         avatarTransitionKey = route.castAvatarTransitionKey,
                         preferCrew = route.preferCrew,
-                        onBack = { navController.popBackStack() },
+                        onBack = { navController.popBackStackSafely() },
                         onOpenMeta = { preview ->
                             coroutineScope.launch {
                                 val resolvedId = if (preview.id.startsWith("tmdb:")) {
@@ -1719,7 +1719,7 @@ private fun MainAppContent(
                         entityId = route.entityId,
                         entityName = route.entityName,
                         sourceType = route.sourceType,
-                        onBack = { navController.popBackStack() },
+                        onBack = { navController.popBackStackSafely() },
                         onOpenMeta = { preview ->
                             coroutineScope.launch {
                                 val resolvedId = if (preview.id.startsWith("tmdb:")) {
@@ -1752,7 +1752,7 @@ private fun MainAppContent(
                     if (launch == null) {
                         LaunchedEffect(route.launchId) {
                             StreamsRepository.clear()
-                            navController.popBackStack()
+                            navController.popBackStackSafely()
                         }
                         return@composable
                     }
@@ -2167,7 +2167,7 @@ private fun MainAppContent(
                             },
                             onBack = {
                                 StreamsRepository.clear()
-                                navController.popBackStack()
+                                navController.popBackStackSafely()
                             },
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -2211,7 +2211,7 @@ private fun MainAppContent(
                     val launch = remember(route.launchId) { PlayerLaunchStore.get(route.launchId) }
                     if (launch == null) {
                         LaunchedEffect(route.launchId) {
-                            navController.popBackStack()
+                            navController.popBackStackSafely()
                         }
                         Box(modifier = Modifier.fillMaxSize())
                         return@composable
@@ -2248,7 +2248,7 @@ private fun MainAppContent(
                         onBack = {
                             ResumePromptRepository.markPlayerExitedNormally()
                             PlayerLaunchStore.remove(route.launchId)
-                            navController.popBackStack()
+                            navController.popBackStackSafely()
                         },
                         onOpenInExternalPlayer = { request ->
                             val playerLaunch = PlayerLaunch(
@@ -2307,7 +2307,7 @@ private fun MainAppContent(
                         target = target,
                         onBack = {
                             CatalogRepository.clear()
-                            navController.popBackStack()
+                            navController.popBackStackSafely()
                         },
                         onPosterClick = { meta ->
                             navController.navigate(DetailRoute(type = meta.type, id = meta.id))
@@ -2466,7 +2466,7 @@ private fun MainAppContent(
                         collectionId = route.collectionId,
                         onBack = {
                             CollectionEditorRepository.clear()
-                            navController.popBackStack()
+                            navController.popBackStackSafely()
                         },
                     )
                 }
@@ -2478,7 +2478,7 @@ private fun MainAppContent(
                     FolderDetailScreen(
                         onBack = {
                             FolderDetailRepository.clear()
-                            navController.popBackStack()
+                            navController.popBackStackSafely()
                         },
                         onCatalogClick = onCatalogClick,
                         onPosterClick = { meta ->
@@ -2708,6 +2708,22 @@ private fun MainAppContent(
         }
 }
 
+/**
+ * Pops the back stack, but never the last entry on it.
+ *
+ * ⚠ A NavHost whose back stack is empty renders NOTHING — the window goes blank and there is no
+ * way back short of restarting the app. Reaching that state is easy here: several routes pop
+ * themselves from a `LaunchedEffect` when their launch record has already been consumed, so one
+ * user-visible "back" can issue two pops, and on desktop nothing absorbs the extra one —
+ * [PlatformBackHandler] is a no-op there, so the TabsRoute handler that swallows root-level back
+ * on Android never runs. Refusing to pop the start destination makes an over-pop a harmless
+ * no-op instead of an unrecoverable blank screen.
+ */
+private fun NavHostController.popBackStackSafely(): Boolean {
+    if (previousBackStackEntry == null) return false
+    return popBackStack()
+}
+
 @Composable
 private fun rememberGuardedPopBackStack(
     navController: NavHostController,
@@ -2722,7 +2738,7 @@ private fun rememberGuardedPopBackStack(
             if (!popHandled && currentBackStackEntry == backStackEntry) {
                 popHandled = true
                 beforePop()
-                navController.popBackStack()
+                navController.popBackStackSafely()
             }
         }
     }

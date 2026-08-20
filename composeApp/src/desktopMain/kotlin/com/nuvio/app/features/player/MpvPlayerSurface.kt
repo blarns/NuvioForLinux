@@ -241,6 +241,15 @@ internal fun MpvPlayerSurface(
             session.onError = null
             PlayerControlBridge.controller = null
             PlayerControlBridge.isPlaying = false
+            // ⚠ Also hasMedia. Without it MPRIS kept reporting a Paused player forever after
+            // the user left playback — stale title, stale length, frozen position — because its
+            // "Stopped" branch needs both this and a null controller. The system media widget
+            // and playerctl went on offering Nuvio as a paused player whose Play button did
+            // nothing, until the app was restarted.
+            PlayerControlBridge.hasMedia = false
+            // Push the Stopped status out now rather than waiting for a poll that will never
+            // come again — this surface is going away.
+            PlayerControlBridge.onNowPlayingChanged?.invoke()
             DiscordRichPresence.clear()
         }
     }

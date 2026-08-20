@@ -101,6 +101,13 @@ internal class MpvSoftwareRenderer private constructor(
         )
 
         val rc = mpv.mpv_render_context_render(ctx, params)
+        // ⚠ See the note in MpvGpuRenderer.render(). These are the last reads of buffers mpv is
+        // using DURING the call above, and a local the JVM no longer reads is collectable — at
+        // which point JNA frees the native block out from under mpv. Once per delivered frame.
+        java.lang.ref.Reference.reachabilityFence(size)
+        java.lang.ref.Reference.reachabilityFence(stride)
+        java.lang.ref.Reference.reachabilityFence(format)
+        java.lang.ref.Reference.reachabilityFence(params)
         if (rc < 0) {
             println("$TAG: render failed rc=$rc")
             return false
@@ -126,6 +133,8 @@ internal class MpvSoftwareRenderer private constructor(
 
             val res = arrayOfNulls<Pointer>(1)
             val rc = MpvLibrary.INSTANCE.mpv_render_context_create(res, raw, params)
+            java.lang.ref.Reference.reachabilityFence(apiType)
+            java.lang.ref.Reference.reachabilityFence(params)
             val ctx = res[0]
             if (rc < 0 || ctx == null) {
                 println("$TAG: mpv_render_context_create failed rc=$rc")

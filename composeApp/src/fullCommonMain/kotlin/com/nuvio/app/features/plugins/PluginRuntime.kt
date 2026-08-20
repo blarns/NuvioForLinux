@@ -400,8 +400,12 @@ internal object PluginRuntime {
                         if (parsed.port != parsed.protocol.defaultPort) parsed.port.toString() else "",
                     ),
                     "pathname" to JsonPrimitive(parsed.encodedPath.ifBlank { "/" }),
-                    "search" to JsonPrimitive(parsed.encodedQuery?.let { "?$it" } ?: ""),
-                    "hash" to JsonPrimitive(parsed.encodedFragment?.let { "#$it" } ?: ""),
+                    // ⚠ Ktor returns "" for a URL with no query or fragment, never null, so
+                    // `?.let { "?$it" }` produced a bare "?" and "#" — and a scraper appending
+                    // url.search built "…/path??foo=1". JS URL.search is "" when there is no
+                    // query; ifEmpty is what actually expresses that.
+                    "search" to JsonPrimitive(parsed.encodedQuery.ifEmpty { null }?.let { "?$it" } ?: ""),
+                    "hash" to JsonPrimitive(parsed.encodedFragment.ifEmpty { null }?.let { "#$it" } ?: ""),
                 ),
             ).toString()
         } catch (_: Exception) {

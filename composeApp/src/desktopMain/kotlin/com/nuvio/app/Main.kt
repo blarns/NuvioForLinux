@@ -110,6 +110,10 @@ fun main(args: Array<String>) {
         }
         // Clear and disconnect the Discord presence (no-op when the feature was inert).
         com.nuvio.app.features.discord.DiscordRichPresence.shutdown()
+        // Ask the P2P engine to stop its TorrServer subprocess gracefully. This is best-effort
+        // and asynchronous, which is why TorrServerBinary also registers a JVM shutdown hook —
+        // between the two, quitting can never leave a torrent daemon seeding in the background.
+        runCatching { com.nuvio.app.features.p2p.P2pStreamingEngine.shutdown() }
         DesktopTray.remove()
         // WindowState.size tracks the live window, so while maximised or fullscreen it reports
         // the screen size. Persist the placement separately and only write a size back when the

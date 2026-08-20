@@ -18,6 +18,13 @@ private const val INITIAL_HEIGHT = 720
 private const val MIN_FRAME_INTERVAL_MS = 33L
 
 /**
+ * How long the teardown watchdog keeps waiting for a wedged frame pump before giving up and
+ * leaving the mpv instance alive. Generous: freeing a render context under a live pump crashes
+ * the process, so waiting is always the cheaper mistake.
+ */
+private const val PUMP_WATCHDOG_TIMEOUT_MS = 60_000L
+
+/**
  * One playback session on libmpv: the handle, the render context, the controller, and the
  * thread that pumps frames out of mpv.
  *
@@ -272,15 +279,40 @@ internal class MpvSession private constructor(
         runCatching { stopAcked.await(300, java.util.concurrent.TimeUnit.MILLISECONDS) }
         pumpThread?.let { t ->
             // 2s is far longer than one render; a pump still running after that is wedged inside
-            // mpv, and freeing the context under it would crash the process, so leave it be.
+            // mpv, and freeing the context under it would crash the process, so it is not freed
+            // here.
             try { t.join(2_000) } catch (_: InterruptedException) {}
             if (t.isAlive) {
-                println("$TAG: frame pump did not stop; leaving the render context alive")
+                // ⚠ Hand the orphan to a watchdog rather than returning and forgetting it. This
+                // used to `return`, which skipped the GL teardown, the controller and
+                // mpv_terminate_destroy — and because `stopped` was already latched, a second
+                // dispose() was a no-op, so that mpv instance leaked for the life of the
+                // process. Worse, the bounded `stop` above may not have taken effect on a wedged
+                // core, so the abandoned instance could keep decoding and playing AUDIO after
+                // the user had left the player. Waiting off-thread costs nothing and completes
+                // the teardown the moment the pump comes unstuck.
+                println("$TAG: frame pump still running; completing teardown on a watchdog")
                 pumpThread = null
+                Thread(null, {
+                    runCatching { t.join(PUMP_WATCHDOG_TIMEOUT_MS) }
+                    if (t.isAlive) {
+                        println("$TAG: frame pump never stopped; mpv instance intentionally leaked")
+                        return@Thread
+                    }
+                    finishTeardown()
+                }, "mpv-pump-watchdog", 0).apply { isDaemon = true }.start()
                 return
             }
         }
         pumpThread = null
+        finishTeardown()
+    }
+
+    /**
+     * The half of teardown that must not run while the frame pump could still be rendering:
+     * the software renderer, the GL objects, and finally the handle itself.
+     */
+    private fun finishTeardown() {
         renderer?.dispose()
         // ⚠ The GL renderer deletes GL objects, so it can only be torn down where the EGL
         // context is current — the EDT. Compose disposes on the EDT already; the branch is for

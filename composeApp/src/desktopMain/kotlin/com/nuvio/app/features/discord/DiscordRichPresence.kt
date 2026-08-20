@@ -38,6 +38,8 @@ internal object DiscordRichPresence {
     private const val ITAG = "NuvioDiscordRPC"
     private const val MAX_FAILURES = 10          // back off after this many consecutive I/O failures
     private const val RETRY_COOLDOWN_MS = 60_000L
+    private const val IPC_TIMEOUT_MS = 5_000L
+    private const val IPC_POLL_INTERVAL_MS = 5L
     private const val SEEK_RESEND_THRESHOLD_S = 5L
 
     private val lock = Any()
@@ -203,6 +205,12 @@ internal object DiscordRichPresence {
         val path = discoverSocket() ?: run { noteFailure(); return null }
         return try {
             val ch = SocketChannel.open(UnixDomainSocketAddress.of(path))
+            // ⚠ Non-blocking, so the reads below can honour a deadline. In blocking mode
+            // readFully had no bound at all: a Discord client that accepted the socket and then
+            // never answered parked the single discord-rpc worker permanently, and every later
+            // presence update — and the clear on shutdown — queued behind it and never ran.
+            // (SocketChannel.socket() is not an option here; it throws for Unix-domain channels.)
+            ch.configureBlocking(false)
             writeFrame(ch, OP_HANDSHAKE, handshakePayload(clientId))
             if (!readFrame(ch)) {
                 runCatching { ch.close() }
@@ -311,7 +319,13 @@ internal object DiscordRichPresence {
         buf.putInt(bytes.size)
         buf.put(bytes)
         buf.flip()
-        while (buf.hasRemaining()) ch.write(buf)
+        val deadline = System.currentTimeMillis() + IPC_TIMEOUT_MS
+        while (buf.hasRemaining()) {
+            if (ch.write(buf) == 0) {
+                if (System.currentTimeMillis() > deadline) throw java.io.IOException("Discord IPC write timed out")
+                Thread.sleep(IPC_POLL_INTERVAL_MS)
+            }
+        }
     }
 
     /** Reads one frame; returns false on EOF/oversized/CLOSE so the caller reconnects. */
@@ -325,10 +339,17 @@ internal object DiscordRichPresence {
         return op != OP_CLOSE
     }
 
+    /** Null on EOF or when the peer went quiet for [IPC_TIMEOUT_MS]; the caller reconnects. */
     private fun readFully(ch: SocketChannel, n: Int): ByteBuffer? {
         val buf = ByteBuffer.allocate(n)
+        val deadline = System.currentTimeMillis() + IPC_TIMEOUT_MS
         while (buf.hasRemaining()) {
-            if (ch.read(buf) < 0) return null   // peer closed
+            val read = ch.read(buf)
+            if (read < 0) return null   // peer closed
+            if (read == 0) {
+                if (System.currentTimeMillis() > deadline) return null
+                Thread.sleep(IPC_POLL_INTERVAL_MS)
+            }
         }
         buf.flip()
         return buf

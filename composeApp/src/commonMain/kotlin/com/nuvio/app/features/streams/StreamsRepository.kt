@@ -18,9 +18,9 @@ import com.nuvio.app.features.plugins.PluginsUiState
 import com.nuvio.app.features.plugins.PluginRepositoryItem
 import com.nuvio.app.features.plugins.PluginRuntimeResult
 import com.nuvio.app.features.plugins.PluginScraper
+import com.nuvio.app.core.concurrency.NuvioBlockingDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
@@ -29,13 +29,50 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.withTimeoutOrNull
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.getString
 import kotlinx.coroutines.launch
 
+/**
+ * Upper bound on how long a single addon or scraper may hold the stream list open. Matches
+ * PlayerStreamsRepository's bound — the same sources are being asked the same question.
+ */
+private const val SOURCE_TIMEOUT_MS = 45_000L
+
+/**
+ * Whether a repeat request for the same content can reuse what is already on screen.
+ *
+ * ⚠ The `isLoadJobActive` term is the whole point of this being a named function. Without it a
+ * load whose job died still reported `isAnyLoading = true` forever, this returned true forever,
+ * and re-opening that episode returned immediately without starting anything — so the user sat
+ * on a spinner that nothing would ever complete and had to restart the app. A loading flag is
+ * only a reason to wait if something is actually still loading.
+ *
+ * Shared by StreamsRepository and PlayerStreamsRepository so the two fan-outs cannot drift.
+ */
+internal fun shouldSkipStreamReload(
+    forceRefresh: Boolean,
+    sameRequestKey: Boolean,
+    hasSettledGroups: Boolean,
+    hasEmptyStateReason: Boolean,
+    isAnyLoading: Boolean,
+    isLoadJobActive: Boolean,
+): Boolean {
+    if (forceRefresh || !sameRequestKey) return false
+    return hasSettledGroups || hasEmptyStateReason || (isAnyLoading && isLoadJobActive)
+}
+
 object StreamsRepository {
     private val log = Logger.withTag("StreamsRepo")
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    // ⚠ Not Dispatchers.Default — the same reasoning as PlayerStreamsRepository, which this
+    // fan-out is the twin of. Scraper plugins block a thread per in-flight HTTP request, and
+    // Default is sized to the CPU count: a handful of scrapers can occupy every thread in it,
+    // including the one this fan-in needs to publish results, and the source list then spins
+    // forever with no error. NuvioBlockingDispatcher is the elastic pool meant for that work.
+    private val scope = CoroutineScope(SupervisorJob() + NuvioBlockingDispatcher)
     private val _uiState = MutableStateFlow(StreamsUiState())
     val uiState: StateFlow<StreamsUiState> = _uiState.asStateFlow()
 
@@ -92,9 +129,14 @@ object StreamsRepository {
         val requestKey = "$requestToken::pluginsGrouped=${pluginUiState.groupStreamsByRepository}"
         val currentState = _uiState.value
         if (
-            !forceRefresh &&
-            activeRequestKey == requestKey &&
-            (currentState.groups.isNotEmpty() || currentState.emptyStateReason != null || currentState.isAnyLoading)
+            shouldSkipStreamReload(
+                forceRefresh = forceRefresh,
+                sameRequestKey = activeRequestKey == requestKey,
+                hasSettledGroups = currentState.groups.any { !it.isLoading },
+                hasEmptyStateReason = currentState.emptyStateReason != null,
+                isAnyLoading = currentState.isAnyLoading,
+                isLoadJobActive = activeJob?.isActive == true,
+            )
         ) {
             log.d { "Skipping stream reload for unchanged request type=$type id=$videoId" }
             return
@@ -242,7 +284,12 @@ object StreamsRepository {
 
         activeJob = scope.launch {
             val pendingStreamAddons = streamAddons.filterNot { it.addonId in warmedAddonIds }
-            val completions = Channel<StreamLoadCompletion>(capacity = Channel.BUFFERED)
+            // ⚠ UNLIMITED, not BUFFERED. Completions are posted with trySend (the publisher must
+            // not suspend), and trySend FAILS on a full channel — so with more sources than the
+            // buffer holds, a completion could be dropped, and the fan-in below waits for a
+            // count that can then never arrive. An unbounded channel makes trySend infallible;
+            // the queue is at most one small object per source.
+            val completions = Channel<StreamLoadCompletion>(capacity = Channel.UNLIMITED)
             val pluginRemainingByAddonId = pluginProviderGroups
                 .associate { it.addonId to it.scrapers.size }
                 .toMutableMap()
@@ -309,11 +356,20 @@ object StreamsRepository {
                     eligibleGroupIds = eligibleGroupIds,
                 ).firstOrNull() ?: group
 
+                // ⚠ Launched on the load's own job (not the supervisorScope below), so an
+                // uncaught throw here would cancel the whole load and strand every group at
+                // isLoading = true. The debrid cache check is an enhancement — it must never be
+                // able to take the stream list down with it.
                 val availabilityJob = launch {
-                    val availabilityGroup = LocalDebridAvailabilityService.annotateCachedAvailability(
-                        groups = listOf(checkingGroup),
-                        eligibleGroupIds = eligibleGroupIds,
-                    ).firstOrNull() ?: checkingGroup
+                    val availabilityGroup = runCatchingUnlessCancelled {
+                        LocalDebridAvailabilityService.annotateCachedAvailability(
+                            groups = listOf(checkingGroup),
+                            eligibleGroupIds = eligibleGroupIds,
+                        ).firstOrNull()
+                    }.getOrElse { error ->
+                        log.w(error) { "Debrid availability check failed for ${group.addonName}" }
+                        null
+                    } ?: checkingGroup
                     publishAddonGroup(presentStreamGroup(availabilityGroup))
 
                     // Early binge-group match right after this addon's availability is resolved
@@ -438,143 +494,184 @@ object StreamsRepository {
                 null
             }
 
-            pendingStreamAddons.forEach { addon ->
-                launch {
-                    val url = buildAddonResourceUrl(
-                        manifestUrl = addon.manifest.transportUrl,
-                        resource = "stream",
-                        type = type,
-                        id = videoId,
-                    )
-                    log.d { "Fetching streams from: $url" }
-
-                    val displayName = addon.addonName
-                    val group = runCatchingUnlessCancelled {
-                        val payload = httpGetText(url)
-                        StreamParser.parse(
-                            payload = payload,
-                            addonName = displayName,
-                            addonId = addon.addonId,
-                            addonLogo = addon.manifest.logoUrl,
-                        )
-                    }.fold(
-                        onSuccess = { streams ->
-                            log.d { "Got ${streams.size} streams from ${displayName}" }
-                            AddonStreamGroup(
-                                addonName = displayName,
-                                addonId = addon.addonId,
-                                streams = streams,
-                                isLoading = false,
-                            )
-                        },
-                        onFailure = { err ->
-                            log.w(err) { "Failed to fetch streams from ${displayName}" }
-                            AddonStreamGroup(
-                                addonName = displayName,
-                                addonId = addon.addonId,
-                                streams = emptyList(),
-                                isLoading = false,
-                                error = err.message,
-                            )
-                        },
-                    )
-                    publishCompletion(StreamLoadCompletion.Addon(group))
-                }
-            }
-
-            pluginProviderGroups.forEach { providerGroup ->
-                val includeScraperNameInSubtitle = false
-                providerGroup.scrapers.forEach { scraper ->
+            // ⚠ supervisorScope, not the plain job scope. The fan-in below waits for exactly
+            // `totalTasks` completions, so a source that dies without publishing one blocks it
+            // forever. Under a plain Job a single throw in ANY producer also cancelled the
+            // parent, which killed the fan-in itself and left every group that had not reported
+            // yet stuck at isLoading = true — a permanent spinner with no error, recoverable
+            // only by restarting the app. PlayerStreamsRepository was fixed this way already;
+            // this is the same fan-out and needs the same guarantees.
+            supervisorScope {
+                pendingStreamAddons.forEach { addon ->
                     launch {
-                        val completion = PluginRepository.executeScraper(
-                            scraper = scraper,
-                            tmdbId = pluginContentId(
-                                videoId = videoId,
-                                season = season,
-                                episode = episode,
-                            ),
-                            mediaType = type,
-                            season = season,
-                            episode = episode,
-                        ).fold(
-                            onSuccess = { results ->
-                                StreamLoadCompletion.PluginScraper(
-                                    addonId = providerGroup.addonId,
-                                    streams = results.map { result ->
-                                        result.toStreamItem(
-                                            scraper = scraper,
-                                            addonName = providerGroup.addonName,
-                                            addonId = providerGroup.addonId,
-                                            includeScraperNameInSubtitle = includeScraperNameInSubtitle,
-                                        )
-                                    },
-                                    error = null,
+                        val url = buildAddonResourceUrl(
+                            manifestUrl = addon.manifest.transportUrl,
+                            resource = "stream",
+                            type = type,
+                            id = videoId,
+                        )
+                        log.d { "Fetching streams from: $url" }
+
+                        val displayName = addon.addonName
+                        val group = runCatchingUnlessCancelled {
+                            // Bounded: one unresponsive addon must not hold the list open forever.
+                            withTimeoutOrNull(SOURCE_TIMEOUT_MS) {
+                                val payload = httpGetText(url)
+                                StreamParser.parse(
+                                    payload = payload,
+                                    addonName = displayName,
+                                    addonId = addon.addonId,
+                                    addonLogo = addon.manifest.logoUrl,
                                 )
+                            }
+                        }.fold(
+                            onSuccess = { streams ->
+                                if (streams == null) {
+                                    log.w { "Timed out fetching streams from $displayName" }
+                                    AddonStreamGroup(
+                                        addonName = displayName,
+                                        addonId = addon.addonId,
+                                        streams = emptyList(),
+                                        isLoading = false,
+                                        error = "Timed out",
+                                    )
+                                } else {
+                                    log.d { "Got ${streams.size} streams from ${displayName}" }
+                                    AddonStreamGroup(
+                                        addonName = displayName,
+                                        addonId = addon.addonId,
+                                        streams = streams,
+                                        isLoading = false,
+                                    )
+                                }
                             },
-                            onFailure = { error ->
-                                StreamLoadCompletion.PluginScraper(
-                                    addonId = providerGroup.addonId,
+                            onFailure = { err ->
+                                log.w(err) { "Failed to fetch streams from ${displayName}" }
+                                AddonStreamGroup(
+                                    addonName = displayName,
+                                    addonId = addon.addonId,
                                     streams = emptyList(),
-                                    error = error.message ?: getString(Res.string.streams_failed_to_load_scraper, scraper.name),
+                                    isLoading = false,
+                                    error = err.message ?: "Failed to load",
                                 )
                             },
                         )
-                        publishCompletion(completion)
+                        publishCompletion(StreamLoadCompletion.Addon(group))
+                    }
+                }
+
+                pluginProviderGroups.forEach { providerGroup ->
+                    val includeScraperNameInSubtitle = false
+                    providerGroup.scrapers.forEach { scraper ->
+                        launch {
+                            // ⚠ The whole body is inside runCatchingUnlessCancelled, not just the
+                            // scraper call. executeScraper returns a Result, but mapping its results
+                            // into StreamItems and resolving the error string are outside that
+                            // Result — and a throw there used to escape the producer, so no
+                            // completion was ever published and the fan-in below waited forever.
+                            val completion = runCatchingUnlessCancelled {
+                                withTimeoutOrNull(SOURCE_TIMEOUT_MS) {
+                                    PluginRepository.executeScraper(
+                                        scraper = scraper,
+                                        tmdbId = pluginContentId(
+                                            videoId = videoId,
+                                            season = season,
+                                            episode = episode,
+                                        ),
+                                        mediaType = type,
+                                        season = season,
+                                        episode = episode,
+                                    ).fold(
+                                        onSuccess = { results ->
+                                            StreamLoadCompletion.PluginScraper(
+                                                addonId = providerGroup.addonId,
+                                                streams = results.map { result ->
+                                                    result.toStreamItem(
+                                                        scraper = scraper,
+                                                        addonName = providerGroup.addonName,
+                                                        addonId = providerGroup.addonId,
+                                                        includeScraperNameInSubtitle = includeScraperNameInSubtitle,
+                                                    )
+                                                },
+                                                error = null,
+                                            )
+                                        },
+                                        onFailure = { error ->
+                                            StreamLoadCompletion.PluginScraper(
+                                                addonId = providerGroup.addonId,
+                                                streams = emptyList(),
+                                                error = error.message
+                                                    ?: getString(Res.string.streams_failed_to_load_scraper, scraper.name),
+                                            )
+                                        },
+                                    )
+                                }
+                            }.getOrElse { error ->
+                                log.w(error) { "Scraper ${scraper.name} failed outside its own error handling" }
+                                null
+                            } ?: StreamLoadCompletion.PluginScraper(
+                                addonId = providerGroup.addonId,
+                                streams = emptyList(),
+                                error = "Timed out",
+                            )
+                            publishCompletion(completion)
+                        }
+                    }
+                }
+
+                repeat(totalTasks) {
+                    when (val completion = completions.receive()) {
+                        is StreamLoadCompletion.Addon -> {
+                            val result = completion.group
+                            publishAddonGroupAfterCacheCheck(result)
+                        }
+
+                        is StreamLoadCompletion.PluginScraper -> {
+                            val remaining = (pluginRemainingByAddonId[completion.addonId] ?: 1) - 1
+                            pluginRemainingByAddonId[completion.addonId] = remaining.coerceAtLeast(0)
+                            if (!completion.error.isNullOrBlank() && pluginFirstErrorByAddonId[completion.addonId].isNullOrBlank()) {
+                                pluginFirstErrorByAddonId[completion.addonId] = completion.error
+                            }
+
+                            _uiState.update { current ->
+                                val updated = StreamAutoPlaySelector.orderAddonStreams(
+                                    groups = current.groups.map { group ->
+                                        if (group.addonId != completion.addonId) {
+                                            group
+                                        } else {
+                                            val mergedStreams = if (completion.streams.isEmpty()) {
+                                                group.streams
+                                            } else {
+                                                (group.streams + completion.streams).sortedForGroupedDisplay()
+                                            }
+                                            val stillLoading = remaining > 0
+                                            val finalError = if (mergedStreams.isEmpty() && !stillLoading) {
+                                                pluginFirstErrorByAddonId[completion.addonId]
+                                            } else {
+                                                null
+                                            }
+                                            group.copy(
+                                                streams = mergedStreams,
+                                                isLoading = stillLoading,
+                                                error = finalError,
+                                            )
+                                        }
+                                    },
+                                    installedOrder = installedAddonOrder,
+                                )
+                                val anyLoading = updated.any { it.isLoading }
+                                current.copy(
+                                    groups = updated,
+                                    isAnyLoading = anyLoading,
+                                    emptyStateReason = updated.toEmptyStateReason(anyLoading),
+                                )
+                            }
+                        }
+
                     }
                 }
             }
-
-            repeat(totalTasks) {
-                when (val completion = completions.receive()) {
-                    is StreamLoadCompletion.Addon -> {
-                        val result = completion.group
-                        publishAddonGroupAfterCacheCheck(result)
-                    }
-
-                    is StreamLoadCompletion.PluginScraper -> {
-                        val remaining = (pluginRemainingByAddonId[completion.addonId] ?: 1) - 1
-                        pluginRemainingByAddonId[completion.addonId] = remaining.coerceAtLeast(0)
-                        if (!completion.error.isNullOrBlank() && pluginFirstErrorByAddonId[completion.addonId].isNullOrBlank()) {
-                            pluginFirstErrorByAddonId[completion.addonId] = completion.error
-                        }
-
-                        _uiState.update { current ->
-                            val updated = StreamAutoPlaySelector.orderAddonStreams(
-                                groups = current.groups.map { group ->
-                                    if (group.addonId != completion.addonId) {
-                                        group
-                                    } else {
-                                        val mergedStreams = if (completion.streams.isEmpty()) {
-                                            group.streams
-                                        } else {
-                                            (group.streams + completion.streams).sortedForGroupedDisplay()
-                                        }
-                                        val stillLoading = remaining > 0
-                                        val finalError = if (mergedStreams.isEmpty() && !stillLoading) {
-                                            pluginFirstErrorByAddonId[completion.addonId]
-                                        } else {
-                                            null
-                                        }
-                                        group.copy(
-                                            streams = mergedStreams,
-                                            isLoading = stillLoading,
-                                            error = finalError,
-                                        )
-                                    }
-                                },
-                                installedOrder = installedAddonOrder,
-                            )
-                            val anyLoading = updated.any { it.isLoading }
-                            current.copy(
-                                groups = updated,
-                                isAnyLoading = anyLoading,
-                                emptyStateReason = updated.toEmptyStateReason(anyLoading),
-                            )
-                        }
-                    }
-
-                }
-            }
+            completions.close()
 
             for (availabilityJob in debridAvailabilityJobs) {
                 availabilityJob.join()

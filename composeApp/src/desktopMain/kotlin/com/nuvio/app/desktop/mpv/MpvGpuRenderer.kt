@@ -106,6 +106,15 @@ internal class MpvGpuRenderer private constructor(
             MpvRenderParam.FLIP_Y to flip,
         )
         val rc = mpv.mpv_render_context_render(this.ctx, params)
+        // ⚠ Not defensive: mandatory. `fbo` and `flip` are last READ by the renderParams call
+        // above, and the JVM may collect a local the moment it stops being read — it does not
+        // wait for the end of the scope. JNA's Memory frees its native block when collected, so
+        // without these fences a GC during the render call above can free the very buffers mpv
+        // is reading, every frame, 30-60 times a second. The symptom would be a torn frame or a
+        // crash inside libmpv, neither of which points back here.
+        java.lang.ref.Reference.reachabilityFence(fbo)
+        java.lang.ref.Reference.reachabilityFence(flip)
+        java.lang.ref.Reference.reachabilityFence(params)
         // ⚠ mpv leaves ITS framebuffer bound. Everything Compose draws afterwards — the whole
         // controls overlay — would go into mpv's video texture instead of the window, which
         // looks like a corrupted UI rather than like a GL error. Rebinding the default
@@ -237,6 +246,12 @@ internal class MpvGpuRenderer private constructor(
 
             val res = arrayOfNulls<Pointer>(1)
             val rc = MpvLibrary.INSTANCE.mpv_render_context_create(res, raw, params)
+            // Same reachability rule as render(): these buffers are unreachable to the JVM the
+            // moment renderParams stops reading them, and JNA frees Memory on collection.
+            java.lang.ref.Reference.reachabilityFence(apiType)
+            java.lang.ref.Reference.reachabilityFence(initParams)
+            java.lang.ref.Reference.reachabilityFence(advanced)
+            java.lang.ref.Reference.reachabilityFence(params)
             val rctx = res[0]
             if (rc < 0 || rctx == null) {
                 println("$TAG: mpv_render_context_create failed rc=$rc")

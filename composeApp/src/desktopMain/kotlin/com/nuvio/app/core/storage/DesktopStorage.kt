@@ -2,9 +2,13 @@ package com.nuvio.app.core.storage
 
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.io.FileOutputStream
+import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
 import java.util.Comparator
 import java.util.Locale
 import java.util.Properties
@@ -130,18 +134,67 @@ internal object DesktopStorage {
             if (loaded) return
             loaded = true
             properties.clear()
-            if (!file.exists()) return
-            runCatching {
-                Files.newInputStream(file).use { input ->
-                    properties.load(input)
-                }
+            // The backup is the other half of the atomic write in persist(): if the main file is
+            // missing or unreadable — a store truncated by a pre-fix build, an interrupted
+            // rename — the previous good contents are still on disk and are worth far more to
+            // the user than an empty store.
+            if (readInto(file)) return
+            val backup = file.resolveSibling("${file.fileName}.bak")
+            if (readInto(backup)) {
+                println("DesktopStorage: recovered ${file.fileName} from its backup")
             }
         }
 
+        private fun readInto(source: Path): Boolean {
+            if (!source.exists()) return false
+            return runCatching {
+                Files.newInputStream(source).use { input -> properties.load(input) }
+                properties.isNotEmpty()
+            }.getOrElse {
+                properties.clear()
+                false
+            }
+        }
+
+        /**
+         * Writes the store atomically: full contents to a sibling temp file, then rename.
+         *
+         * ⚠ This used to open [file] itself for a truncating write. Every store goes through
+         * here — session, profiles, addons, collections, watch progress, downloads — so a crash,
+         * a kill, a full disk or a power cut anywhere between the truncate and the flush left a
+         * zero-length file, and the next launch read that as "no data" and silently started the
+         * user over. A rename is atomic on POSIX: readers see either the old file or the new
+         * one, never a half-written one. The previous contents are kept as `.bak` so even a
+         * failure during the rename leaves something to recover from.
+         */
         private fun persist() {
             Files.createDirectories(file.parent)
-            Files.newOutputStream(file).use { output ->
+            val temp = file.resolveSibling("${file.fileName}.tmp")
+            Files.newOutputStream(
+                temp,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.WRITE,
+                StandardOpenOption.TRUNCATE_EXISTING,
+            ).use { output ->
                 properties.store(output, "Nuvio desktop preferences")
+                // The rename is only atomic with respect to what actually reached the disk.
+                if (output is FileOutputStream) output.fd.sync()
+            }
+            if (Files.exists(file)) {
+                runCatching {
+                    Files.copy(
+                        file,
+                        file.resolveSibling("${file.fileName}.bak"),
+                        StandardCopyOption.REPLACE_EXISTING,
+                    )
+                }
+            }
+            try {
+                Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            } catch (_: AtomicMoveNotSupportedException) {
+                // Some filesystems (and some FUSE mounts on Linux) refuse ATOMIC_MOVE. A plain
+                // replace is still better than writing through the live file.
+                Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING)
             }
         }
     }

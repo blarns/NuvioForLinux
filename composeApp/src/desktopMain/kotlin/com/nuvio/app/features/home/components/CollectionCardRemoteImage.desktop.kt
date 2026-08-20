@@ -123,13 +123,37 @@ private fun AnimatedFocusImage(
 }
 
 private class FocusAnimation(
-    val images: List<ImageBitmap>,
+    private val frames: List<Image>,
     val delaysMs: List<Int>,
-)
+) {
+    /** The drawable views of [frames]; these wrap the Images rather than copying them. */
+    val images: List<ImageBitmap> = frames.map { it.toComposeImageBitmap() }
+
+    /**
+     * Frees the frames' native Skia memory.
+     *
+     * Only ever called on eviction, and only for the least-recently-used entry. Exactly one card
+     * can be hovered at a time and its entry is touched to most-recently-used when it is read, so
+     * the animation being evicted cannot be the one on screen.
+     */
+    fun close() {
+        frames.forEach { runCatching { it.close() } }
+    }
+}
 
 private const val DefaultFrameDelayMs = 100
 private const val MinFrameDelayMs = 20
 private const val MaxCachedAnimations = 8
+
+/**
+ * Ceiling on how many frames one animation may hold in memory.
+ *
+ * ⚠ These URLs come from addon metadata, so the frame count is not ours to trust: a long
+ * animated WebP at poster resolution is a few megabytes per frame, and eight of them cached is
+ * gigabytes of native memory. Playing the first seconds of an over-long animation is a better
+ * outcome than exhausting the machine.
+ */
+private const val MaxAnimationFrames = 120
 
 private val focusHttpClient by lazy { HttpClient(Java) }
 private val focusDecodeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -152,7 +176,13 @@ private fun storeAnimation(url: String, animation: FocusAnimation) {
     focusAnimationCache[url] = animation
     while (focusAnimationCache.size > MaxCachedAnimations) {
         val oldest = focusAnimationCache.keys.firstOrNull() ?: break
-        focusAnimationCache.remove(oldest)
+        // ⚠ Dropping the map entry is NOT enough. Every frame is a Skia Image behind a tiny
+        // Kotlin wrapper, so the JVM sees a few dozen bytes freed while tens or hundreds of
+        // megabytes of native memory stay allocated — it has no reason to GC and nothing
+        // reclaims them. This is the same mistake that grew RSS by 38 GB on the frame path (see
+        // the long note in PlayerEngine.desktop.kt); the cap only bounds memory if the evicted
+        // frames are actually closed.
+        focusAnimationCache.remove(oldest)?.close()
     }
 }
 
@@ -199,10 +229,12 @@ private fun decodeAnimation(bytes: ByteArray): FocusAnimation? {
             return null
         }
 
-        val images = ArrayList<ImageBitmap>(frameCount)
+        // Held as skia Images, not ImageBitmaps: an ImageBitmap wraps the Image and gives no way
+        // to release it, and these are the objects that own the frames' native memory.
+        val images = ArrayList<Image>(frameCount)
         val delays = ArrayList<Int>(frameCount)
         try {
-            for (i in 0 until frameCount) {
+            for (i in 0 until minOf(frameCount, MaxAnimationFrames)) {
                 // Reuse the bitmap across frames so Skia composes disposal/blend against the prior
                 // frame (priorFrame = i - 1, the common sequential case). makeFromBitmap copies the
                 // pixels, so each snapshot is independent and the bitmap is safe to overwrite.
@@ -210,7 +242,7 @@ private fun decodeAnimation(bytes: ByteArray): FocusAnimation? {
                     if (i == 0) codec.readPixels(bitmap, 0) else codec.readPixels(bitmap, i, i - 1)
                 }.isSuccess
                 if (!decoded) break
-                images.add(Image.makeFromBitmap(bitmap).toComposeImageBitmap())
+                images.add(Image.makeFromBitmap(bitmap))
                 val duration = info.getOrNull(i)?.duration ?: 0
                 delays.add(if (duration > 0) duration.coerceAtLeast(MinFrameDelayMs) else DefaultFrameDelayMs)
             }
