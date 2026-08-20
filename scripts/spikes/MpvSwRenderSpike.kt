@@ -126,8 +126,14 @@ fun main(args: Array<String>) {
     // The number that decides whether this path is watchable: the client IS the display, so
     // rendering slower than the source frame rate makes video fall behind audio without bound.
     val msPerRender = renderNanos / 1_000_000.0 / rendered.coerceAtLeast(1)
+    // ⚠ EXPECTED TO FAIL ON A 4K SOURCE, and that is not a regression: the per-render cost here
+    // is the `vaapi-copy` readback, which is unchanged by output size (measured identical at
+    // 1920x1111 and 960x540). 4K gives ~18-20 fps against a 25 fps source; 1080p gives ~25 and
+    // passes. This path is the FALLBACK — the GPU path is what carries 4K, and this check
+    // failing on a 4K file is the measurement that says so.
     check("keeps up with the source frame rate", renderFps >= 23.0,
-        "%.1f render fps at ${w}x$h, %.1f ms per render call".format(renderFps, msPerRender))
+        "%.1f render fps at ${w}x$h, %.1f ms per render call".format(renderFps, msPerRender) +
+            " — expected to FAIL on a 4K source; the readback is the cost, not the scale")
 
     check("frames rendered", rendered >= 20, "rendered=$rendered")
     check("frames are not black", nonBlack >= rendered - 2, "nonBlack=$nonBlack/$rendered")
