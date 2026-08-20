@@ -601,14 +601,21 @@ internal class MpvPlayerController(
      * "subtitles" includes rendered subtitles, matching what the VLCJ path captured.
      */
     /**
-      * ⚠ Fire-and-forget, and it reports success optimistically: writing a 4K PNG takes mpv long
-      * enough to be felt, and the "S" key that triggers it is pressed on the UI thread. Waiting
-      * for the real answer would stutter the player for a screenshot.
-      */
+     * Writes a source-resolution frame, and reports whether it actually worked.
+     *
+     * ⚠ Not fire-and-forget, deliberately: [DesktopScreenshot] checks the file the moment this
+     * returns and falls back to the stored window-sized frame if it is empty — and on the GPU
+     * path there IS no stored frame, so an optimistic `true` turns every screenshot into "no
+     * video frame to capture". It is safe to wait here because the caller already runs on an IO
+     * coroutine, never on the UI thread; the bound is what keeps a wedged core from parking that
+     * coroutine forever.
+     */
     fun saveScreenshot(path: String): Boolean {
-        if (!fileLoaded) return false
-        onControlThread { mpv.command("screenshot-to-file", path, "subtitles") }
-        return true
+        if (!fileLoaded || disposed) return false
+        return runCatching {
+            control.submit<Boolean> { mpv.command("screenshot-to-file", path, "subtitles") }
+                .get(5, java.util.concurrent.TimeUnit.SECONDS)
+        }.getOrDefault(false)
     }
 
     /** Diagnostics for the frame pump: audio/video drift and mpv's own dropped-frame counters. */

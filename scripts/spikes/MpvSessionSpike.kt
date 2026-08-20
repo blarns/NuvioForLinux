@@ -144,6 +144,17 @@ fun main(args: Array<String>) {
 
     // Teardown, from a thread that is NOT the pump — i.e. exactly what Compose does.
     stats.reset()
+    // ⚠ The screenshot goes through the same control thread as everything else, and
+    // DesktopScreenshot checks the FILE the moment this returns — an optimistic "true" with the
+    // write still in flight reads as failure and falls back to a stored frame the GPU path does
+    // not have. So it must report the real answer, and the file must actually be there.
+    val shot = java.io.File.createTempFile("nuvio-spike-shot", ".png").apply { delete() }
+    val shotOk = session.controller.saveScreenshot(shot.absolutePath)
+    check("screenshot reports a real result and writes a file",
+        shotOk && shot.isFile && shot.length() > 0L,
+        "reported=$shotOk exists=${shot.isFile} bytes=${shot.length()}")
+    shot.delete()
+
     check("dispose is clean and idempotent", runCatching {
         session.dispose()
         session.dispose()
