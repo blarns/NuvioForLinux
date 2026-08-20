@@ -30,6 +30,16 @@ fun main() {
     check("libmpv loadable", MpvHandle.isAvailable, "api=${MpvHandle.apiVersion()}")
     if (!MpvHandle.isAvailable) { report(); return }
 
+    // ⚠ The check above passes on ANY dev machine and says nothing about a packaged install:
+    // `Native.load("mpv")` finds `libmpv.so`, which ships in `libmpv-dev`. Users get `libmpv2`,
+    // where the only file is the soname below — so the fallback leg is loaded EXPLICITLY here,
+    // because it is the leg every real install will take and the one nothing else exercises.
+    val bySoname = runCatching {
+        com.sun.jna.Native.load("libmpv.so.2", MpvLibrary::class.java).mpv_client_api_version()
+    }
+    check("loadable by soname (no -dev symlink)", bySoname.getOrNull() != null,
+        "libmpv.so.2 -> ${bySoname.getOrNull() ?: bySoname.exceptionOrNull()?.message}")
+
     val mpv = MpvHandle.create()
     check("mpv_create", mpv != null)
     if (mpv == null) { report(); return }

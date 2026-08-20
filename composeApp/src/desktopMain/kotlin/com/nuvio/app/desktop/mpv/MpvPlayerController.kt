@@ -16,6 +16,12 @@ private const val TAG = "NuvioMpvController"
 private const val SEEK_SETTLE_TIMEOUT_MS = 8_000L
 
 /**
+ * How long a seek may be outstanding before the UI calls it loading. Comfortably longer than a
+ * local seek (milliseconds) and far shorter than a user's patience with a frozen picture.
+ */
+private const val SEEK_SPINNER_DELAY_MS = 400L
+
+/**
  * [PlayerEngineController] backed by libmpv.
  *
  * The point of this path is hardware decoding: libVLC silently forces `avcodec-hw=none`
@@ -53,6 +59,14 @@ internal class MpvPlayerController(
     // case the event never arrives.
     private val pendingSeekTargetMs = AtomicLong(-1L)
     @Volatile private var pendingSeekStartedAtMs = 0L
+
+    /**
+     * When the outstanding seek was issued, or 0 when none is. Separate from
+     * [pendingSeekTargetMs] on purpose: that one is abandoned after
+     * [SEEK_SETTLE_TIMEOUT_MS] so the timeline stops lying about the position, but the seek
+     * itself is still outstanding at that point and the UI still needs to say so.
+     */
+    @Volatile private var seekPendingSinceMs = 0L
 
     @Volatile private var fileLoaded = false
     @Volatile private var currentAudioLevel = PlayerAudioLevel(1.0f, false)
@@ -92,7 +106,7 @@ internal class MpvPlayerController(
                 // change to report and would never announce that playback started — leaving
                 // isPlaying false forever on some load orderings.
                 val paused = mpv.getPropertyBoolean("pause") == true
-                state = state.copy(isLoading = false, isEnded = false, isPlaying = !paused)
+                state = state.copy(isLoading = isBuffering(), isEnded = false, isPlaying = !paused)
                 // hwdec is only meaningful once a video track is actually decoding. This is the
                 // runtime assertion the whole investigation turned on: every failure mode was
                 // silent, producing correct-looking video at several times the CPU cost.
@@ -107,6 +121,9 @@ internal class MpvPlayerController(
             MpvEventId.END_FILE -> {
                 // No file is decoding any more either way, so isPlaying must not stay true.
                 fileLoaded = false
+                // Whatever a seek was waiting for, it is not coming — an error must surface as an
+                // error, not as a spinner that never stops.
+                seekPendingSinceMs = 0L
                 when {
                     // The stream failed to open or died mid-play. Reported as an error rather
                     // than as an end-of-file, otherwise a dead source looks exactly like a
@@ -125,13 +142,18 @@ internal class MpvPlayerController(
             MpvEventId.PLAYBACK_RESTART -> {
                 // The seek (or the initial load) has landed and time-pos is trustworthy again.
                 pendingSeekTargetMs.set(-1L)
+                seekPendingSinceMs = 0L
                 // ⚠ Also the way back from end-of-file. `keep-open=yes` leaves the file loaded at
                 // EOF, so a seek backwards resumes it — but END_FILE had cleared `fileLoaded` and
                 // set `isEnded`, and nothing else ever cleared them. The player then stayed
                 // "ended" forever: the picture never updated and play/seek did nothing.
                 fileLoaded = true
                 val paused = mpv.getPropertyBoolean("pause") == true
-                state = state.copy(isLoading = false, isEnded = false, isPlaying = !paused)
+                // ⚠ NOT `isLoading = false`. A seek into an unbuffered region sets
+                // `paused-for-cache` BEFORE playback restarts, and the flag then never changes
+                // again — so clearing the spinner here left the player stalled with no spinner
+                // and no way to get one back. Ask mpv what it is actually doing instead.
+                state = state.copy(isLoading = isBuffering(), isEnded = false, isPlaying = !paused)
             }
             MpvEventId.PROPERTY_CHANGE -> handlePropertyChange(ev)
         }
@@ -182,15 +204,26 @@ internal class MpvPlayerController(
      * 10 Hz UI poll costs nothing. Only the in-flight seek needs any logic.
      */
     fun currentSnapshot(): PlayerPlaybackSnapshot {
+        // ⚠ A seek that has not landed is the state that produced a frozen picture with NO
+        // spinner: the position jumps to the target immediately, `paused-for-cache` reads back
+        // null while the demuxer is being re-opened, and nothing else ever says "waiting". A seek
+        // still outstanding after [SEEK_SPINNER_DELAY_MS] therefore reports as loading — long
+        // enough that a local seek, which lands in milliseconds, never flashes one.
+        val seekingSince = seekPendingSinceMs
+        val seekWaiting = seekingSince != 0L &&
+            System.currentTimeMillis() - seekingSince >= SEEK_SPINNER_DELAY_MS
+        val base = if (seekWaiting && !state.isLoading) state.copy(isLoading = true) else state
+
         val pending = pendingSeekTargetMs.get()
-        if (pending < 0L) return state
+        if (pending < 0L) return base
         // Safety net: if mpv never reported the seek landing, stop overriding the real position
-        // rather than freezing the timeline on the target forever.
+        // rather than freezing the timeline on the target forever. The spinner above is NOT
+        // dropped with it — the seek is still outstanding, and that is the whole point.
         if (System.currentTimeMillis() - pendingSeekStartedAtMs >= SEEK_SETTLE_TIMEOUT_MS) {
             pendingSeekTargetMs.compareAndSet(pending, -1L)
-            return state
+            return base
         }
-        return state.copy(positionMs = pending)
+        return base.copy(positionMs = pending)
     }
 
     // --- transport ---------------------------------------------------------------------------
@@ -213,6 +246,7 @@ internal class MpvPlayerController(
         val target = positionMs.coerceAtLeast(0L)
         pendingSeekTargetMs.set(target)
         pendingSeekStartedAtMs = System.currentTimeMillis()
+        seekPendingSinceMs = pendingSeekStartedAtMs
         println("$TAG: seekTo($target)")
         // "absolute" + "keyframes" is mpv's fast seek; exact seeking on a 4K remux can stall
         // for seconds while it decodes forward to the precise frame.
@@ -402,6 +436,9 @@ internal class MpvPlayerController(
         lastLoadedKey = key
         lastSourceUrl = sourceUrl
         pendingSeekTargetMs.set(-1L)
+        // A seek against the OUTGOING file is void; leaving it outstanding would leave the new
+        // file showing a spinner it has no reason to.
+        seekPendingSinceMs = 0L
         fileLoaded = false
 
         try {
@@ -471,10 +508,31 @@ internal class MpvPlayerController(
         val dropped = mpv.getPropertyLong("frame-drop-count")
         val delayed = mpv.getPropertyLong("vo-delayed-frame-count")
         val fps = mpv.getPropertyDouble("estimated-vf-fps")
-        return "avsync=%.3f dropped=%s delayed=%s vf-fps=%.1f".format(
+        val pacing = "avsync=%.3f dropped=%s delayed=%s vf-fps=%.1f".format(
             avsync ?: 0.0, dropped ?: -1L, delayed ?: -1L, fps ?: 0.0,
         )
+        // ⚠ Why the state fields are here and not only in a debug build: a stalled picture looks
+        // identical whatever caused it — paused, buffering, ended, or the demuxer wedged on a
+        // dead link. Without these a stall can only be guessed at after the fact, which is
+        // exactly what happened to the one stall this path has produced so far.
+        val state = "pause=%s core-idle=%s paused-for-cache=%s buffering=%s%% cache-time=%.1f eof=%s".format(
+            mpv.getPropertyBoolean("pause"),
+            mpv.getPropertyBoolean("core-idle"),
+            mpv.getPropertyBoolean("paused-for-cache"),
+            mpv.getPropertyLong("cache-buffering-state") ?: -1L,
+            mpv.getPropertyDouble("demuxer-cache-time") ?: -1.0,
+            mpv.getPropertyBoolean("eof-reached"),
+        )
+        return "$pacing  $state"
     }
+
+    /**
+     * mpv's own answer to "am I waiting for the network right now", read live rather than
+     * tracked. The observed `paused-for-cache` notification only fires on a CHANGE, so any code
+     * that resets the loading state has to consult the current value or it will silently
+     * contradict mpv.
+     */
+    private fun isBuffering(): Boolean = mpv.getPropertyBoolean("paused-for-cache") == true
 
     /**
      * mpv's own message ("loading failed") says nothing the user can act on, so an HTTP source

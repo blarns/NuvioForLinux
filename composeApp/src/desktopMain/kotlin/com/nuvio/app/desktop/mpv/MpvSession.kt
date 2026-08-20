@@ -137,7 +137,13 @@ internal class MpvSession private constructor(
         if (now - pacingWindowStartMs < 5_000) return
         val frames = renderer.framesRendered.get()
         val fps = (frames - pacingWindowFrames) * 1000.0 / (now - pacingWindowStartMs)
-        println("$TAG: gpu %.1f fps  %s".format(fps, controller.pacingReport()))
+        // A five-second window with no frame at all, while the user believes it is playing, is
+        // the one condition worth shouting about — it is what a dead source, a wedged demuxer and
+        // a silent render failure all look like, and the report says which.
+        val snap = controller.currentSnapshot()
+        val stalled = fps < 0.5 && snap.isPlaying && !snap.isEnded
+        val label = if (stalled) "gpu STALLED" else "gpu"
+        println("$TAG: $label %.1f fps  %s".format(fps, controller.pacingReport()))
         pacingWindowStartMs = now
         pacingWindowFrames = frames
     }

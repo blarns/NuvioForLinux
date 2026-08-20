@@ -74,8 +74,21 @@ internal interface MpvLibrary : Library {
          */
         val INSTANCE: MpvLibrary by lazy {
             LibC.INSTANCE.setlocale(LC_NUMERIC, "C")
-            Native.load("mpv", MpvLibrary::class.java)
+            load()
         }
+
+        /**
+         * ⚠ `Native.load("mpv")` resolves **`libmpv.so`**, and that unversioned symlink ships in
+         * `libmpv-dev` — NOT in the `libmpv2` runtime package a user would have. A dev machine
+         * therefore cannot see the failure a packaged install would hit: no symlink, no libmpv,
+         * silent fallback to VLCJ at 4× the CPU. The soname is tried explicitly for that reason.
+         */
+        private fun load(): MpvLibrary =
+            runCatching { Native.load("mpv", MpvLibrary::class.java) }
+                .getOrElse { Native.load(SONAME, MpvLibrary::class.java) }
+
+        /** The runtime package's actual file name. API 2.x is the only version this binds. */
+        private const val SONAME = "libmpv.so.2"
     }
 }
 
