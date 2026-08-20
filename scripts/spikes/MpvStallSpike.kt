@@ -247,6 +247,25 @@ fun main(args: Array<String>) {
         results["seek during stall"] = "SKIP  (clip too short: ${durationMs}ms)"
     }
 
+    // --- 2c. the UI must not block on a dead stream -------------------------------------------
+    // ⚠ The worst bug this engine has produced was not a stall, it was a FREEZE: every one of
+    // these calls used to run mpv's synchronous property API on Compose's main thread, and when
+    // mpv's core wedged on a dead network read they never returned. The app locked up completely
+    // on a half-decoded frame — no spinner, because the thread that draws one was the thread
+    // that was stuck. These are exactly the calls the player screen makes from that thread.
+    val uiCallStart = System.currentTimeMillis()
+    ctrl.getAudioTracks()
+    ctrl.getSubtitleTracks()
+    ctrl.currentSnapshot()
+    ctrl.setVolume(0.6f)
+    ctrl.setPlaybackSpeed(1.0f)
+    ctrl.selectSubtitleTrack(-1)
+    ctrl.pause()
+    ctrl.play()
+    val uiCallMs = System.currentTimeMillis() - uiCallStart
+    check("UI-thread controller calls do not block on a dead stream", uiCallMs < 500,
+        "${uiCallMs}ms for 8 calls")
+
     // --- 3. recovery -------------------------------------------------------------------------
     server.credit.set(file.length())
     check("playback resumes when the source feeds again",

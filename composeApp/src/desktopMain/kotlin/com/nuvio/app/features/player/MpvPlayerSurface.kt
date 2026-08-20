@@ -262,8 +262,10 @@ internal fun MpvPlayerSurface(
     LaunchedEffect(Unit) {
         while (true) {
             delay(100)
+            // ⚠ Only field reads happen here. Anything that calls into mpv belongs on a
+            // background thread — see MpvSession.startPacingLogger for what a blocking property
+            // read on this thread does to the application.
             handleSnapshot(session.controller.currentSnapshot())
-            if (session.isGpu) session.logPacing()
         }
     }
 

@@ -70,6 +70,12 @@ STAGED_JDK="$(find "$BUILD_DIR/jdk" -maxdepth 1 -type d -name 'jdk-21*' 2>/dev/n
 if [ "$SKIP_BUILD" -eq 0 ]; then
   if [ -n "$STAGED_JDK" ]; then
     log "Building app-image with staged JDK: $STAGED_JDK"
+    # ⚠ Which JDK built the jlink runtime is NOT a tracked Gradle input, so createRuntimeImage
+    # stays UP-TO-DATE and silently reuses a runtime some earlier build made with the SYSTEM
+    # JDK — which pins the AppImage's glibc floor to this host (2.38) while every log line still
+    # says "staged JDK". Cost a whole build to find; the runtime lives under tmp/, so wiping
+    # binaries/ (the obvious thing) does not clear it.
+    rm -rf "$PROJECT_ROOT/composeApp/build/compose/tmp/main/runtime"
     ( cd "$PROJECT_ROOT" && JAVA_HOME="$STAGED_JDK" ./gradlew :composeApp:createDistributable --no-daemon )
   else
     log "Building app-image (system JDK — WARNING: AppImage glibc floor will match this host)"

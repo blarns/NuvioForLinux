@@ -7,6 +7,7 @@ import com.nuvio.app.features.player.PlayerPlaybackSnapshot
 import com.nuvio.app.features.player.PlayerSettingsUiState
 import com.nuvio.app.features.player.SubtitleStyleState
 import com.nuvio.app.features.player.SubtitleTrack
+import com.nuvio.app.features.player.redactSourceUrl
 import com.nuvio.app.features.player.reportPlaybackFailureAsync
 import java.util.concurrent.atomic.AtomicLong
 
@@ -68,6 +69,39 @@ internal class MpvPlayerController(
      */
     @Volatile private var seekPendingSinceMs = 0L
 
+    /**
+     * Every mpv call the UI triggers runs here, never on the caller's thread.
+     *
+     * ⚠ This is not tidiness, it is the difference between a stalled stream and a frozen
+     * application. `mpv_get_property` / `mpv_set_property` are SYNCHRONOUS: they hand the request
+     * to mpv's core and wait. When the core is wedged — a demuxer blocked on a dead network read
+     * is the ordinary case — they never return. Called from Compose's main thread, as they were,
+     * that is a hard UI freeze: measured in a real session, the event thread healthy in
+     * `mpv_wait_event` while the EDT sat in `mpv_get_property` for minutes, picture frozen on a
+     * half-decoded frame and no spinner, because the thread that would have drawn one was the
+     * thread that was stuck.
+     *
+     * Single-threaded on purpose: commands keep the order the user issued them in. Optimistic UI
+     * state is still written synchronously by the caller, so the interface stays responsive.
+     */
+    private val control = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(null, r, "mpv-control", 0).apply { isDaemon = true }
+    }
+
+    @Volatile private var disposed = false
+
+    /** Runs [block] on the control thread. Silently dropped after [dispose]. */
+    private fun onControlThread(block: () -> Unit) {
+        if (disposed) return
+        runCatching {
+            control.execute {
+                if (!disposed) runCatching(block).onFailure {
+                    println("$TAG: control call failed: ${it.message}")
+                }
+            }
+        }
+    }
+
     @Volatile private var fileLoaded = false
     @Volatile private var currentAudioLevel = PlayerAudioLevel(1.0f, false)
     @Volatile private var lastSourceUrl: String? = null
@@ -111,6 +145,9 @@ internal class MpvPlayerController(
                 // runtime assertion the whole investigation turned on: every failure mode was
                 // silent, producing correct-looking video at several times the CPU cost.
                 hwdecCurrent = mpv.getPropertyString("hwdec-current")
+                // Built here, on the event thread, so the menus can be served from a field
+                // instead of a few dozen blocking property reads on the UI thread.
+                refreshTrackCaches()
                 // sid is logged because mpv picks a subtitle track on its own and the UI layer may
                 // then override it; without this the two are indistinguishable from a screenshot.
                 println(
@@ -228,7 +265,7 @@ internal class MpvPlayerController(
 
     // --- transport ---------------------------------------------------------------------------
 
-    override fun play() {
+    override fun play() = onControlThread {
         // ⚠ At end-of-file with `keep-open=yes`, clearing `pause` does nothing at all — mpv sits
         // on the last frame. Pressing play on a finished episode therefore has to seek off the
         // end first, which is also what libVLC does implicitly when it replays finished media.
@@ -244,18 +281,22 @@ internal class MpvPlayerController(
     }
 
     /** Idempotent by construction: this sets the pause flag, it does not toggle it. */
-    override fun pause() { mpv.setPropertyBoolean("pause", true) }
+    override fun pause() = onControlThread { mpv.setPropertyBoolean("pause", true) }
 
     override fun seekTo(positionMs: Long) {
         val target = positionMs.coerceAtLeast(0L)
+        // The bookkeeping and the optimistic position are set on the CALLER's thread, so the
+        // timeline and the spinner react immediately even if mpv itself is slow to answer.
         pendingSeekTargetMs.set(target)
         pendingSeekStartedAtMs = System.currentTimeMillis()
         seekPendingSinceMs = pendingSeekStartedAtMs
-        println("$TAG: seekTo($target)")
-        // "absolute" + "keyframes" is mpv's fast seek; exact seeking on a 4K remux can stall
-        // for seconds while it decodes forward to the precise frame.
-        mpv.command("seek", (target / 1000.0).toString(), "absolute+keyframes")
         state = state.copy(positionMs = target)
+        println("$TAG: seekTo($target)")
+        onControlThread {
+            // "absolute" + "keyframes" is mpv's fast seek; exact seeking on a 4K remux can stall
+            // for seconds while it decodes forward to the precise frame.
+            mpv.command("seek", (target / 1000.0).toString(), "absolute+keyframes")
+        }
     }
 
     override fun seekBy(offsetMs: Long) {
@@ -276,12 +317,22 @@ internal class MpvPlayerController(
         // to say "loading" the way loadMedia does, or the UI sits on the error's frozen frame
         // with no sign that anything is happening.
         state = state.copy(isLoading = true, isEnded = false)
-        mpv.command("loadfile", url, "replace")
+        onControlThread { mpv.command("loadfile", url, "replace") }
+    }
+
+    /**
+     * Fit (letterbox) vs Fill (stretch), done inside mpv while it scales to the surface.
+     *
+     * Lives on the controller rather than on the session so it goes through the same control
+     * thread as every other mpv call — it is issued from a Compose effect on the main thread.
+     */
+    fun setKeepAspect(keep: Boolean) = onControlThread {
+        mpv.setPropertyBoolean("keepaspect", keep)
     }
 
     override fun setPlaybackSpeed(speed: Float) {
-        mpv.setPropertyDouble("speed", speed.toDouble())
         state = state.copy(playbackSpeed = speed)
+        onControlThread { mpv.setPropertyDouble("speed", speed.toDouble()) }
     }
 
     // --- tracks ------------------------------------------------------------------------------
@@ -318,17 +369,45 @@ internal class MpvPlayerController(
             .joinToString(" · ")
             .ifBlank { "$kind $id" }
 
-    override fun getAudioTracks(): List<AudioTrack> = runCatching {
-        tracks("audio").map {
-            AudioTrack(
-                index = it.id,
-                id = it.id.toString(),
-                label = it.label("Audio"),
-                language = it.lang,
-                isSelected = it.selected,
-            )
-        }
-    }.getOrDefault(emptyList())
+    /**
+     * ⚠ Served from a cache, refreshed when a file loads or the subtitle set changes.
+     *
+     * Building these lists costs six blocking property reads PER TRACK, and the UI asks for them
+     * from the main thread the instant a menu opens — on a stalled stream that is a frozen app,
+     * for the same reason the pacing report was (see [control]).
+     */
+    @Volatile private var cachedAudioTracks: List<AudioTrack> = emptyList()
+    @Volatile private var cachedSubtitleTracks: List<SubtitleTrack> = emptyList()
+
+    /** Called from the event thread or the control thread — never from the UI. */
+    private fun refreshTrackCaches() {
+        cachedAudioTracks = runCatching {
+            tracks("audio").map {
+                AudioTrack(
+                    index = it.id,
+                    id = it.id.toString(),
+                    label = it.label("Audio"),
+                    language = it.lang,
+                    isSelected = it.selected,
+                )
+            }
+        }.getOrDefault(emptyList())
+        cachedSubtitleTracks = runCatching {
+            tracks("sub").map {
+                SubtitleTrack(
+                    index = it.id,
+                    id = it.id.toString(),
+                    label = it.label("Subtitle"),
+                    language = it.lang,
+                    // See the note on getSubtitleTracks: deliberately false, to match VLCJ.
+                    isSelected = false,
+                    isForced = false,
+                )
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    override fun getAudioTracks(): List<AudioTrack> = cachedAudioTracks
 
     /**
      * ⚠ `isSelected` is reported as **false even for the track mpv has selected**, deliberately,
@@ -343,56 +422,48 @@ internal class MpvPlayerController(
      * Nothing in the UI reads this: `SubtitleModal` marks the active row from the screen's own
      * `selectedIndex`, so the menu still shows the user's choice correctly.
      */
-    override fun getSubtitleTracks(): List<SubtitleTrack> = runCatching {
-        tracks("sub").map {
-            SubtitleTrack(
-                index = it.id,
-                id = it.id.toString(),
-                label = it.label("Subtitle"),
-                language = it.lang,
-                isSelected = false,
-                isForced = false,
-            )
-        }
-    }.getOrDefault(emptyList())
+    override fun getSubtitleTracks(): List<SubtitleTrack> = cachedSubtitleTracks
 
-    override fun selectAudioTrack(index: Int) {
-        runCatching { mpv.setPropertyLong("aid", index.toLong()) }.onFailure { onError(it as Exception) }
+    override fun selectAudioTrack(index: Int) = onControlThread {
+        mpv.setPropertyLong("aid", index.toLong())
     }
 
     override fun selectSubtitleTrack(index: Int) {
         println("$TAG: selectSubtitleTrack($index)")
-        // A negative index is the UI's "none"; mpv spells that "no", and setting sid to a
-        // negative number would be rejected.
-        if (index < 0) mpv.setPropertyString("sid", "no")
-        else runCatching { mpv.setPropertyLong("sid", index.toLong()) }
-            .onFailure { onError(it as Exception) }
+        onControlThread {
+            // A negative index is the UI's "none"; mpv spells that "no", and setting sid to a
+            // negative number would be rejected.
+            if (index < 0) mpv.setPropertyString("sid", "no")
+            else mpv.setPropertyLong("sid", index.toLong())
+        }
     }
 
     override fun setSubtitleUri(url: String) {
-        runCatching {
-            externalSubtitleUri = url
+        externalSubtitleUri = url
+        onControlThread {
             // "select" makes it the active track immediately; "cached" would leave it inactive.
             mpv.command("sub-add", url, "select")
             // Remember WHICH track this created. sub-add selects it, so sid now names it —
             // needed because sub-remove without an id targets whatever is selected later.
             externalSubtitleId = mpv.getPropertyLong("sid")?.toInt()
-        }.onFailure { onError(it as Exception) }
+            refreshTrackCaches()
+        }
     }
 
-    override fun clearExternalSubtitle() {
-        runCatching {
-            // ⚠ Remove BY ID. A bare `sub-remove` targets the currently selected track, so if
-            // the user added an external subtitle and then switched to an embedded one, this
-            // would delete the embedded track instead of the external one.
-            externalSubtitleId?.let { mpv.command("sub-remove", it.toString()) }
-            externalSubtitleId = null
-            externalSubtitleUri = null
-            mpv.setPropertyString("sid", "no")
-        }.onFailure { onError(it as Exception) }
+    override fun clearExternalSubtitle() = onControlThread {
+        // ⚠ Remove BY ID. A bare `sub-remove` targets the currently selected track, so if
+        // the user added an external subtitle and then switched to an embedded one, this
+        // would delete the embedded track instead of the external one.
+        externalSubtitleId?.let { mpv.command("sub-remove", it.toString()) }
+        externalSubtitleId = null
+        externalSubtitleUri = null
+        mpv.setPropertyString("sid", "no")
+        refreshTrackCaches()
     }
 
     override fun clearExternalSubtitleAndSelect(trackIndex: Int) {
+        // Both hop to the control thread, and it is single-threaded, so the removal is still
+        // guaranteed to happen before the selection.
         clearExternalSubtitle()
         selectSubtitleTrack(trackIndex)
     }
@@ -402,11 +473,10 @@ internal class MpvPlayerController(
         // (see MpvEngineOptions), matching how the VLCJ path configures freetype.
     }
 
-    override fun setSubtitleDelayMs(delayMs: Int) {
+    override fun setSubtitleDelayMs(delayMs: Int) = onControlThread {
         // mpv's sub-delay is in SECONDS as a float; passing milliseconds would put subtitles
         // minutes out of sync.
-        runCatching { mpv.setPropertyDouble("sub-delay", delayMs / 1000.0) }
-            .onFailure { onError(it as Exception) }
+        mpv.setPropertyDouble("sub-delay", delayMs / 1000.0)
     }
 
     override fun configureIosVideoOutput(settings: PlayerSettingsUiState) {
@@ -419,12 +489,13 @@ internal class MpvPlayerController(
 
     override fun setVolume(level: Float): PlayerAudioLevel? {
         val clamped = level.coerceIn(0f, 1f)
+        // Reported back immediately: the volume overlay must track the scroll wheel, not mpv.
         currentAudioLevel = currentAudioLevel.copy(fraction = clamped, isMuted = clamped <= 0f)
-        return runCatching {
+        onControlThread {
             mpv.setPropertyLong("volume", (clamped * 100).toLong().coerceIn(0L, 100L))
             mpv.setPropertyBoolean("mute", clamped <= 0f)
-            currentAudioLevel
-        }.getOrDefault(currentAudioLevel)
+        }
+        return currentAudioLevel
     }
 
     // --- loading -----------------------------------------------------------------------------
@@ -438,7 +509,7 @@ internal class MpvPlayerController(
     ) {
         val key = "$sourceUrl@$startPositionMs@$sourceAudioUrl"
         if (key == lastLoadedKey) {
-            println("$TAG: loadMedia skipped (duplicate) url=$sourceUrl")
+            println("$TAG: loadMedia skipped (duplicate) url=${redactSourceUrl(sourceUrl)}")
             return
         }
         lastLoadedKey = key
@@ -449,8 +520,11 @@ internal class MpvPlayerController(
         seekPendingSinceMs = 0L
         fileLoaded = false
 
-        try {
-            println("$TAG: loadMedia url=$sourceUrl playWhenReady=$playWhenReady start=$startPositionMs")
+        // The spinner goes up on the CALLER's thread so the UI reacts to the click, not to mpv.
+        state = state.copy(isLoading = true, isEnded = false)
+
+        onControlThread {
+            println("$TAG: loadMedia url=${redactSourceUrl(sourceUrl)} playWhenReady=$playWhenReady start=$startPositionMs")
             applyRequestHeaders(sourceHeaders)
 
             // Per-file settings are applied as PROPERTIES rather than as loadfile's trailing
@@ -471,10 +545,6 @@ internal class MpvPlayerController(
             mpv.setPropertyString("audio-files", sourceAudioUrl ?: "")
 
             mpv.command("loadfile", sourceUrl, "replace")
-            state = state.copy(isLoading = true, isEnded = false)
-        } catch (e: Exception) {
-            println("$TAG: loadMedia exception: ${e.message}")
-            onError(e)
         }
     }
 
@@ -507,8 +577,16 @@ internal class MpvPlayerController(
      * mpv scales to the window while decoding, so the delivered frame is window-sized.
      * "subtitles" includes rendered subtitles, matching what the VLCJ path captured.
      */
-    fun saveScreenshot(path: String): Boolean =
-        fileLoaded && mpv.command("screenshot-to-file", path, "subtitles")
+    /**
+      * ⚠ Fire-and-forget, and it reports success optimistically: writing a 4K PNG takes mpv long
+      * enough to be felt, and the "S" key that triggers it is pressed on the UI thread. Waiting
+      * for the real answer would stutter the player for a screenshot.
+      */
+    fun saveScreenshot(path: String): Boolean {
+        if (!fileLoaded) return false
+        onControlThread { mpv.command("screenshot-to-file", path, "subtitles") }
+        return true
+    }
 
     /** Diagnostics for the frame pump: audio/video drift and mpv's own dropped-frame counters. */
     fun pacingReport(): String {
@@ -553,7 +631,13 @@ internal class MpvPlayerController(
     }
 
     fun dispose() {
+        disposed = true
         mpv.onEvent = null
+        // ⚠ Do NOT wait for the control thread here. If it is blocked inside a wedged mpv call —
+        // the very case this whole indirection exists for — joining it would hang whatever is
+        // disposing the player. It is a daemon thread and every task checks `disposed` first,
+        // so abandoning it is safe; mpv_terminate_destroy below unblocks it anyway.
+        control.shutdownNow()
         mpv.dispose()
     }
 }

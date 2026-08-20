@@ -434,7 +434,7 @@ private fun VlcjPlayerSurface(
     // running media in-place. Do NOT stop() here: a deferred stop on the shared mediaPlayer
     // can land AFTER the next play() and kill the new stream.
     DisposableEffect(sourceUrl, sourceAudioUrl, sourceHeaders) {
-        println("$TAG: Creating VlcjPlayerController for $sourceUrl")
+        println("$TAG: Creating VlcjPlayerController for ${redactSourceUrl(sourceUrl)}")
 
         val controller = VlcjPlayerController(
             mediaPlayer = mediaPlayer,
@@ -815,14 +815,14 @@ private class VlcjPlayerController(
     ) {
         val cacheKey = "$sourceUrl@$startPositionMs@$sourceAudioUrl"
         if (cacheKey == lastLoadedUrl) {
-            println("$TAG: loadMedia skipped (duplicate call) url=$sourceUrl startPositionMs=$startPositionMs")
+            println("$TAG: loadMedia skipped (duplicate call) url=${redactSourceUrl(sourceUrl)} startPositionMs=$startPositionMs")
             return
         }
         lastLoadedUrl = cacheKey
         lastSourceUrl = sourceUrl
         pendingSeekTargetMs.set(-1L)
         try {
-            println("$TAG: loadMedia url=$sourceUrl playWhenReady=$playWhenReady startPositionMs=$startPositionMs audio=${sourceAudioUrl != null}")
+            println("$TAG: loadMedia url=${redactSourceUrl(sourceUrl)} playWhenReady=$playWhenReady startPositionMs=$startPositionMs audio=${sourceAudioUrl != null}")
             // libVLC has no generic per-request header option, but the two headers addon
             // proxyHeaders actually rely on map onto media options. Anything else is logged
             // so a failing header-protected stream is diagnosable.

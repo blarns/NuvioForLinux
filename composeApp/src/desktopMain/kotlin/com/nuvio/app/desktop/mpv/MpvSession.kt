@@ -67,9 +67,7 @@ internal class MpvSession private constructor(
      * delivered frame: mpv is already scaling to the surface size, so letterboxing there costs
      * nothing and the frame can be blitted 1:1.
      */
-    fun setKeepAspect(keep: Boolean) {
-        handle.setPropertyBoolean("keepaspect", keep)
-    }
+    fun setKeepAspect(keep: Boolean) = controller.setKeepAspect(keep)
 
     // --- GPU path ---------------------------------------------------------------------------
 
@@ -104,6 +102,7 @@ internal class MpvSession private constructor(
             }
             created.onFrameAvailable = onFrameAvailable
             gpu = created
+            startPacingLogger()
             created
         }
         // The same Image comes back when there is no new frame — the previous one is still in
@@ -118,6 +117,29 @@ internal class MpvSession private constructor(
 
     private var pacingWindowStartMs = 0L
     private var pacingWindowFrames = 0L
+    private var pacingThread: Thread? = null
+
+    /**
+     * Runs [logPacing] on its own thread, forever, until the session is disposed.
+     *
+     * ⚠ It used to be called from the surface's 100 ms poll, which runs on Compose's main
+     * thread — and `pacingReport()` makes ten SYNCHRONOUS mpv property reads. When mpv's core
+     * wedges (a demuxer stuck on a dead network read), those never return, and the UI thread
+     * that would have drawn a spinner is the thread that is stuck. Measured in a real session:
+     * the app froze completely on a half-decoded frame, with mpv's own event thread perfectly
+     * healthy. Diagnostics must never be able to take the application down.
+     */
+    private fun startPacingLogger() {
+        if (!isGpu || pacingThread != null) return
+        val t = Thread(null, {
+            while (!stopped.get()) {
+                Thread.sleep(1_000)
+                runCatching { logPacing() }
+            }
+        }, "mpv-pacing", 0).apply { isDaemon = true }
+        pacingThread = t
+        t.start()
+    }
 
     /**
      * Logs presented fps alongside mpv's own drift and drop counters, once every 5s.
@@ -126,7 +148,7 @@ internal class MpvSession private constructor(
      * when two thirds of the frames never reach the screen, since the clock is the audio. Only
      * `frame-drop-count` staying flat and `avsync` staying near zero prove the path keeps up.
      */
-    fun logPacing() {
+    private fun logPacing() {
         val renderer = gpu ?: return
         val now = System.currentTimeMillis()
         if (pacingWindowStartMs == 0L) {
