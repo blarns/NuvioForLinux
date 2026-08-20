@@ -249,7 +249,18 @@ internal class MpvSession private constructor(
         // makes mpv try to re-initialise its video output against a context that no longer
         // exists, and it reports that as a playback ERROR — indistinguishable, to everything
         // downstream, from a dead source. Leaving the player must not look like a failure.
-        runCatching { handle.command("stop") }
+        //
+        // ⚠ …but BOUNDED. This runs on the EDT during composition disposal, and `stop` is a
+        // synchronous mpv call: against a wedged core it never returns, so waiting for it would
+        // freeze the app at the exact moment the user is trying to escape a dead stream — the
+        // one thing they can still do. A brief wait keeps the clean teardown in the normal case
+        // and gives it up in the pathological one.
+        val stopAcked = java.util.concurrent.CountDownLatch(1)
+        Thread(null, {
+            runCatching { handle.command("stop") }
+            stopAcked.countDown()
+        }, "mpv-stop", 0).apply { isDaemon = true }.start()
+        runCatching { stopAcked.await(300, java.util.concurrent.TimeUnit.MILLISECONDS) }
         pumpThread?.let { t ->
             // 2s is far longer than one render; a pump still running after that is wedged inside
             // mpv, and freeing the context under it would crash the process, so leave it be.
@@ -273,8 +284,14 @@ internal class MpvSession private constructor(
             }
         }
         gpu = null
-        controller.dispose()   // disposes the handle too
-        println("$TAG: disposed")
+        // ⚠ Off the EDT: this ends in mpv_terminate_destroy, which waits for mpv's core to shut
+        // down and therefore inherits the same freeze risk as every other synchronous call. The
+        // GL objects above are already gone and `stopped` gates every other entry point, so
+        // nothing can touch the handle after this point regardless of when it completes.
+        Thread(null, {
+            controller.dispose()   // disposes the handle too
+            println("$TAG: disposed")
+        }, "mpv-teardown", 0).apply { isDaemon = true }.start()
     }
 
     companion object {

@@ -172,8 +172,32 @@ fun main(args: Array<String>) {
             "errors=$badErrors")
         check("dead source is not reported as ended", !bad.controller.currentSnapshot().isEnded,
             "snapshot=${bad.controller.currentSnapshot()}")
+        // ⚠ The spinner must come DOWN. loadMedia raises it optimistically on the caller's
+        // thread, so anything that fails after that point has to clear it — a permanent spinner
+        // on a dead link is the failure this engine has already produced once.
+        check("dead source clears the loading state",
+            waitFor(10_000) { !bad.controller.currentSnapshot().isLoading },
+            "snapshot=${bad.controller.currentSnapshot()}")
         bad.dispose()
     }
+
+    // --- teardown overlaps the next session ---------------------------------------------------
+    // ⚠ dispose() hands mpv_terminate_destroy to a background thread so leaving a wedged player
+    // cannot freeze the UI — which means a leave-then-re-enter can have the OLD handle still
+    // shutting down while the new one initialises. That overlap is what the player does every
+    // time the user backs out and picks another source, so it is exercised with no delay at all.
+    var overlapFailures = 0
+    repeat(5) {
+        val s1 = MpvSession.create()
+        if (s1 == null) { overlapFailures++; return@repeat }
+        s1.setSurfaceSize(640, 360)
+        s1.startFramePump { _, _, _ -> }
+        s1.controller.loadMedia(file, emptyMap(), playWhenReady = true, startPositionMs = 0L)
+        Thread.sleep(600)
+        s1.dispose()          // returns while the handle is still being destroyed
+    }
+    check("back-to-back sessions survive an overlapping teardown", overlapFailures == 0,
+        "failed=$overlapFailures/5")
 
     report()
 }

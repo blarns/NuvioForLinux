@@ -90,13 +90,23 @@ internal class MpvPlayerController(
 
     @Volatile private var disposed = false
 
-    /** Runs [block] on the control thread. Silently dropped after [dispose]. */
-    private fun onControlThread(block: () -> Unit) {
+    /**
+     * Runs [block] on the control thread. Silently dropped after [dispose].
+     *
+     * ⚠ [onFailure] is not optional decoration. Moving these calls off the caller's thread also
+     * moved them out of the caller's `try`, so a throw here can no longer propagate anywhere the
+     * UI can see — and for anything that raised a spinner first, swallowing it means the spinner
+     * never comes down. Callers that changed UI state before dispatching MUST undo it here.
+     */
+    private fun onControlThread(onFailure: ((Exception) -> Unit)? = null, block: () -> Unit) {
         if (disposed) return
         runCatching {
             control.execute {
-                if (!disposed) runCatching(block).onFailure {
-                    println("$TAG: control call failed: ${it.message}")
+                if (disposed) return@execute
+                runCatching(block).onFailure { t ->
+                    println("$TAG: control call failed: ${t.message}")
+                    val e = t as? Exception ?: Exception(t)
+                    if (onFailure != null) onFailure(e) else onError(e)
                 }
             }
         }
@@ -275,6 +285,11 @@ internal class MpvPlayerController(
             // outstanding, which is what puts a spinner up when one does not land — and an EOF
             // replay is precisely where that was first seen (a stream that never resumed, with
             // no spinner). A second code path issuing seeks would skip that bookkeeping.
+            // ⚠ We are already ON the control thread, and seekTo dispatches — so its `seek`
+            // command queues BEHIND this task and runs after the unpause below, not before it.
+            // Harmless (mpv unpauses at EOF, then the seek moves off the end and playback
+            // resumes) and verified by the EOF-replay check in the stall spike, but it is not
+            // the order the code reads as.
             seekTo(0L)
         }
         mpv.setPropertyBoolean("pause", false)
@@ -523,7 +538,15 @@ internal class MpvPlayerController(
         // The spinner goes up on the CALLER's thread so the UI reacts to the click, not to mpv.
         state = state.copy(isLoading = true, isEnded = false)
 
-        onControlThread {
+        onControlThread(onFailure = { e ->
+            // ⚠ The spinner was raised on the caller's thread before this was dispatched. If the
+            // load throws, nothing else will ever take it down — a permanent spinner is exactly
+            // the failure this engine spent a session eliminating.
+            println("$TAG: loadMedia exception: ${e.message}")
+            state = state.copy(isLoading = false)
+            lastLoadedKey = null
+            onError(e)
+        }) {
             println("$TAG: loadMedia url=${redactSourceUrl(sourceUrl)} playWhenReady=$playWhenReady start=$startPositionMs")
             applyRequestHeaders(sourceHeaders)
 
