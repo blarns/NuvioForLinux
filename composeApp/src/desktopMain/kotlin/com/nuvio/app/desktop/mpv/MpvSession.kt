@@ -98,6 +98,15 @@ internal class MpvSession private constructor(
                 // tier — so this is latched and logged rather than retried every frame.
                 gpuFailed = true
                 println("$TAG: GL render context unavailable; no video will be drawn")
+                // ⚠ Tell the user. There is nothing to fall back to at this point — the handle
+                // was configured for the GPU tier — so without this the failure is a black video
+                // area with the audio still playing and the controls still working, which reads
+                // as a broken source rather than a broken renderer.
+                onError?.invoke(
+                    IllegalStateException(
+                        "Video renderer could not start. Restart the app, or unset NUVIO_MPV to use the default player.",
+                    ),
+                )
                 return null
             }
             created.onFrameAvailable = onFrameAvailable

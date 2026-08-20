@@ -1028,3 +1028,68 @@ the check without building an AppImage: 13/13 green after the fix, `hwdec=vaapi`
 | AppImage: host libmpv, libva never bundled | ✅ verified by the bundle-env run above |
 | An in-app soak over a real film (Compose lifecycle) | ⬜ needs a human driving the UI |
 | Defaults: `NUVIO_MPV=1` / `NUVIO_EGL=1` still opt-in | ⬜ ben's call |
+
+---
+
+## Revision 2026-08-20b — the AppImage, the in-app soak, and the freeze it found
+
+### The AppImage builds, and mpv works inside it
+
+Tooling had to be re-staged (`appimage-build/` was empty): excludelist, appimagetool (extracted, never
+executed — this box's AppImageLauncher deletes AppImages on exec), the type2 runtime, and Temurin 21.
+
+⚠ **The first build silently shipped a glibc-2.38 floor.** `createRuntimeImage` was UP-TO-DATE and
+reused a runtime an earlier `packageDeb` had built with the SYSTEM JDK, while every log line said
+"staged JDK". Wiping `binaries/` — the obvious thing — does not clear it; the runtime lives under
+`build/compose/tmp/main/runtime`. `package-appimage.sh` now deletes that itself whenever it uses a
+staged JDK, because remembering to is not a plan. Second build: floor ≤ 2.35, no libva, 216 MB.
+
+Verified in the REAL APP, launched from the AppImage: `hwdec-current=vaapi`, **24.0 fps against a
+24 fps source, avsync 0.000, dropped 0, ~20% CPU on a 4K HEVC remux** — the headline number
+reproduced end to end through the packaged artifact rather than through a spike.
+
+### ⚠ The in-app soak found a total application freeze — this is the important part
+
+Thirty minutes into a 4K remux, playback stopped dead: picture frozen on a half-decoded frame, no
+spinner, CPU at 1%, pacing log silent. A thread dump named it in one shot — mpv's own event thread
+healthy in `mpv_wait_event`, and **`AWT-EventQueue-0` stuck in `mpv_get_property`**, in the same
+frame across three dumps nine seconds apart.
+
+`mpv_get_property` and `mpv_set_property` are **synchronous**: they hand the request to mpv's core
+and wait. When the core wedges — a demuxer blocked on a dead network read, i.e. an expired debrid
+link, the most ordinary failure this app has — they never return. Every transport call the UI made
+went straight into them from Compose's main thread, and the diagnostics added earlier that day made
+it far more likely by putting ten property reads there every five seconds. **The thread that would
+have drawn the spinner was the thread that was stuck.**
+
+Fixed structurally: a single-threaded control executor owns every mpv call the UI can trigger
+(play/pause/seek/speed/volume/track selection/subtitles/keepaspect/loadMedia/retry/screenshot), with
+optimistic UI state still written synchronously on the caller's thread. Track lists are cached and
+rebuilt on `FILE_LOADED` — building them cost six blocking reads *per track*, at the instant a menu
+opens. `dispose()` bounds the `stop` at 300 ms and hands `mpv_terminate_destroy` to a background
+thread, because leaving a wedged player is exactly what a user does when a stream dies.
+
+⚠ **Moving calls off the caller's thread also moves them out of the caller's `try`.** The first cut
+of this swallowed every failure into a `println`: a failed `loadMedia` then left the optimistic
+spinner up forever with no error — the very failure being fixed, reintroduced by the fix.
+`onControlThread` now routes failures to `onError`, and callers that changed UI state before
+dispatching undo it there.
+
+The stall spike asserts the contract directly: eight of the exact calls the player screen makes,
+against a source that has stopped feeding — **6 ms for all eight**.
+
+### Also found by the soak
+
+- ⚠ **Debrid API keys were being logged in cleartext.** Scraper links carry credentials in the base64
+  path; `loadMedia` logged the URL whole, and `scripts/nuvio_debug_logs.sh` collects exactly that for
+  bug reports. Both engines now log through `redactSourceUrl` (scheme, host, file name).
+- **Screenshots**: making them fire-and-forget broke them. `DesktopScreenshot` checks the file the
+  moment the call returns, and the GPU path has no stored fallback frame, so "true" with the write
+  in flight read as "no video frame to capture". Bounded wait instead — the caller is an IO coroutine.
+- A silent black screen if the GL render context ever fails now reports an error instead.
+
+### Verified in the app across five enter/play/leave cycles
+
+Five sessions created, five disposed, `hwdec=vaapi` every time, threads returning to baseline
+(64→97→64), fds oscillating without monotonic growth, and a mid-playback **source switch** from a
+1080p AVC remux to a 4K HEVC remux that kept zero-copy decode and resumed at the right position.
