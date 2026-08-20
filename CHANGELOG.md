@@ -6,6 +6,49 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.5] — 2026-08-20
+
+Mostly groundwork for a second, much cheaper video player — off by default, and the existing
+player is unchanged for everyone who does not go looking for it. One privacy fix that applies
+to everybody.
+
+### Added
+- **An experimental libmpv player, off by default.** The player Nuvio has always used cannot
+  hardware-decode video on Linux: libVLC refuses hardware decoding whenever it is asked to hand
+  frames back to the application, which is how Nuvio draws them, so a 4K film is decoded entirely
+  in software. The new engine has no such restriction and hands the decoded frame straight to the
+  screen without ever copying it back. On the same 4K HEVC episode, measured end to end in the
+  app: **around 20–27% of a CPU core instead of around 380%, and about 1.1 GB of memory instead
+  of 6.4 GB.**
+
+  It is **not enabled unless you ask for it**, it is still being tested, and VLC remains both the
+  default and the automatic fallback if anything about the new engine fails to start:
+
+  ```bash
+  NUVIO_MPV=1 NUVIO_EGL=1 ./Nuvio-0.3.5-x86_64.AppImage
+  ```
+
+  Both variables are needed — the second puts Nuvio's own rendering on EGL, and without it the
+  new engine cannot reach the zero-copy path and falls back to a slower one. It needs libmpv
+  (`libmpv2`, mpv 0.36 or newer); the `.deb` now recommends it, and the AppImage uses your
+  system's copy if you have one. Please report anything you see: a frozen picture, a spinner that
+  never clears, wrong colours, or audio drifting away from the video.
+
+- **Card rows can be dragged with the left mouse button.** Grab a row of posters and pull it
+  sideways, instead of reaching for the scroll wheel or the arrows.
+
+### Fixed
+- **Stream links are no longer written to the log in full.** Debrid and scraper links carry your
+  account API keys inside the URL itself, and those links were being logged verbatim — including
+  by the log-collection script people use when reporting bugs. Only the provider and the file
+  name are logged now. If you have shared a Nuvio log publicly, consider rotating your debrid API
+  key.
+
+### Notes
+- The AppImage no longer bundles `libva`. It was shadowing the copy your graphics driver expects,
+  which silently disabled hardware decoding for the new player. This has no effect on the default
+  VLC player, which does not hardware-decode on Linux either way.
+
 ## [0.3.4] — 2026-08-14
 
 An ordinary upgrade on top of 0.3.3, carrying the interface translations and home-screen work
