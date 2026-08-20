@@ -223,6 +223,11 @@ internal class MpvSession private constructor(
     /** Idempotent, and safe to call from any thread. */
     fun dispose() {
         if (!stopped.compareAndSet(false, true)) return
+        // ⚠ Stop playback BEFORE the render context goes away. Freeing it under a playing file
+        // makes mpv try to re-initialise its video output against a context that no longer
+        // exists, and it reports that as a playback ERROR — indistinguishable, to everything
+        // downstream, from a dead source. Leaving the player must not look like a failure.
+        runCatching { handle.command("stop") }
         pumpThread?.let { t ->
             // 2s is far longer than one render; a pump still running after that is wedged inside
             // mpv, and freeing the context under it would crash the process, so leave it be.
