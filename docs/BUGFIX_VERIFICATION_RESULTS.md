@@ -400,3 +400,127 @@ Before this pass, the intent was to run on the testing profile with its own addo
 Not investigated further: whether the write never happens or a sync pull puts the old value back.
 It is unrelated to this branch — `ProfileEditScreen` / `ProfileRepository` are untouched by it — but
 it is a feature that visibly does nothing.
+
+---
+
+## Run: 2026-08-21 — SW-01 root cause found and fixed, MP-01 closed
+
+- Commits under test: `d4b09a37` (redaction + MPRIS + hardening), `b685f2fe` (libmpv setting),
+  `49506855` (the dispatcher fix)
+- Build: from source (`./gradlew :composeApp:run`), isolated `XDG_CONFIG_HOME` copy of the primary
+  profile, PIN entered by hand at each launch
+- Real config verified untouched afterwards by mtime: newest file 05:00, session ran 05:18–05:47
+
+This run was not the protocol. It set out to answer one question left open by runs 1–3 — why the
+in-player Streams panel spins past its own timeout — and then to verify the fixes that came out of
+the answer.
+
+### ⚠ SW-01: **FAIL → PASS**, and it was neither of the two candidates recorded in run 1
+
+Run 1 left two suspects: a `source.fetch()` suspending where `withTimeoutOrNull` cannot see it, or
+an unbounded debrid cache check. **Both were wrong.** The stream list was deadlocking itself.
+
+Reproduced first try on a series episode with 7 stream addons and ~20 plugin scrapers. `jstack`
+while the panel showed "Finding streams…":
+
+| Observation | Value |
+| --- | --- |
+| Threads parked in `BlockingCoroutine.joinBlocking` | **64** |
+| …of those, inside `PluginRuntime.performNativeFetch` | **64** |
+| `DefaultDispatcher-worker-1` CPU at elapsed 199s | 1205.37ms |
+| same thread's CPU at elapsed 325s | **1205.37ms** |
+| New log lines in a 30s window | **0** |
+| Time on screen before the run was abandoned | > 5 min |
+
+64 is not a coincidence. `NuvioBlockingDispatcher` is `Dispatchers.IO`, whose default parallelism
+is `max(64, nCPU)` = 64 here, and nothing in the repo raises it (`grep` for `io.parallelism` and
+`limitedParallelism` returns nothing).
+
+**Mechanism.** The JS `fetch` binding QuickJS gives scraper code is synchronous, so
+`performNativeFetch` services it with `runBlocking { … }` from inside a native `QuickJs.evaluate`
+frame — and `httpRequestRaw` starts with `withContext(Dispatchers.IO)`. Plugin execution ran on
+`Dispatchers.IO` too. Every plugin holding a thread inside `runBlocking` was holding one of the 64
+slots its own HTTP call then needed. All 64 filled; every fetch queued behind a thread waiting for
+that fetch.
+
+**This is why nothing was ever logged.** The 20s fetch bound belongs to a coroutine that was never
+scheduled. The 60s plugin bound and the 45s per-source bound cannot cancel through a native frame —
+cancellation is only observed at a suspension point and there is none between the timeout and
+QuickJS. The machinery that would have printed `Timed out:` was itself starved. Every earlier run
+read "no timeout logged" as evidence the timeout had not been reached; it was evidence the timeout
+could not fire.
+
+Note this also explains why run 1's control test looked clean. The control loaded the *show page*
+list on a title whose scrapers happened to finish. The variable was never addon-vs-scraper as run 1
+guessed — it was how many scrapers blocked at once.
+
+**Fix** (`49506855`): plugin execution moves to `NuvioPluginDispatcher`, a dedicated elastic pool
+disjoint from the one `httpRequestRaw` uses. The invariant is written into its KDoc as a rule —
+nothing dispatched there may block on work that dispatches back there.
+
+**Re-test, same episode, same addons, same scrapers:**
+
+| Check | Before | After |
+| --- | --- | --- |
+| Stream picker | never settled | settles, all 7 addons report |
+| In-player Sources panel | never settled | `All 157 sources reported` / `Load complete: 0 still loading` |
+| Per-source failures logged | none, ever | 4, by name |
+| Threads in `performNativeFetch` | 64 | **0** |
+| `DefaultDispatcher-worker` threads | 69 | **12** |
+| Leftover plugin threads after the load | — | **0** |
+
+Both panels were also inspected visually: no spinning chips, streams listed.
+
+### MP-01: **FAIL → PASS**
+
+The stale-`Paused` MPRIS state was a race, not a missing clear. `onDispose` clears `hasMedia` and
+`controller`, but the ~10 Hz snapshot loop sets `hasMedia = !snap.isEnded` from another thread, so
+one late tick puts it back and the Stopped branch — which needs both — never fires again. The side
+effects now know whether their surface still owns the bridge, and detach *first* in the source-keyed
+dispose. Re-armable, not latched, because a source change disposes that same effect while the
+surface lives on.
+
+Measured on both engines: `Playing` with an advancing position during playback, `Stopped`
+immediately after leaving and still `Stopped` 20s later.
+
+Found alongside it: on the mpv engine `PlayerControlBridge.isPlaying` was **never once set true** —
+VLCJ set it from its own playing/paused/stopped/finished callbacks and mpv has no equivalent, so
+MPRIS advertised a paused player through an entire film. It is maintained from the snapshot now,
+which both engines produce, and the VLCJ event writes are gone.
+
+### Debrid API keys in the log: fixed
+
+`redactSourceUrl` existed but lived in `desktopMain`, and the addon fan-out that logs every stream
+URL is `commonMain`. Moved to `core/network` as pure common Kotlin, and applied to the fan-out, the
+meta fetch and the three `AddonRepository` sites that log a manifest URL. It now also drops the
+query string whole and strips `user:password@` credentials, and its file-name heuristic checks the
+extension rather than "contains a dot" — a base64 config blob appended to a segment that already
+has one used to sail through. Eight tests.
+
+Confirmed live: `Fetching streams from: https://<host>/…/kitsu%3A49444%3A5.json`.
+
+### The libmpv engine is a setting now
+
+Verified end to end on this machine, driven only by the toggle, no env vars: the row renders and is
+enabled (libmpv 2.x detected), flipping it writes `mpvEngineEnabled=true`, and after a restart the
+log shows `libmpv player engine: enabled in Settings`, `[nuvio-egl] ACTIVE`,
+`hwdec-current=vaapi`, 24.0 fps against a 24 fps source, avsync 0.000, dropped 0 — at **20.9% CPU
+on 4K**, against VLCJ's ~380% on the same class of file. Clean `NuvioMpvSession: disposed` on exit.
+
+### Also fixed, from run 3's findings
+
+`ProfileRepository.updateProfile` rebuilt the edited profile's push payload without
+`usesPrimaryPlugins`, and the push replaces the whole row — so renaming a profile or changing its
+avatar silently turned its primary plugins off. Carried over now.
+
+⚠ Still not fixed: turning **"use primary addons" off** does not persist. The flag is sent
+correctly (`encodeDefaults` is on, so `false` really is in the payload) and comes back `true` from
+the pull after `sync_push_profiles`. That points at the server RPC, not the client.
+
+### Standing caveat
+
+The per-source timeout still cannot interrupt a scraper, because cancellation cannot unwind a native
+QuickJS frame. With the dispatcher fixed, the 20s per-fetch bound does its job and scrapers settle;
+but a scraper making many sequential fetches is bounded only by its own fetch count. If that ever
+bites, the fix is to race each source against its timer in a job the timeout does not own, and
+publish "Timed out" while the orphan finishes in the background.
