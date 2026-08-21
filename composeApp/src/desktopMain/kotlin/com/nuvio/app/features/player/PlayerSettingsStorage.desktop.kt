@@ -433,6 +433,15 @@ internal actual object PlayerSettingsStorage {
             "No Discord application id is built into this release, so this setting has no effect. " +
                 "Set NUVIO_DISCORD_CLIENT_ID, or put the id in ~/.config/nuvio/discord-client-id, then restart Nuvio."
         }
+    actual fun loadMpvEngineEnabled(): Boolean? = machineStore.getBoolean("mpvEngineEnabled")
+    actual fun saveMpvEngineEnabled(enabled: Boolean) { machineStore.putBoolean("mpvEngineEnabled", enabled) }
+    actual fun mpvEngineUnavailableReason(): String? =
+        if (com.nuvio.app.desktop.mpv.MpvHandle.isAvailable) {
+            null
+        } else {
+            "libmpv 2.x was not found on this system, so this setting has no effect and Nuvio " +
+                "will keep using the default player. Install it (Debian/Ubuntu: libmpv2) and restart Nuvio."
+        }
     actual fun loadTrayIconEnabled(): Boolean? = machineStore.getBoolean("trayIconEnabled")
     actual fun saveTrayIconEnabled(enabled: Boolean) { machineStore.putBoolean("trayIconEnabled", enabled) }
     actual fun loadMenuBarEnabled(): Boolean? = machineStore.getBoolean("menuBarEnabled")

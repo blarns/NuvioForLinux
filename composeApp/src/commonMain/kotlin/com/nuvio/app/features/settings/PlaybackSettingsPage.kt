@@ -788,6 +788,23 @@ private fun PlaybackSettingsSection(
                         onCheckedChange = PlayerSettingsRepository::setHwAccelEnabled,
                     )
                     SettingsGroupDivider(isTablet = isTablet)
+                    val mpvUnavailableReason = remember {
+                        PlayerSettingsStorage.mpvEngineUnavailableReason()
+                    }
+                    SettingsSwitchRow(
+                        title = "Experimental libmpv player",
+                        description = mpvUnavailableReason
+                            ?: "Play video through libmpv instead of the default player. On a 4K " +
+                                "HEVC file this cuts CPU use from around 380% to 20% by decoding " +
+                                "on the GPU with no copy back. Still experimental: if libmpv " +
+                                "cannot start, Nuvio falls back to the default player on its own. " +
+                                "Requires app restart to take effect.",
+                        checked = playerSettings.mpvEngineEnabled,
+                        enabled = mpvUnavailableReason == null,
+                        isTablet = isTablet,
+                        onCheckedChange = PlayerSettingsRepository::setMpvEngineEnabled,
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
                     SettingsSwitchRow(
                         title = "Show menu bar",
                         description = "Show the window menu bar (Playback \u2192 Sleep timer). " +

@@ -1,5 +1,6 @@
 package com.nuvio.app.desktop.mpv
 
+import com.nuvio.app.desktop.DesktopEngineFlags
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
@@ -111,7 +112,8 @@ internal class MpvSession private constructor(
                 // as a broken source rather than a broken renderer.
                 onError?.invoke(
                     IllegalStateException(
-                        "Video renderer could not start. Restart the app, or unset NUVIO_MPV to use the default player.",
+                        "Video renderer could not start. Restart the app, or turn off the " +
+                            "experimental libmpv player in Settings → Playback to use the default player.",
                     ),
                 )
                 return null
@@ -338,9 +340,13 @@ internal class MpvSession private constructor(
     companion object {
         /**
          * Opt-in while the engine is being proven on real hardware. VLCJ stays the default and
-         * the fallback: nothing below runs unless this is set.
+         * the fallback: nothing below runs unless this is on.
+         *
+         * Settings → Playback → Linux desktop owns this; NUVIO_MPV still overrides it either way
+         * (`=1` on, anything else off) so the spikes and a user with a broken install can force
+         * the answer without touching the store.
          */
-        val isEnabled: Boolean get() = System.getenv("NUVIO_MPV") == "1"
+        val isEnabled: Boolean get() = DesktopEngineFlags.mpvEnabled
 
         /**
          * Null whenever libmpv is missing or refuses to start — the caller falls back to VLCJ

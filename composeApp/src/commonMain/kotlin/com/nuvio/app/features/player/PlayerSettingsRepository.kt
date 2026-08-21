@@ -53,6 +53,7 @@ data class PlayerSettingsUiState(
     val tunnelingEnabled: Boolean = false,
     val hwAccelEnabled: Boolean = true,
     val discordRichPresenceEnabled: Boolean = false,
+    val mpvEngineEnabled: Boolean = false,
     val trayIconEnabled: Boolean = false,
     val menuBarEnabled: Boolean = true,
     val audioOutput: String = "",
@@ -121,6 +122,7 @@ object PlayerSettingsRepository {
     private var tunnelingEnabled = false
     private var hwAccelEnabled = true
     private var discordRichPresenceEnabled = false
+    private var mpvEngineEnabled = false
     private var trayIconEnabled = false
     private var menuBarEnabled = true
     private var audioOutput = ""
@@ -283,6 +285,7 @@ object PlayerSettingsRepository {
         tunnelingEnabled = PlayerSettingsStorage.loadTunnelingEnabled() ?: false
         hwAccelEnabled = PlayerSettingsStorage.loadHwAccelEnabled() ?: true
         discordRichPresenceEnabled = PlayerSettingsStorage.loadDiscordRichPresenceEnabled() ?: false
+        mpvEngineEnabled = PlayerSettingsStorage.loadMpvEngineEnabled() ?: false
         trayIconEnabled = PlayerSettingsStorage.loadTrayIconEnabled() ?: false
         menuBarEnabled = PlayerSettingsStorage.loadMenuBarEnabled() ?: true
         audioOutput = PlayerSettingsStorage.loadAudioOutput() ?: ""
@@ -550,6 +553,19 @@ object PlayerSettingsRepository {
         discordRichPresenceEnabled = enabled
         publish()
         PlayerSettingsStorage.saveDiscordRichPresenceEnabled(enabled)
+    }
+
+    /**
+     * ⚠ Takes effect on the NEXT launch, not this one. The engine choice also decides whether
+     * Compose renders through EGL, and that is installed before the first SkiaLayer exists — see
+     * DesktopEngineFlags. The settings row says so; nothing here tries to switch engines live.
+     */
+    fun setMpvEngineEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (mpvEngineEnabled == enabled) return
+        mpvEngineEnabled = enabled
+        publish()
+        PlayerSettingsStorage.saveMpvEngineEnabled(enabled)
     }
 
     fun setTrayIconEnabled(enabled: Boolean) {
@@ -947,6 +963,7 @@ object PlayerSettingsRepository {
             tunnelingEnabled = tunnelingEnabled,
             hwAccelEnabled = hwAccelEnabled,
             discordRichPresenceEnabled = discordRichPresenceEnabled,
+            mpvEngineEnabled = mpvEngineEnabled,
             trayIconEnabled = trayIconEnabled,
             menuBarEnabled = menuBarEnabled,
             audioOutput = audioOutput,

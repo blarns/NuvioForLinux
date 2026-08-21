@@ -502,6 +502,9 @@ actual object PlayerSettingsStorage {
     actual fun loadDiscordRichPresenceEnabled(): Boolean? = null
     actual fun saveDiscordRichPresenceEnabled(enabled: Boolean) {}
     actual fun discordRichPresenceUnavailableReason(): String? = null
+    actual fun loadMpvEngineEnabled(): Boolean? = null
+    actual fun saveMpvEngineEnabled(enabled: Boolean) {}
+    actual fun mpvEngineUnavailableReason(): String? = null
     actual fun loadTrayIconEnabled(): Boolean? = null
     actual fun saveTrayIconEnabled(enabled: Boolean) {}
     actual fun loadMenuBarEnabled(): Boolean? = null

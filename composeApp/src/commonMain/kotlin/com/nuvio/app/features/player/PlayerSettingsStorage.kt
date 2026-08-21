@@ -68,6 +68,17 @@ internal expect object PlayerSettingsStorage {
      * having no effect, shown under the toggle. Always null where the feature doesn't exist.
      */
     fun discordRichPresenceUnavailableReason(): String?
+    fun loadMpvEngineEnabled(): Boolean?
+    fun saveMpvEngineEnabled(enabled: Boolean)
+    /**
+     * Null when the libmpv engine can actually be used on this machine; otherwise a short reason
+     * it cannot, shown under the toggle. Always null where the engine doesn't exist.
+     *
+     * ⚠ Read at startup, before Compose, because the EGL renderer this engine needs has to be
+     * installed before the first SkiaLayer exists. Machine-local and NOT profile-scoped for that
+     * reason — there is no active profile that early.
+     */
+    fun mpvEngineUnavailableReason(): String?
     fun loadTrayIconEnabled(): Boolean?
     fun saveTrayIconEnabled(enabled: Boolean)
     fun loadMenuBarEnabled(): Boolean?

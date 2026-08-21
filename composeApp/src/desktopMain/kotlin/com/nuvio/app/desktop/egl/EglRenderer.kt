@@ -537,11 +537,13 @@ object EglRenderer {
     /** True once Compose is really drawing through EGL — see [EglSeam] for why this gates mpv. */
     val isActive: Boolean get() = activeRenderer != null && EglSeam.directContext != null
 
-    val isEnabled: Boolean get() = System.getenv("NUVIO_EGL") == "1"
+    // Follows the libmpv engine setting, because the GPU tier is the only reason to run on EGL
+    // at all — see DesktopEngineFlags. NUVIO_EGL still overrides it on its own.
+    val isEnabled: Boolean get() = com.nuvio.app.desktop.DesktopEngineFlags.eglEnabled
 
     fun install() {
         if (!isEnabled) {
-            status = "disabled (set NUVIO_EGL=1 to enable)"
+            status = "disabled (enable the libmpv engine in Settings, or set NUVIO_EGL=1)"
             return
         }
         // Deliberate escape hatch: exercises the GLX fallback on demand, so that path is
