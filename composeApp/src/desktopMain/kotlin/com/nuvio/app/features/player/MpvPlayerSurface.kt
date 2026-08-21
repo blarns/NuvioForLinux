@@ -236,8 +236,12 @@ internal fun MpvPlayerSurface(
         }
         onControllerReady(session.controller)
         PlayerControlBridge.controller = session.controller
+        sideEffects.attach()
 
         onDispose {
+            // ⚠ First, before anything is cleared: a snapshot tick already in flight would
+            // otherwise put hasMedia straight back and strand MPRIS on a frozen Paused.
+            sideEffects.detach()
             session.onError = null
             PlayerControlBridge.controller = null
             PlayerControlBridge.isPlaying = false

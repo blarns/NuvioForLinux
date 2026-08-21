@@ -7,7 +7,7 @@ import com.nuvio.app.features.player.PlayerPlaybackSnapshot
 import com.nuvio.app.features.player.PlayerSettingsUiState
 import com.nuvio.app.features.player.SubtitleStyleState
 import com.nuvio.app.features.player.SubtitleTrack
-import com.nuvio.app.features.player.redactSourceUrl
+import com.nuvio.app.core.network.redactSourceUrl
 import com.nuvio.app.features.player.reportPlaybackFailureAsync
 import java.util.concurrent.atomic.AtomicLong
 

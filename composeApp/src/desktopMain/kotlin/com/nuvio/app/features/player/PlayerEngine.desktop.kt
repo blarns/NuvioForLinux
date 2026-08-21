@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import com.nuvio.app.core.network.redactSourceUrl
 import com.nuvio.app.desktop.mpv.MpvSession
 import com.nuvio.app.features.discord.DiscordRichPresence
 import kotlinx.coroutines.Dispatchers
@@ -456,8 +457,12 @@ private fun VlcjPlayerSurface(
         playerController = controller
         onControllerReady(controller)
         PlayerControlBridge.controller = controller
+        sideEffects.attach()
 
         onDispose {
+            // ⚠ First, before anything is cleared: a snapshot tick already in flight would
+            // otherwise put hasMedia straight back and strand MPRIS on a frozen Paused.
+            sideEffects.detach()
             playerController = null
             PlayerControlBridge.controller = null
             PlayerControlBridge.isPlaying = false
@@ -615,8 +620,9 @@ private class VlcjPlayerController(
                 override fun playing(mediaPlayer: MediaPlayer?) {
                     println("$TAG: Event -> playing")
                     currentState = currentState.copy(isLoading = false, isPlaying = true, isEnded = false)
+                    // The MPRIS bridge is fed from the snapshot inside DesktopPlaybackSideEffects,
+                    // not from here — see the note there on why the engine events cannot own it.
                     onSnapshot(currentState)
-                    PlayerControlBridge.isPlaying = true
 
                     // Re-apply our cached volume when media actually starts
                     try {
@@ -629,19 +635,16 @@ private class VlcjPlayerController(
                 override fun paused(mediaPlayer: MediaPlayer?) {
                     currentState = currentState.copy(isPlaying = false, positionMs = bestPositionMs(), durationMs = bestDurationMs())
                     onSnapshot(currentState)
-                    PlayerControlBridge.isPlaying = false
                 }
 
                 override fun stopped(mediaPlayer: MediaPlayer?) {
                     currentState = currentState.copy(isPlaying = false, positionMs = bestPositionMs(), durationMs = bestDurationMs())
                     onSnapshot(currentState)
-                    PlayerControlBridge.isPlaying = false
                 }
 
                 override fun finished(mediaPlayer: MediaPlayer?) {
                     currentState = currentState.copy(isEnded = true, isPlaying = false, positionMs = bestPositionMs(), durationMs = bestDurationMs())
                     onSnapshot(currentState)
-                    PlayerControlBridge.isPlaying = false
                 }
 
                 override fun timeChanged(mediaPlayer: MediaPlayer?, newTime: Long) {

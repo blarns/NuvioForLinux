@@ -135,6 +135,28 @@ internal class DesktopPlaybackSideEffects {
      */
     val nearEnd = AtomicBoolean(false)
 
+    /**
+     * Whether this surface still owns [PlayerControlBridge].
+     *
+     * ⚠ The poll loop and Compose disposal run on different threads, so leaving the player is a
+     * race: the surface's `onDispose` clears `hasMedia`/`controller` to make MPRIS say `Stopped`,
+     * but a snapshot tick already in flight would then set `hasMedia = true` again from
+     * `!snap.isEnded`. MPRIS needs BOTH cleared for its Stopped branch, so one late tick left the
+     * system media widget offering Nuvio forever as a paused player with a frozen position and a
+     * Play button that did nothing — the exact symptom the clear was added to fix, just harder to
+     * reproduce. Ticks that land after the surface has let go must not write to the bridge at all.
+     *
+     * Re-armable, not latched: a source change (next-episode autoplay, token rotation) disposes
+     * and re-runs that same effect while the surface lives on, and MPRIS has to come back.
+     */
+    private val attached = AtomicBoolean(false)
+
+    /** This surface is taking ownership of the MPRIS bridge. */
+    fun attach() { attached.set(true) }
+
+    /** This surface has let the bridge go; later ticks must leave it alone. */
+    fun detach() { attached.set(false) }
+
     /** Call from the poll loop. [forward] is the surface's own `onSnapshot` callback. */
     fun onSnapshot(snap: PlayerPlaybackSnapshot, forward: (PlayerPlaybackSnapshot) -> Unit) {
         // Freeze frame rendering once ended; re-enable when real playback resumes.
@@ -150,19 +172,30 @@ internal class DesktopPlaybackSideEffects {
         }
         // Feed live position/duration to MPRIS and nudge it to re-emit metadata only when
         // playing-state or duration actually changes (Position is polled by clients, so it is
-        // intentionally NOT signalled every tick).
-        val statusOrDurationChanged =
-            PlayerControlBridge.isPlaying != snap.isPlaying ||
-                PlayerControlBridge.durationMs != snap.durationMs
-        PlayerControlBridge.positionMs = snap.positionMs
-        PlayerControlBridge.durationMs = snap.durationMs
-        PlayerControlBridge.hasMedia = !snap.isEnded
-        if (statusOrDurationChanged) PlayerControlBridge.onNowPlayingChanged?.invoke()
+        // intentionally NOT signalled every tick). Skipped once detached — see [attached].
+        if (attached.get()) {
+            val statusOrDurationChanged =
+                PlayerControlBridge.isPlaying != snap.isPlaying ||
+                    PlayerControlBridge.durationMs != snap.durationMs
+            PlayerControlBridge.positionMs = snap.positionMs
+            PlayerControlBridge.durationMs = snap.durationMs
+            PlayerControlBridge.hasMedia = !snap.isEnded
+            // ⚠ isPlaying is maintained HERE, from the snapshot, not from engine events. VLCJ used
+            // to set it from its own playing/paused/stopped/finished callbacks — which mpv has no
+            // equivalent of, so on the mpv engine the flag never once became true and MPRIS
+            // advertised a paused player through an entire film. Both engines produce snapshots;
+            // only one produced those events.
+            PlayerControlBridge.isPlaying = snap.isPlaying
+            if (statusOrDurationChanged) PlayerControlBridge.onNowPlayingChanged?.invoke()
+        }
         forward(snap)
     }
 
     /** Teardown: drop the inhibitor and the Discord presence when leaving the surface. */
     fun release() {
+        // Backstop only — the source-keyed dispose detaches first, because this one runs later
+        // and Compose does not promise the order.
+        detach()
         ScreensaverInhibitor.release()
         DiscordRichPresence.clear()
     }

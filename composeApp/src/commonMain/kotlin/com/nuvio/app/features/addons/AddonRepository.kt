@@ -2,6 +2,7 @@ package com.nuvio.app.features.addons
 
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.network.SupabaseProvider
+import com.nuvio.app.core.network.redactSourceUrl
 import com.nuvio.app.core.sync.putSyncOriginClientId
 import com.nuvio.app.features.profiles.ProfileRepository
 import io.github.jan.supabase.postgrest.postgrest
@@ -228,7 +229,7 @@ object AddonRepository {
         if (isUsingPrimaryAddonsFromSecondaryProfile()) {
             return AddAddonResult.Error(getString(Res.string.profile_primary_addons_required))
         }
-        log.i { "addAddon() — rawUrl=$rawUrl" }
+        log.i { "addAddon() — rawUrl=${redactSourceUrl(rawUrl)}" }
         val manifestUrl = try {
             normalizeManifestUrl(rawUrl)
         } catch (error: IllegalArgumentException) {
@@ -270,7 +271,7 @@ object AddonRepository {
         if (isUsingPrimaryAddonsFromSecondaryProfile()) {
             return AddAddonResult.Error(getString(Res.string.profile_primary_addons_required))
         }
-        log.i { "replaceAddonUrl() — currentUrl=$currentUrl" }
+        log.i { "replaceAddonUrl() — currentUrl=${redactSourceUrl(currentUrl)}" }
         val newManifestUrl = try {
             normalizeManifestUrl(newRawUrl)
         } catch (error: IllegalArgumentException) {
@@ -321,7 +322,7 @@ object AddonRepository {
 
     fun removeAddon(manifestUrl: String) {
         if (isUsingPrimaryAddonsFromSecondaryProfile()) return
-        log.i { "removeAddon() — $manifestUrl" }
+        log.i { "removeAddon() — ${redactSourceUrl(manifestUrl)}" }
         _uiState.update { current ->
             current.copy(
                 addons = current.addons.filterNot { it.manifestUrl == manifestUrl },

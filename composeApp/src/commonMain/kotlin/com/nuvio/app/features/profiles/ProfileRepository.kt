@@ -242,6 +242,10 @@ object ProfileRepository {
                     name = name,
                     avatarColorHex = avatarColorHex,
                     usesPrimaryAddons = usesPrimaryAddons,
+                    // ⚠ Carried over, not defaulted. The push replaces the whole row and this
+                    // screen has no control for it, so leaving it out silently turned primary
+                    // plugins off for the profile every time its name or avatar was edited.
+                    usesPrimaryPlugins = profile.usesPrimaryPlugins,
                     avatarId = avatarId,
                     avatarUrl = avatarUrl,
                 )

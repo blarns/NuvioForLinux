@@ -1,45 +1,9 @@
 package com.nuvio.app.features.player
 
-/**
- * A source URL reduced to what is safe to print.
- *
- * ⚠ Debrid and scraper links carry CREDENTIALS IN THE PATH — a base64 blob holding the user's
- * Real-Debrid / TorBox API keys, or a signed token — and the query string routinely repeats them.
- * Logging the URL whole therefore writes working account keys into stdout, which is exactly what
- * `scripts/nuvio_debug_logs.sh` collects and users paste into bug reports. Seen in a real session
- * log before this existed.
- *
- * Keeps the host (which names the provider, the useful part when diagnosing) and the file name if
- * the last path segment looks like one; everything in between becomes an ellipsis.
- */
-internal fun redactSourceUrl(url: String?): String {
-    if (url.isNullOrBlank()) return "<none>"
-    if (!(url.startsWith("http://", true) || url.startsWith("https://", true))) {
-        // Local paths and magnets carry no account secrets, but a magnet is long and pointless
-        // in a log, so it is cut to its info-hash.
-        return if (url.startsWith("magnet:", true)) url.take(60) + "…" else url
-    }
-    return try {
-        val uri = java.net.URI.create(url)
-        val host = uri.host ?: return "<unparseable url>"
-        // Only a segment that still looks like a media file name is kept; a long opaque segment
-        // is precisely the credential blob.
-        val lastSegment = uri.path.orEmpty().substringAfterLast('/')
-        val fileName = lastSegment.takeIf {
-            it.length in 1..120 && it.contains('.') && !it.contains("==")
-        }
-        val decodedName = fileName?.let {
-            runCatching { java.net.URLDecoder.decode(it, "UTF-8") }.getOrDefault(it)
-        }
-        buildString {
-            append(uri.scheme).append("://").append(host)
-            append("/…")
-            if (decodedName != null) append('/').append(decodedName)
-        }
-    } catch (_: Exception) {
-        "<unparseable url>"
-    }
-}
+// redactSourceUrl used to live here. It moved to com.nuvio.app.core.network because the addon
+// fan-out that also logs credential-bearing URLs is commonMain and could not reach a desktopMain
+// helper — which is how whole addon URLs, API keys and all, kept being written to the log this
+// function exists to keep them out of.
 
 /**
  * Turns a playback failure into something a user can act on.

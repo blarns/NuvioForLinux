@@ -19,6 +19,7 @@ import com.nuvio.app.features.plugins.PluginRepositoryItem
 import com.nuvio.app.features.plugins.PluginRuntimeResult
 import com.nuvio.app.features.plugins.PluginScraper
 import com.nuvio.app.core.concurrency.NuvioBlockingDispatcher
+import com.nuvio.app.core.network.redactSourceUrl
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -63,6 +64,15 @@ internal fun shouldSkipStreamReload(
     if (forceRefresh || !sameRequestKey) return false
     return hasSettledGroups || hasEmptyStateReason || (isAnyLoading && isLoadJobActive)
 }
+
+/**
+ * Upper bound on the debrid cached-availability check, shared by both fan-outs.
+ *
+ * A group is not published until its check returns, so an unbounded one keeps that source's
+ * spinner up forever. Generous — this is a backstop against a wedged provider, not a latency
+ * target — but finite.
+ */
+internal const val CACHE_CHECK_TIMEOUT_MS = 20_000L
 
 object StreamsRepository {
     private val log = Logger.withTag("StreamsRepo")
@@ -362,10 +372,14 @@ object StreamsRepository {
                 // able to take the stream list down with it.
                 val availabilityJob = launch {
                     val availabilityGroup = runCatchingUnlessCancelled {
-                        LocalDebridAvailabilityService.annotateCachedAvailability(
-                            groups = listOf(checkingGroup),
-                            eligibleGroupIds = eligibleGroupIds,
-                        ).firstOrNull()
+                        // Bounded as well as caught: nothing publishes until this returns, so an
+                        // unbounded check holds this source's spinner open indefinitely.
+                        withTimeoutOrNull(CACHE_CHECK_TIMEOUT_MS) {
+                            LocalDebridAvailabilityService.annotateCachedAvailability(
+                                groups = listOf(checkingGroup),
+                                eligibleGroupIds = eligibleGroupIds,
+                            ).firstOrNull()
+                        }
                     }.getOrElse { error ->
                         log.w(error) { "Debrid availability check failed for ${group.addonName}" }
                         null
@@ -510,7 +524,7 @@ object StreamsRepository {
                             type = type,
                             id = videoId,
                         )
-                        log.d { "Fetching streams from: $url" }
+                        log.d { "Fetching streams from: ${redactSourceUrl(url)}" }
 
                         val displayName = addon.addonName
                         val group = runCatchingUnlessCancelled {

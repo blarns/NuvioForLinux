@@ -23,6 +23,7 @@ import com.nuvio.app.features.streams.StreamBadgeSettingsRepository
 import com.nuvio.app.features.streams.StreamItem
 import com.nuvio.app.features.streams.StreamParser
 import com.nuvio.app.features.streams.StreamsUiState
+import com.nuvio.app.features.streams.CACHE_CHECK_TIMEOUT_MS
 import com.nuvio.app.features.streams.shouldSkipStreamReload
 import com.nuvio.app.core.concurrency.NuvioBlockingDispatcher
 import kotlinx.coroutines.CancellationException
@@ -319,11 +320,27 @@ object PlayerStreamsRepository {
                     eligibleGroupIds = eligibleGroupIds,
                 ).firstOrNull() ?: group
 
+                // ⚠ Launched on the load's own job, NOT the supervisorScope below, so an uncaught
+                // throw here cancels the whole load — and every group that had not published yet
+                // is stranded at isLoading = true, spinning forever with nothing logged, because
+                // cancellation is exactly what the fan-out's runCatchingUnlessCancelled rethrows.
+                // Nothing is published until this returns either, so an unbounded check holds its
+                // own group's spinner open indefinitely. The debrid cache check is an enhancement:
+                // it must never be able to take the stream list down with it, and it must always
+                // settle. StreamsRepository, the twin fan-out, already had the first guard; this
+                // is the same guarantee plus a bound on both.
                 val availabilityJob = launch {
-                    val availabilityGroup = LocalDebridAvailabilityService.annotateCachedAvailability(
-                        groups = listOf(checkingGroup),
-                        eligibleGroupIds = eligibleGroupIds,
-                    ).firstOrNull() ?: checkingGroup
+                    val availabilityGroup = runCatchingUnlessCancelled {
+                        withTimeoutOrNull(CACHE_CHECK_TIMEOUT_MS) {
+                            LocalDebridAvailabilityService.annotateCachedAvailability(
+                                groups = listOf(checkingGroup),
+                                eligibleGroupIds = eligibleGroupIds,
+                            ).firstOrNull()
+                        }
+                    }.getOrElse { error ->
+                        log.w(error) { "Debrid availability check failed for ${group.addonName}" }
+                        null
+                    } ?: checkingGroup
                     publishStreamGroup(presentStreamGroup(availabilityGroup))
                 }
                 debridAvailabilityJobs += availabilityJob
