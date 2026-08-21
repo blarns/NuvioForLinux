@@ -524,3 +524,32 @@ QuickJS frame. With the dispatcher fixed, the 20s per-fetch bound does its job a
 but a scraper making many sequential fetches is bounded only by its own fetch count. If that ever
 bites, the fix is to race each source against its timer in a job the timeout does not own, and
 publish "Timed out" while the orphan finishes in the background.
+
+### Precision on the before/after, since the comparison is doing a lot of work
+
+The obvious way an A/B like this lies is if the "after" run simply did less. It did **more**:
+
+| | deadlocked run | post-fix run |
+| --- | --- | --- |
+| `PluginRuntime` log lines | 80, then frozen | **807** |
+| Distinct scrapers that logged | 54 | **75** |
+
+So the fixed build pushed roughly ten times the plugin work through and finished, where the broken
+one stopped at 80 lines and never emitted another.
+
+⚠ One thing was **not** directly observed: every post-fix `jstack` was taken *after* the load had
+settled, and the cached pool reaps idle threads after 60s, so no `nuvio-plugin-N` thread was ever
+caught in flight. Routing is established by construction — `executePlugin` and the `quickJs(...)`
+job dispatcher both name `NuvioPluginDispatcher`, with no dynamic dispatch — and the pre-fix dump
+showed those same frames on `DefaultDispatcher-worker`, which is what the old wiring named. The
+deadlock's disappearance under a strictly larger workload is the behavioural proof. A dump taken
+mid-load would close the last gap.
+
+### Two follow-ups this run created and did not close
+
+- The `usesPrimaryPlugins` fix is **not exercised at runtime**. Editing a profile's name or avatar
+  and confirming the flag survives is a one-minute check that nobody has run.
+- On timeout, the bounded debrid cache check publishes `checkingGroup` — so a source whose check
+  times out settles (good) but keeps a permanent **"checking"** badge (misleading). Deliberately
+  mirrors the sibling repository rather than diverging under time pressure; worth a
+  `checking → unknown` mapping on the fallback path in both.
