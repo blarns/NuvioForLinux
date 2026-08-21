@@ -257,3 +257,81 @@ write behaved (no stray `.tmp` files, no truncated store, value intact across a 
 **freeing evicted hover-art frames was never reached** — the hovering hit catalog rows, not
 collection rows, so HA-01 is BLOCKED rather than passed. Seven rows are BLOCKED rather than
 guessed: SW-03, HA-01, the three DL rows, P2P-01 and UP-01.
+
+---
+
+## Run: 2026-08-20 (second pass) — the blocked rows, revisited
+
+Same machine, same branch, same isolation as the first run. This pass exists only to close the
+rows the first run left BLOCKED. Rows not listed here are unchanged from run 1.
+
+- Commit under test: `958ca1f4`
+- Build: from source
+- Profile: `testing` (profile 4) except where noted; one HA-01 sweep ran on profile 1, read-only
+- Debrid configured: yes   P2P enabled: no   NUVIO_MPV: unset
+
+| ID | Result | Notes |
+|----|--------|-------|
+| HA-01 | PASS | Now run on the **collection** rows, which are the ones that use the changed file. 68 hovers over 4 passes: RSS 1797.1 MB → 1800.1 MB, then **989.4 MB** after a forced GC. App alive throughout, no native crash. One caveat below |
+| SW-03 | BLOCKED | Three further attempts, all defeated by addon filtering rather than by the fix. Much sharper account of what it would take, below |
+| UP-01 | BLOCKED (half covered) | The update **check** works end to end — reaches the release feed, resolves the latest release, reports "No updates found" against 0.3.5 (111). The **download** half, which is where the changed code is, could not run: there is no newer release to fetch |
+
+### HA-01 — now on the right rows
+
+Run 1's sweep was on catalog rows and therefore proved nothing about this change. This pass hovered
+the two collection rows on the home page — the tiles rendered by `HomeCollectionRowSection` →
+`CollectionCardRemoteImage`, which is where `FocusAnimation.close()` lives. 17 distinct tiles, four
+passes, 68 hovers, well past the 8-entry animation cache, so evictions must have occurred if the
+cache was being populated at all.
+
+No crash. RSS rose 3 MB across the sweep and dropped to 989 MB after `GC.run` — 808 MB below where
+it started, so nothing is being retained.
+
+⚠ What is still not proven: that the **animated decode** actually ran. There is no log line for it,
+and sampling a hovered tile five times over three seconds showed a pixel-identical image each time
+(mean absolute difference 0.000), so no frame advance was observed. The hover art is configured —
+the collection data carries `focusGifUrl` values and `mobileFocusGifEnabled` defaults to true — and
+the tile does change appearance on hover, but the GIF may simply not have decoded. Read this row as
+"68 hovers of the changed composable produced no crash and no growth", not as "the eviction path
+was exercised".
+
+### SW-03 — three more attempts, still blocked, and now for a precise reason
+
+The plan was sound and the harness worked: a local HTTP server that serves a valid Stremio manifest
+and returns 500 on every `/stream` request, added to the addon list. The app fetched its manifest at
+startup on every attempt, so it *was* installed. It was never given a stream request:
+
+1. Manifest with `idPrefixes: ["tt"]`, opened a `kitsu:`-keyed title → filtered out, 12 addons in
+   the fan-out.
+2. Manifest with **no** `idPrefixes` at all, opened a `tt:`-keyed title → still filtered out.
+   14 addons found, 14 `Got N streams` lines, none of them this addon, and no request reached the
+   server. So an absent `idPrefixes` is not treated as "matches everything".
+3. Manifest with `idPrefixes: ["tt", "kitsu"]`, `tt:`-keyed title → identical to (2). 14 addons,
+   14 results, no request.
+
+So a hand-edited entry in `installed_addon_urls_*` is loaded far enough to have its manifest
+fetched, but not far enough to join the stream fan-out. Whatever admits an addon to that fan-out is
+established somewhere other than the URL list plus a live manifest.
+
+To actually close this row, the addon has to be installed the ordinary way, through the UI — which
+needs a profile that owns its addons, because `addAddon()` refuses on a secondary profile using the
+primary's list (`AddonRepository.kt:228`). That means either the primary profile, whose addon list
+pushes to Supabase, or giving the testing profile its own addon list, which is also a synced change.
+Both are the maintainer's call, not something to do unattended.
+
+### UP-01 — the half that could run, ran
+
+`Check for updates` reached the release feed and returned **"Update status — No updates found."**
+against the running 0.3.5 (111). That exercises the check path and confirms it is not broken.
+
+The changed code is in the **download** (`AppUpdaterPlatform.desktop.kt`, the per-8KB progress
+issue), and it cannot be reached while the newest published release is the version already running.
+Enabling "Experimental updates" would not help — there is no newer prerelease either. This needs a
+newer release to exist, or a build deliberately versioned behind one.
+
+**Verdict for this pass:** one of the three intended rows closed. HA-01 now covers the changed
+composable and shows no crash and no retention, with the honest caveat that the animated decode
+itself was never observed running. SW-03 and UP-01 remain BLOCKED, but for reasons that are now
+specific and actionable rather than "not attempted": SW-03 needs a real UI install on a profile that
+owns its addons, and UP-01 needs a newer release to exist. Nothing found in this pass changes any
+run-1 result.
