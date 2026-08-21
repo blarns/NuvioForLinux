@@ -335,3 +335,68 @@ itself was never observed running. SW-03 and UP-01 remain BLOCKED, but for reaso
 specific and actionable rather than "not attempted": SW-03 needs a real UI install on a profile that
 owns its addons, and UP-01 needs a newer release to exist. Nothing found in this pass changes any
 run-1 result.
+
+---
+
+## Run: 2026-08-21 (third pass) — SW-03, closed
+
+Run 2 could not install a failing addon. This pass installs one properly, on a profile that owns
+its addon list, runs the check, and removes it again.
+
+- Commit under test: `958ca1f4`
+- Build: from source
+- Profile: the **primary** profile, with the maintainer present to enter its PIN
+- Isolation: as before, `XDG_CONFIG_HOME` on a fresh copy of `~/.config/nuvio`
+
+| ID | Result | Notes |
+|----|--------|-------|
+| SW-03 | PASS | A source that throws on every request does **not** take the stream list down. Detail below |
+
+### SW-03 — PASS
+
+Method: a local HTTP server serving a valid Stremio manifest (`stream` resource, movie + series,
+`idPrefixes` for the id schemes in use) that returns **HTTP 500 and closes the connection** on every
+`/stream` request. Installed through the ordinary Addons UI, exercised, then removed.
+
+What happened, in order:
+
+1. Install succeeded: `addAddon()`, then `pushToServer() — pushing 38 addons … success`.
+   The addon list went 37 → 38, active 31 → 32, and the addon appeared in the list as Active.
+2. Opening a series stream list produced `Found 15 addons for stream type=series id=tt…:8:3` — the
+   failing addon included.
+3. The server logged the request and refused it: `FAILING /stream/series/tt…%3A8%3A3.json` → 500.
+4. **Every other source populated anyway.** Fourteen `Got N streams from …` lines for that fan-out,
+   the list rendered normally, and no filter chip was left spinning.
+5. Removed: `removeAddon()`, `pushToServer() — pushing 37 addons … success`. Back to 37 / 31, and
+   no trace of it in the addon store.
+
+So the property SW-03 exists to check holds: one source throwing inside the fan-out no longer kills
+the load. This is the case run 1 could only evidence with an *error response* from a real addon —
+this one is a genuine transport failure inside the fetch.
+
+⚠ Half-confirmed: the failing addon's **own** row was not visually inspected. Its filter chip sits
+off the right-hand end of a horizontally scrollable strip that would not scroll under synthetic
+input, and its group is far down a list of ~900 streams. So "every other source still populates" is
+directly observed; "the dead addon's row shows an error" is not.
+
+### Why run 2's attempts failed, for the record
+
+Run 2 hand-edited the URL into `installed_addon_urls_*`. That gets the manifest fetched at startup
+but the addon never joins the fan-out. Installing the same URL through the UI, on the same machine
+against the same server, worked first time. So the addon list alone is not what admits an addon to
+stream discovery — worth knowing before anyone else tries to script addon setup by editing the
+store.
+
+### A separate finding: "use primary addons" does not turn off
+
+Before this pass, the intent was to run on the testing profile with its own addon list. Turning
+**off** "use primary addons" for that profile does not take:
+
+- `uses_primary_addons` is still `true` for that profile in `nuvio_profiles.properties`, in a copy
+  of the store written *after* the toggle.
+- Attempting an install on that profile fails with **"Install Failed — This profile uses primary
+  addons."**
+
+Not investigated further: whether the write never happens or a sync pull puts the old value back.
+It is unrelated to this branch — `ProfileEditScreen` / `ProfileRepository` are untouched by it — but
+it is a feature that visibly does nothing.
