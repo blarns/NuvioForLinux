@@ -139,6 +139,7 @@ object PlayerStreamsRepository {
     ) {
         val requestKey = "$type::$videoId::$season::$episode"
         val current = stateFlow.value
+        val isLoadJobActive = jobHolder()?.isActive == true
         if (
             shouldSkipStreamReload(
                 forceRefresh = forceRefresh,
@@ -146,9 +147,17 @@ object PlayerStreamsRepository {
                 hasSettledGroups = current.groups.any { !it.isLoading },
                 hasEmptyStateReason = current.emptyStateReason != null,
                 isAnyLoading = current.isAnyLoading,
-                isLoadJobActive = jobHolder()?.isActive == true,
+                isLoadJobActive = isLoadJobActive,
             )
         ) {
+            // ⚠ jobActive is the fact worth having in the log. When a source chip is still
+            // spinning, "the load is suspended somewhere" and "the load was cancelled and will
+            // never finish" look identical on screen and want opposite fixes.
+            log.d {
+                "Skipping stream reload for unchanged request type=$type id=$videoId " +
+                    "(loading=${current.isAnyLoading} jobActive=$isLoadJobActive " +
+                    "spinning=${current.groups.count { it.isLoading }}/${current.groups.size})"
+            }
             return
         }
 
@@ -336,6 +345,9 @@ object PlayerStreamsRepository {
                                 groups = listOf(checkingGroup),
                                 eligibleGroupIds = eligibleGroupIds,
                             ).firstOrNull()
+                        } ?: run {
+                            log.w { "Debrid availability check timed out for ${group.addonName}" }
+                            null
                         }
                     }.getOrElse { error ->
                         log.w(error) { "Debrid availability check failed for ${group.addonName}" }
@@ -406,9 +418,14 @@ object PlayerStreamsRepository {
                     publishStreamGroupAfterCacheCheck(result)
                 }
             }
+            log.d { "All ${sources.size} sources reported" }
             for (availabilityJob in debridAvailabilityJobs) {
                 availabilityJob.join()
             }
+            // Reaching here means every source AND every cache check finished. A spinner that
+            // outlives this line is a UI-state bug; one that appears without it is a source or
+            // a check still outstanding. Cheap to log, and it is the difference between the two.
+            log.d { "Load complete: ${stateFlow.value.groups.count { it.isLoading }} still loading" }
             launch {
                 DirectDebridStreamPreparer.prepare(
                     streams = stateFlow.value.groups

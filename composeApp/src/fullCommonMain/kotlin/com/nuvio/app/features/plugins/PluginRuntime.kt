@@ -8,7 +8,7 @@ import com.fleeksoft.ksoup.Ksoup
 import com.fleeksoft.ksoup.nodes.Document
 import com.fleeksoft.ksoup.nodes.Element
 import com.fleeksoft.ksoup.select.Elements
-import com.nuvio.app.core.concurrency.NuvioBlockingDispatcher
+import com.nuvio.app.core.concurrency.NuvioPluginDispatcher
 import com.nuvio.app.features.addons.httpRequestRaw
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -46,7 +46,7 @@ internal object PluginRuntime {
         episode: Int?,
         scraperId: String,
         scraperSettings: Map<String, Any> = emptyMap(),
-    ): List<PluginRuntimeResult> = withContext(NuvioBlockingDispatcher) {
+    ): List<PluginRuntimeResult> = withContext(NuvioPluginDispatcher) {
         withTimeout(PLUGIN_TIMEOUT_MS) {
             executePluginInternal(
                 code = code,
@@ -75,7 +75,12 @@ internal object PluginRuntime {
         var resultJson = "[]"
 
         try {
-            quickJs(NuvioBlockingDispatcher) {
+            // ⚠ NuvioPluginDispatcher, not the shared blocking one. This is the dispatcher the
+            // native `QuickJs.evaluate` frame runs on, and the `fetch` binding below blocks that
+            // very thread with `runBlocking` while its HTTP call needs a thread from
+            // Dispatchers.IO. Sharing one pool between the two deadlocks both — see
+            // NuvioPluginDispatcher for the measurement.
+            quickJs(NuvioPluginDispatcher) {
                 define("console") {
                     function("log") { args ->
                         log.d { "Plugin:$scraperId ${args.joinToString(" ") { it?.toString() ?: "null" }}" }
