@@ -6,6 +6,26 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.6.1] — 2026-08-22
+
+A single fix on top of 0.3.6, replacing that release's workaround with the real one.
+
+### Fixed
+
+- **Scraper plugins no longer tie up a thread each while waiting on the network.** 0.3.6 fixed the
+  "stream list spins forever" deadlock by keeping plugins and their web requests in separate thread
+  pools, so they could not starve each other. That worked, but it left the underlying waste in
+  place: every plugin waiting on a slow site still held a whole thread doing nothing.
+
+  The upstream Nuvio developers hit the same bug and fixed it properly, and this release adopts
+  their approach — plugin web requests now pause and hand the thread back instead of holding it.
+  Same result for the deadlock, far cheaper, and it fixes something 0.3.6 did not: a plugin stuck
+  on an unresponsive site can now actually be timed out and cut loose. Before, the timeout existed
+  but had no way to interrupt it.
+
+  Credit to upstream for finding it first. Their fix is not copied verbatim — this fork keeps its
+  own per-request deadline, which upstream's version does not have.
+
 ## [0.3.6] — 2026-08-22
 
 A bug-fix release, and the three problems reported from real use are the reason for it: the
