@@ -18,21 +18,24 @@ expect val NuvioBlockingDispatcher: CoroutineDispatcher
  *
  * ⚠ **The rule: nothing dispatched here may block waiting on work that dispatches back here, and
  * this pool must stay disjoint from the one `httpRequestRaw` uses.** It is not a style preference
- * — violating it deadlocks the app, and it has already happened.
+ * — violating it deadlocked the app once already.
  *
- * The JS `fetch` binding QuickJS exposes to scraper code is synchronous, so it services a call
- * with `runBlocking { … }` from inside a native `QuickJs.evaluate` frame — and `httpRequestRaw`
- * begins with `withContext(Dispatchers.IO)`. When plugin execution ALSO ran on
- * [NuvioBlockingDispatcher] (which is `Dispatchers.IO`, capped at `max(64, nCPU)` = 64 threads
- * here), every plugin holding a thread inside `runBlocking` was holding one of the 64 slots its
- * own HTTP call then needed. With ~20 scrapers each making several concurrent fetches, all 64
- * filled and the fetches queued behind the threads waiting for them.
+ * The history, because it explains why this exists at all. QuickJS's JS `fetch` binding used to be
+ * synchronous, so it serviced a call with `runBlocking { … }` from inside a native
+ * `QuickJs.evaluate` frame — while `httpRequestRaw` begins with `withContext(Dispatchers.IO)`. With
+ * plugin execution ALSO on [NuvioBlockingDispatcher] (which is `Dispatchers.IO`, capped at
+ * `max(64, nCPU)`), every plugin holding a thread inside `runBlocking` held one of the 64 slots its
+ * own HTTP call then needed. Measured, not theorised: 64 of 64 threads parked in
+ * `BlockingCoroutine.joinBlocking`, CPU frozen at 1.2s across 125s of wall clock, no log line in
+ * 30s. Neither timeout could fire — the fetch bound belonged to a coroutine that was never
+ * scheduled, and the plugin bound cannot cancel through a native frame. The stream panel spun
+ * forever with nothing logged, which is exactly how SW-01 presented.
  *
- * Measured, not theorised: 64 of 64 threads parked in `BlockingCoroutine.joinBlocking`, CPU time
- * frozen at 1.2s across 125s of wall clock, no new log line in 30s. Neither timeout could fire —
- * the 20s fetch bound belongs to a coroutine that was never scheduled, and the 60s plugin bound
- * cannot cancel through a native frame. So the panel spun with nothing logged, which is exactly
- * how SW-01 presented: "Finding streams…" forever and not one `Timed out:` line.
+ * ⚠ **That root cause is now fixed at source**: the binding is `asyncFunction` and the fetch
+ * suspends rather than blocking (matching upstream `NuvioDesktop@72e1cc1`). So this dispatcher is
+ * no longer what prevents the deadlock. It is kept for a smaller, still-real reason — plugin and
+ * QuickJS CPU work should not compete for the pool the HTTP calls need — and because the isolation
+ * invariant above is worth keeping structurally true rather than true by accident.
  *
  * Elastic and idle-collapsing rather than fixed: the real bound is one thread per concurrently
  * executing scraper, which is the user's installed-and-enabled count.

@@ -1,6 +1,7 @@
 package com.nuvio.app.features.plugins
 
 import co.touchlab.kermit.Logger
+import com.dokar.quickjs.binding.asyncFunction
 import com.dokar.quickjs.binding.define
 import com.dokar.quickjs.binding.function
 import com.dokar.quickjs.quickJs
@@ -10,7 +11,7 @@ import com.fleeksoft.ksoup.nodes.Element
 import com.fleeksoft.ksoup.select.Elements
 import com.nuvio.app.core.concurrency.NuvioPluginDispatcher
 import com.nuvio.app.features.addons.httpRequestRaw
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
@@ -75,11 +76,10 @@ internal object PluginRuntime {
         var resultJson = "[]"
 
         try {
-            // ⚠ NuvioPluginDispatcher, not the shared blocking one. This is the dispatcher the
-            // native `QuickJs.evaluate` frame runs on, and the `fetch` binding below blocks that
-            // very thread with `runBlocking` while its HTTP call needs a thread from
-            // Dispatchers.IO. Sharing one pool between the two deadlocks both — see
-            // NuvioPluginDispatcher for the measurement.
+            // NuvioPluginDispatcher, not the shared blocking one. The `fetch` binding no longer
+            // blocks (it suspends), so this is no longer load-bearing against the deadlock it was
+            // introduced for — it is kept so plugin/QuickJS CPU work cannot crowd out the pool the
+            // HTTP calls use. See NuvioPluginDispatcher for the history.
             quickJs(NuvioPluginDispatcher) {
                 define("console") {
                     function("log") { args ->
@@ -104,7 +104,9 @@ internal object PluginRuntime {
                     }
                 }
 
-                function("__native_fetch") { args ->
+                // ⚠ asyncFunction, NOT function. This binding takes a suspend lambda, so the
+                // fetch below can suspend instead of parking a thread — see performNativeFetch.
+                asyncFunction("__native_fetch") { args ->
                     val url = args.getOrNull(0)?.toString() ?: ""
                     val method = args.getOrNull(1)?.toString() ?: "GET"
                     val headersJson = args.getOrNull(2)?.toString() ?: "{}"
@@ -112,6 +114,11 @@ internal object PluginRuntime {
                     val followRedirects = args.getOrNull(4) as? Boolean ?: true
                     try {
                         performNativeFetch(url, method, headersJson, body, followRedirects)
+                    } catch (ce: CancellationException) {
+                        // Cancellation is not a fetch failure. Swallowing it into the JSON error
+                        // below would make a cancelled plugin look like a dead host, and would
+                        // stop the timeout that cancelled it from actually unwinding anything.
+                        throw ce
                     } catch (t: Throwable) {
                         log.e(t) { "Fetch bridge error for $method $url" }
                         JsonObject(
@@ -317,7 +324,7 @@ internal object PluginRuntime {
         }
     }
 
-    private fun performNativeFetch(
+    private suspend fun performNativeFetch(
         url: String,
         method: String,
         headersJson: String,
@@ -330,20 +337,26 @@ internal object PluginRuntime {
                 headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             }
 
-            // The JS `fetch` binding is synchronous, so this blocks its thread for the whole
-            // request. PLUGIN_TIMEOUT_MS cannot rescue a blocked thread — cancellation is only
-            // observed at a suspension point — so the wait needs its own deadline, otherwise one
-            // unresponsive host wedges the scraper (and the panel that is waiting on it) forever.
-            val response = runBlocking {
-                withTimeout(PLUGIN_FETCH_TIMEOUT_MS) {
-                    httpRequestRaw(
-                        method = method,
-                        url = url,
-                        headers = headers,
-                        body = body,
-                        followRedirects = followRedirects,
-                    )
-                }
+            // ⚠ This SUSPENDS; it does not block. It used to be wrapped in `runBlocking`, which
+            // parked a whole thread per in-flight request — and because plugin execution and this
+            // HTTP call drew from the same pool, enough concurrent scrapers deadlocked the app
+            // outright: every thread held by a plugin waiting for a request that needed a thread.
+            // Neither timeout could even report it, since a timeout is itself scheduled work.
+            //
+            // Now the coroutine suspends and the thread goes back to doing something useful, which
+            // also makes PLUGIN_TIMEOUT_MS effective again — a suspension point is somewhere
+            // cancellation can actually land, which is not true of a blocked native frame.
+            //
+            // ⚠ The withTimeout stays. Upstream's equivalent fix (NuvioDesktop@72e1cc1) has no
+            // per-fetch bound at all; dropping ours would remove a protection they never had.
+            val response = withTimeout(PLUGIN_FETCH_TIMEOUT_MS) {
+                httpRequestRaw(
+                    method = method,
+                    url = url,
+                    headers = headers,
+                    body = body,
+                    followRedirects = followRedirects,
+                )
             }
 
             val responseHeaders = response.headers.mapValues { (_, value) ->
@@ -510,7 +523,7 @@ internal object PluginRuntime {
                 var headers = options.headers || {};
                 var body = options.body || '';
                 var followRedirects = options.redirect !== 'manual';
-                var result = __native_fetch(url, method, JSON.stringify(headers), body, followRedirects);
+                var result = await __native_fetch(url, method, JSON.stringify(headers), body, followRedirects);
                 var parsed = JSON.parse(result);
                 return {
                     ok: parsed.ok,
