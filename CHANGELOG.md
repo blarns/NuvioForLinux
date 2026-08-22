@@ -6,6 +6,108 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.6] — 2026-08-22
+
+A bug-fix release, and the three problems reported from real use are the reason for it: the
+stream list that spun forever, the show that vanished from Continue Watching, and the blank
+window after a few presses of Back. All three are fixed. Several ways your library could be
+damaged or your credentials leaked are fixed too, and the experimental libmpv player is now a
+setting instead of an environment variable.
+
+### Fixed
+
+- **The stream list could spin forever, and only restarting recovered it.** This is the reported
+  bug — the next-episode list spinning with no error, going back losing the show from Continue
+  Watching, and then that title spinning too — and it turned out to be one fault with a much
+  worse shape than it looked.
+
+  Nuvio runs scraper plugins in a small JavaScript engine, and the `fetch` those plugins call has
+  to block its thread until the request comes back. The plugins and the network requests they
+  make were drawing from the same pool of 64 threads, so with enough scrapers installed every
+  thread ended up held by a plugin waiting for a request that could not start until a thread
+  freed up. Nothing was moving, and nothing could report it: the timeouts that should have cut
+  each source loose are themselves scheduled work, so they never ran either. That is why the
+  spinner never became an error message.
+
+  Plugins now have their own pool, kept separate from the requests they make. Measured on the
+  same episode that used to hang: 157 sources all reported and the list settled, where before it
+  never did.
+
+- **Enough presses of Back left a blank window.** Nuvio was popping the last screen off the
+  navigation stack, leaving nothing to draw. It also double-popped on several screens, which is
+  what made it reachable in a few presses.
+
+- **A show could disappear from Continue Watching after you watched an episode.** Working out
+  the next episode returned "nothing" both when a show genuinely had no next episode and when
+  the lookup simply failed, and the failure was then written to the cache as though it were the
+  answer.
+
+- **Your settings could be wiped by a crash or a power cut.** Every settings file was saved by
+  emptying it and writing again, so an interruption at the wrong moment left an empty file and
+  the next launch started you over. Files are now written to one side and swapped into place in
+  a single step, with the previous copy kept as a fallback.
+
+- **An upgrade from an old version could permanently strand your addons, profiles and watch
+  history.** The one-time import from the pre-0.1 settings location marked itself finished even
+  when it failed part-way, so it never tried again and the data it had not copied yet was simply
+  never seen.
+
+- **Resumed downloads could produce a corrupt file that looked complete.** Resuming asked for the
+  rest of the file without checking it was still the same file — routine with debrid links, which
+  rotate — so two halves of different copies could be spliced together.
+
+- **Downloading a large file hammered the disk.** Progress was recorded on every 8 KB read, and
+  each record rewrote the entire download list: roughly half a million full-file writes for a
+  4 GB film.
+
+- **Nuvio's media controls could get stuck showing a paused player forever.** After leaving
+  playback the desktop media widget kept offering Nuvio as paused, at a frozen position, with a
+  Play button that did nothing until you restarted the app. Two things were wrong: the playback
+  loop could undo the clean-up a moment after it happened, and on the libmpv player the "playing"
+  state was never reported at all, so it claimed to be paused through an entire film.
+
+- **Seeking while paused snapped the progress bar back** to where it was before you paused.
+
+- **Quitting Nuvio could leave the torrent engine running** in the background — still sharing,
+  still advertising your IP address — if you had enabled P2P streaming.
+
+- **The updater could hang forever** on a stalled download, with no timeout of any kind.
+
+### Security
+
+- **Addon URLs were still being written to the log in full, API keys and all.** v0.3.5 fixed this
+  for the player, but the part of Nuvio that asks every addon for streams was missed, and it logs
+  a URL for every addon on every search. Several addon URLs carry your Real-Debrid or TorBox key
+  inside them, and the log-collection script used for bug reports picks up exactly that file.
+
+  Every place that logs a URL now shortens it to the provider and the file name, drops the query
+  string entirely, and strips any embedded username and password. **If you have shared a Nuvio
+  log publicly at any point, rotate your debrid API key** — v0.3.5's fix did not cover this path.
+
+### Changed
+
+- **The experimental libmpv player is now a setting**, under *Settings → Playback → Linux
+  desktop → Experimental libmpv player*, instead of the `NUVIO_MPV` / `NUVIO_EGL` environment
+  variables. It is still off by default, VLC is still the default player and the automatic
+  fallback, and the setting takes effect the next time you start Nuvio. The switch turns itself
+  off with an explanation if libmpv is not installed.
+
+  One switch now covers what used to be two variables, on purpose: without the second one the
+  new player cannot reach the fast path and ends up slower than the player it replaces, so
+  half-enabling it was never useful. The environment variables still work and still win, if you
+  are scripting.
+
+  Measured on this release, on a 4K H.264 episode, with the switch on and nothing else: **20.9%
+  of a CPU core**, 24 frames per second against a 24 fps source, audio and video in sync.
+
+- **Editing a profile no longer turns its plugin settings off.** Renaming a profile or changing
+  its avatar silently cleared the profile's "use primary plugins" flag.
+
+### Known issues
+
+- **Turning "use primary addons" off does not stick.** The setting is sent correctly and comes
+  back on from the server, so this needs a fix on the sync backend rather than in the app.
+
 ## [0.3.5] — 2026-08-20
 
 Mostly groundwork for a second, much cheaper video player — off by default, and the existing
