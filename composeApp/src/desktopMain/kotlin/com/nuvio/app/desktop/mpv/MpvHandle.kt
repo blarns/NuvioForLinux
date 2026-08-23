@@ -24,6 +24,9 @@ internal class MpvHandle private constructor(private var handle: Pointer) {
     private val mpv = MpvLibrary.INSTANCE
 
     @Volatile private var disposed = false
+
+    /** Guards [initialize]; a second call would SIGABRT the process. See [initialize]. */
+    @Volatile private var initialized = false
     private var eventThread: Thread? = null
 
     /** Set before [startEventLoop]; invoked on the event thread. */
@@ -198,9 +201,22 @@ internal class MpvHandle private constructor(private var handle: Pointer) {
 
     // --- lifecycle -------------------------------------------------------------------------
 
+    /**
+     * ⚠ Calling this twice on one handle **kills the process**, and there is no way to recover
+     * from that at the C level: libmpv answers with `assert(!mpctx->initialized)` in
+     * `mp_initialize`, i.e. `abort()`/SIGABRT, not an error code. The whole JVM goes down with
+     * the message `player/main.c: mp_initialize: Assertion !mpctx->initialized failed`.
+     *
+     * This guard exists because that happened for real: an edit duplicated the call in
+     * [MpvEngineOptions.createHandle], and the first attempt to open a video aborted the app.
+     * A double call is a programming error either way, but it should surface as a catchable
+     * exception the engine can fall back to VLCJ from — not as a dead process.
+     */
     fun initialize() {
+        if (initialized) throw MpvException(0, "mpv_initialize called twice on the same handle")
         val rc = mpv.mpv_initialize(handle)
         if (rc < 0) throw MpvException(rc, "mpv_initialize failed: ${errorString(rc)}")
+        initialized = true
     }
 
     /**

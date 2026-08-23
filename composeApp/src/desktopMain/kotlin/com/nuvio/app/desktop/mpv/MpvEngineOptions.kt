@@ -108,7 +108,6 @@ internal object MpvEngineOptions {
             mpv.requestLogMessages(
                 System.getenv("NUVIO_MPV_LOG_LEVEL")?.takeIf { it.isNotBlank() } ?: "info",
             )
-            mpv.initialize()
             println("$TAG: initialised (output=$output hwdec-request=$hwdec)")
             mpv
         } catch (e: Exception) {
