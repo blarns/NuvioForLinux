@@ -162,6 +162,15 @@ internal class MpvHandle private constructor(private var handle: Pointer) {
                             } else null,
                         )
                     }
+                    MpvEventId.LOG_MESSAGE -> {
+                        val m = ev.data?.let { MpvEventLogMessage(it) }
+                        MpvEventInfo(
+                            id = id,
+                            logPrefix = m?.prefix?.getString(0),
+                            logLevel = m?.level?.getString(0),
+                            logText = m?.text?.getString(0),
+                        )
+                    }
                     MpvEventId.END_FILE -> {
                         // The reason is the only way to tell "the stream failed" from "the file
                         // ended" or "we replaced it" — without it a dead link is indistinguishable
@@ -192,6 +201,22 @@ internal class MpvHandle private constructor(private var handle: Pointer) {
     fun initialize() {
         val rc = mpv.mpv_initialize(handle)
         if (rc < 0) throw MpvException(rc, "mpv_initialize failed: ${errorString(rc)}")
+    }
+
+    /**
+     * Routes mpv's own diagnostics to [onEvent] as [MpvEventId.LOG_MESSAGE] events.
+     *
+     * ⚠ Without this mpv is silent about its own failures. [MpvEngineOptions] sets `terminal=no`,
+     * so every message that would name the codec it could not open, the audio device it could not
+     * claim, or the network error that killed the stream is written nowhere at all. Property reads
+     * are not a substitute: `aid=1` only says a track was *selected* and `ao=pipewire` only says a
+     * device was *opened* — both stay true when the decoder produced no audio whatsoever.
+     *
+     * @param minLevel an mpv log level: `no`, `fatal`, `error`, `warn`, `info`, `v`, `debug`, `trace`.
+     */
+    fun requestLogMessages(minLevel: String) {
+        val rc = mpv.mpv_request_log_messages(handle, minLevel)
+        if (rc < 0) println("$TAG: request_log_messages($minLevel) failed: ${errorString(rc)}")
     }
 
     /** The raw handle, for the render context. Null once disposed. */
@@ -270,6 +295,12 @@ internal data class MpvEventInfo(
     val propertyDouble: Double? = null,
     val propertyLong: Long? = null,
     val propertyFlag: Boolean? = null,
+    /** LOG_MESSAGE only: the mpv subsystem that emitted the line, e.g. `ao`, `ad`, `ffmpeg`. */
+    val logPrefix: String? = null,
+    /** LOG_MESSAGE only: mpv's own level name, e.g. `warn`. */
+    val logLevel: String? = null,
+    /** LOG_MESSAGE only: the message text. mpv includes the trailing newline. */
+    val logText: String? = null,
     /** END_FILE only: an [MpvEndFileReason]. */
     val endFileReason: Int = MpvEndFileReason.EOF,
     /** END_FILE only: the mpv error code, meaningful when the reason is ERROR. */

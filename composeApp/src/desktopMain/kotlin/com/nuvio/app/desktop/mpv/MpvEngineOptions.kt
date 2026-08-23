@@ -93,6 +93,13 @@ internal object MpvEngineOptions {
 
         return try {
             mpv.initialize()
+            // Warn-and-above: enough to explain a failure, silent on a healthy playback. This is
+            // the only channel mpv has here — `terminal=no` above discards everything otherwise.
+            // NUVIO_MPV_LOG_LEVEL raises it (`info`, `v`, `debug`) for one run without a rebuild.
+            mpv.requestLogMessages(
+                System.getenv("NUVIO_MPV_LOG_LEVEL")?.takeIf { it.isNotBlank() } ?: "warn",
+            )
+            mpv.initialize()
             println("$TAG: initialised (output=$output hwdec-request=$hwdec)")
             mpv
         } catch (e: Exception) {

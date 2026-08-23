@@ -212,6 +212,25 @@ internal open class MpvEventEndFile(
     }
 }
 
+/**
+ * `mpv_event_log_message`, truncated to the three strings this app reads.
+ *
+ * The real struct ends with an `mpv_log_level` enum. Omitting it is safe for the same reason as
+ * [MpvEventEndFile] — the struct is only ever mapped onto memory mpv owns, never allocated or
+ * written back — and `level` already carries the severity as text.
+ */
+@Structure.FieldOrder("prefix", "level", "text")
+internal open class MpvEventLogMessage(
+    @JvmField var prefix: Pointer? = null,
+    @JvmField var level: Pointer? = null,
+    @JvmField var text: Pointer? = null,
+) : Structure(), Structure.ByReference {
+    constructor(p: Pointer) : this() {
+        useMemory(p)
+        read()
+    }
+}
+
 /** `mpv_render_param`: `{int type; void *data;}` — the array is terminated by a zeroed entry. */
 @Structure.FieldOrder("type", "data")
 internal open class MpvRenderParamStruct(

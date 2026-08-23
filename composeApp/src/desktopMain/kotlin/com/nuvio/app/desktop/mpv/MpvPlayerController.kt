@@ -160,9 +160,16 @@ internal class MpvPlayerController(
                 refreshTrackCaches()
                 // sid is logged because mpv picks a subtitle track on its own and the UI layer may
                 // then override it; without this the two are indistinguishable from a screenshot.
+                // ⚠ `ao` is logged for the same reason as hwdec-current: a silent player looks
+                // identical to a working one in every other field. `aid` only says a track was
+                // SELECTED — it says nothing about whether mpv managed to open an output device,
+                // and "no sound with aid=1" was otherwise undiagnosable from a log.
                 println(
                     "$TAG: file loaded, hwdec-current=$hwdecCurrent paused=$paused " +
-                        "sid=${mpv.getPropertyString("sid")} aid=${mpv.getPropertyString("aid")}",
+                        "sid=${mpv.getPropertyString("sid")} aid=${mpv.getPropertyString("aid")} " +
+                        "ao=${mpv.getPropertyString("current-ao")} " +
+                        "audio-device=${mpv.getPropertyString("audio-device")} " +
+                        "volume=${mpv.getPropertyString("volume")} mute=${mpv.getPropertyString("mute")}",
                 )
             }
             MpvEventId.END_FILE -> {
@@ -201,6 +208,12 @@ internal class MpvPlayerController(
                 // again — so clearing the spinner here left the player stalled with no spinner
                 // and no way to get one back. Ask mpv what it is actually doing instead.
                 state = state.copy(isLoading = isBuffering(), isEnded = false, isPlaying = !paused)
+            }
+            // mpv explaining itself. Nothing here changes state — the value is that a failure
+            // the app can only see as "it just does not work" (silent audio, a black picture, a
+            // stream that stops) arrives with the library's own reason attached.
+            MpvEventId.LOG_MESSAGE -> {
+                println("$TAG: mpv[${ev.logLevel}/${ev.logPrefix}] ${ev.logText?.trimEnd()}")
             }
             MpvEventId.PROPERTY_CHANGE -> handlePropertyChange(ev)
         }
