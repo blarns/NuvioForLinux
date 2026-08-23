@@ -10,9 +10,13 @@ import com.nuvio.app.features.p2p.P2pSettingsRepository
 import com.nuvio.app.features.p2p.P2pStreamRequest
 import com.nuvio.app.features.p2p.P2pStreamingEngine
 import com.nuvio.app.features.p2p.P2pStreamingState
+import com.nuvio.app.features.player.skip.AutoSkipSegmentType
 import com.nuvio.app.features.player.skip.NextEpisodeInfo
 import com.nuvio.app.features.player.skip.PlayerNextEpisodeRules
 import com.nuvio.app.features.player.skip.SkipIntroRepository
+import com.nuvio.app.features.player.skip.SkipIntervalLookup
+import com.nuvio.app.features.player.skip.autoSkipKey
+import com.nuvio.app.features.player.skip.resolveSkipIntervalLookup
 import com.nuvio.app.features.streams.BingeGroupCacheRepository
 import com.nuvio.app.features.streams.StreamLinkCacheRepository
 import com.nuvio.app.features.streams.StreamItem
@@ -390,31 +394,58 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
         }
     }
 
-    LaunchedEffect(activeVideoId, activeSeasonNumber, activeEpisodeNumber) {
+    LaunchedEffect(
+        activeVideoId,
+        activeSeasonNumber,
+        activeEpisodeNumber,
+        playerSettingsUiState.skipIntroEnabled,
+    ) {
         skipIntervals = emptyList()
         activeSkipInterval = null
         skipIntervalDismissed = false
+        autoSkippedIntervalKeys.clear()
         showNextEpisodeCard = false
         nextEpisodeAutoPlayJob?.cancel()
         nextEpisodeAutoPlaySearching = false
 
-        val season = activeSeasonNumber
-        val episode = activeEpisodeNumber
-        val vid = activeVideoId
-        if (season == null || episode == null || vid == null) return@LaunchedEffect
+        // Previously the lookup ran even with skip-intro switched off, so a user who had
+        // turned it off still paid for the provider round trips on every episode.
+        if (!playerSettingsUiState.skipIntroEnabled) return@LaunchedEffect
+
+        // ⚠ This replaces an imdb-only branch. SkipIntroRepository has always been able to
+        // serve mal: and kitsu: ids, but nothing here ever asked it to, so anime episodes
+        // opened by those ids silently had no skip data. Upstream: NuvioDesktop@6cd7e14.
+        val lookup = resolveSkipIntervalLookup(
+            videoId = activeVideoId,
+            season = activeSeasonNumber,
+            episode = activeEpisodeNumber,
+        ) ?: return@LaunchedEffect
 
         launch {
-            val imdbId = vid.split(":").firstOrNull()?.takeIf { it.startsWith("tt") }
-            val intervals = SkipIntroRepository.getSkipIntervals(
-                imdbId = imdbId,
-                season = season,
-                episode = episode,
-            )
+            val intervals = when (lookup) {
+                is SkipIntervalLookup.Imdb -> SkipIntroRepository.getSkipIntervals(
+                    imdbId = lookup.imdbId,
+                    season = lookup.season,
+                    episode = lookup.episode,
+                )
+                is SkipIntervalLookup.Mal -> SkipIntroRepository.getSkipIntervalsForMal(
+                    malId = lookup.malId,
+                    episode = lookup.episode,
+                )
+                is SkipIntervalLookup.Kitsu -> SkipIntroRepository.getSkipIntervalsForKitsu(
+                    kitsuId = lookup.kitsuId,
+                    episode = lookup.episode,
+                )
+            }
             skipIntervals = intervals
         }
     }
 
-    LaunchedEffect(playbackSnapshot.positionMs, skipIntervals) {
+    LaunchedEffect(
+        playbackSnapshot.positionMs,
+        skipIntervals,
+        playerSettingsUiState.autoSkipSegmentTypes,
+    ) {
         if (skipIntervals.isEmpty()) {
             activeSkipInterval = null
             return@LaunchedEffect
@@ -426,6 +457,29 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
         if (current != activeSkipInterval) {
             activeSkipInterval = current
             if (current != null) skipIntervalDismissed = false
+        }
+        // Auto-skip, for the segment types the user opted into. The seek and the progress-sync
+        // call match what the manual Skip button does (PlayerScreenRuntimeUi), so an automatic
+        // skip and a pressed one leave the player in the same state.
+        //
+        // autoSkippedIntervalKeys is what makes this survivable: without it, seeking back into a
+        // segment the user deliberately rewound to would be skipped again immediately, and they
+        // could never watch it. Skipped once per playback, then it stays out of the way.
+        if (current != null) {
+            val segmentType = AutoSkipSegmentType.fromSkipIntervalType(current.type)
+            val intervalKey = current.autoSkipKey()
+            val controller = playerController
+            if (
+                controller != null &&
+                segmentType != null &&
+                segmentType in playerSettingsUiState.autoSkipSegmentTypes &&
+                intervalKey !in autoSkippedIntervalKeys
+            ) {
+                autoSkippedIntervalKeys.add(intervalKey)
+                controller.seekTo((current.endTime * 1000).toLong())
+                scheduleProgressSyncAfterSeek()
+                skipIntervalDismissed = true
+            }
         }
     }
 

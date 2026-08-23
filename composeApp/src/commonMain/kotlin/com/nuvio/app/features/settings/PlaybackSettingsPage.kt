@@ -65,6 +65,7 @@ import com.nuvio.app.features.player.IosHardwareDecoderMode
 import com.nuvio.app.features.player.IosTargetPrimaries
 import com.nuvio.app.features.player.IosTargetTransfer
 import com.nuvio.app.features.player.PlayerSettingsRepository
+import com.nuvio.app.features.player.skip.AutoSkipSegmentType
 import com.nuvio.app.features.player.PlayerSettingsStorage
 import com.nuvio.app.features.player.PlayerSettingsUiState
 import com.nuvio.app.features.player.STREAM_AUTO_PLAY_TIMEOUT_VALUES
@@ -292,6 +293,7 @@ private fun PlaybackSettingsSection(
     var showAutoPlayAddonSelectionDialog by remember { mutableStateOf(false) }
     var showAutoPlayPluginSelectionDialog by remember { mutableStateOf(false) }
     var showAutoPlayRegexDialog by remember { mutableStateOf(false) }
+    var showAutoSkipSegmentDialog by remember { mutableStateOf(false) }
     val pluginsEnabled = AppFeaturePolicy.pluginsEnabled
     val autoPlayPlayerSettings by PlayerSettingsRepository.uiState.collectAsStateWithLifecycle()
     val availableExternalPlayers = ExternalPlayerPlatform.availablePlayers()
@@ -932,6 +934,16 @@ private fun PlaybackSettingsSection(
                     onCheckedChange = PlayerSettingsRepository::setSkipIntroEnabled,
                 )
                 SettingsGroupDivider(isTablet = isTablet)
+                // Gated on skipIntroEnabled: without the lookup there are no segments to skip,
+                // so an enabled row here would silently do nothing.
+                SettingsNavigationRow(
+                    title = stringResource(Res.string.settings_playback_auto_skip_segments),
+                    description = autoSkipSelectionSummary(autoPlayPlayerSettings.autoSkipSegmentTypes),
+                    enabled = autoPlayPlayerSettings.skipIntroEnabled,
+                    isTablet = isTablet,
+                    onClick = { showAutoSkipSegmentDialog = true },
+                )
+                SettingsGroupDivider(isTablet = isTablet)
                 SettingsSwitchRow(
                     title = stringResource(Res.string.settings_playback_anime_skip),
                     description = stringResource(Res.string.settings_playback_anime_skip_description),
@@ -1306,6 +1318,14 @@ private fun PlaybackSettingsSection(
                 showExternalPlayerAppDialog = false
             },
             onDismiss = { showExternalPlayerAppDialog = false },
+        )
+    }
+
+    if (showAutoSkipSegmentDialog) {
+        AutoSkipSegmentSelectionDialog(
+            selectedTypes = autoPlayPlayerSettings.autoSkipSegmentTypes,
+            onTypeToggled = PlayerSettingsRepository::setAutoSkipSegmentTypeEnabled,
+            onDismiss = { showAutoSkipSegmentDialog = false },
         )
     }
 
@@ -1872,6 +1892,124 @@ private fun ReuseCacheDurationDialog(
             }
         }
     }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun AutoSkipSegmentSelectionDialog(
+    selectedTypes: Set<AutoSkipSegmentType>,
+    onTypeToggled: (AutoSkipSegmentType, Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    BasicAlertDialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = stringResource(Res.string.settings_playback_auto_skip_segments),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    AutoSkipSegmentType.entries.forEach { segmentType ->
+                        val isSelected = segmentType in selectedTypes
+                        val containerColor = if (isSelected) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                        }
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onTypeToggled(segmentType, !isSelected) },
+                            shape = RoundedCornerShape(12.dp),
+                            color = containerColor,
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                                ) {
+                                    Text(
+                                        text = autoSkipTypeLabel(segmentType),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        text = autoSkipTypeDescription(segmentType),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier.size(24.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = stringResource(Res.string.settings_playback_dialog_close),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun autoSkipSelectionSummary(selectedTypes: Set<AutoSkipSegmentType>): String {
+    if (selectedTypes.isEmpty()) return stringResource(Res.string.settings_playback_auto_skip_none)
+    val introLabel = stringResource(Res.string.settings_playback_auto_skip_intro)
+    val recapLabel = stringResource(Res.string.settings_playback_auto_skip_recap)
+    val outroLabel = stringResource(Res.string.settings_playback_auto_skip_outro)
+    return buildList {
+        if (AutoSkipSegmentType.INTRO in selectedTypes) add(introLabel)
+        if (AutoSkipSegmentType.RECAP in selectedTypes) add(recapLabel)
+        if (AutoSkipSegmentType.OUTRO in selectedTypes) add(outroLabel)
+    }.joinToString(", ")
+}
+
+@Composable
+private fun autoSkipTypeLabel(segmentType: AutoSkipSegmentType): String = when (segmentType) {
+    AutoSkipSegmentType.INTRO -> stringResource(Res.string.settings_playback_auto_skip_intro)
+    AutoSkipSegmentType.RECAP -> stringResource(Res.string.settings_playback_auto_skip_recap)
+    AutoSkipSegmentType.OUTRO -> stringResource(Res.string.settings_playback_auto_skip_outro)
+}
+
+@Composable
+private fun autoSkipTypeDescription(segmentType: AutoSkipSegmentType): String = when (segmentType) {
+    AutoSkipSegmentType.INTRO -> stringResource(Res.string.settings_playback_auto_skip_intro_description)
+    AutoSkipSegmentType.RECAP -> stringResource(Res.string.settings_playback_auto_skip_recap_description)
+    AutoSkipSegmentType.OUTRO -> stringResource(Res.string.settings_playback_auto_skip_outro_description)
 }
 
 @Composable
