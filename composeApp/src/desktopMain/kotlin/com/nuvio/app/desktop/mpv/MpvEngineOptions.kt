@@ -93,11 +93,20 @@ internal object MpvEngineOptions {
 
         return try {
             mpv.initialize()
-            // Warn-and-above: enough to explain a failure, silent on a healthy playback. This is
-            // the only channel mpv has here — `terminal=no` above discards everything otherwise.
-            // NUVIO_MPV_LOG_LEVEL raises it (`info`, `v`, `debug`) for one run without a rebuild.
+            // `info`, not `warn`, and the difference was measured rather than guessed.
+            //
+            // `warn` does catch an audio device that fails outright — mpv says "Could not
+            // open/initialize audio device -> no sound" in as many words. But the silent-playback
+            // report this was added for was NOT that: mpv had opened `pipewire` and reported
+            // healthy audio throughout, so `warn` would have logged nothing at all about the one
+            // bug it exists to explain. `info` adds the track-selection and `AO:`/`VO:` format
+            // lines, which is what makes a "no sound" report diagnosable without asking the user
+            // to reproduce it under an env var.
+            //
+            // The cost is 2-4 lines per file load — measured against libmpv, not estimated — so
+            // this is not chatty on a player that opens one file per episode.
             mpv.requestLogMessages(
-                System.getenv("NUVIO_MPV_LOG_LEVEL")?.takeIf { it.isNotBlank() } ?: "warn",
+                System.getenv("NUVIO_MPV_LOG_LEVEL")?.takeIf { it.isNotBlank() } ?: "info",
             )
             mpv.initialize()
             println("$TAG: initialised (output=$output hwdec-request=$hwdec)")
