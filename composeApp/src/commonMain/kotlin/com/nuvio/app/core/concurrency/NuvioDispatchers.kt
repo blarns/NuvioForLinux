@@ -41,3 +41,28 @@ expect val NuvioBlockingDispatcher: CoroutineDispatcher
  * executing scraper, which is the user's installed-and-enabled count.
  */
 expect val NuvioPluginDispatcher: CoroutineDispatcher
+
+/**
+ * Runs [block] with a dispatcher backed by ONE private thread, released when [block] returns.
+ *
+ * ⚠ **A QuickJS runtime is bound to the thread that created it, and touching it from a second
+ * thread is a native SIGSEGV — not an exception you can catch.** This is not hypothetical: it
+ * crashed the whole JVM in v0.3.6.1, in `QuickJs.evaluate` on thread `nuvio-plugin-63`.
+ *
+ * The two changes that combine into that crash are individually correct, which is why it slipped
+ * through. [NuvioPluginDispatcher] is a *cached pool* — fine while the JS `fetch` binding was
+ * synchronous, because evaluation then never suspended and stayed pinned to whichever pool thread
+ * it started on. Making the binding `asyncFunction` removed the blocking (the right fix, and the
+ * one upstream made) but also introduced suspension points *inside* the QuickJS frame — and a
+ * coroutine resuming on a multi-threaded dispatcher may resume on a different thread. From there
+ * QuickJS is being driven from two threads and the process dies.
+ *
+ * So the pool cannot be the runtime's dispatcher. It must be one thread per runtime. Plugins still
+ * run concurrently with each other — each gets its own thread, which is what the cached pool
+ * provided — and the isolation from the HTTP pool that [NuvioPluginDispatcher] documents is
+ * preserved, because these threads are equally disjoint from it.
+ */
+expect suspend fun <T> withPluginRuntimeThread(
+    name: String,
+    block: suspend (CoroutineDispatcher) -> T,
+): T

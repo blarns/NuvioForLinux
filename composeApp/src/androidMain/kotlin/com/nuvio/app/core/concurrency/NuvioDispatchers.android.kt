@@ -18,3 +18,21 @@ actual val NuvioPluginDispatcher: CoroutineDispatcher =
             isDaemon = true
         }
     }.asCoroutineDispatcher()
+
+/**
+ * One private daemon thread, shut down as soon as the runtime is done with it. See the expect
+ * declaration: a QuickJS runtime must never be driven from two threads.
+ */
+actual suspend fun <T> withPluginRuntimeThread(
+    name: String,
+    block: suspend (CoroutineDispatcher) -> T,
+): T {
+    val executor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, name).apply { isDaemon = true }
+    }
+    return try {
+        block(executor.asCoroutineDispatcher())
+    } finally {
+        executor.shutdown()
+    }
+}
