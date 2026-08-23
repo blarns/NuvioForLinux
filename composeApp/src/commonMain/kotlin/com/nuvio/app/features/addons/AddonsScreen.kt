@@ -97,6 +97,7 @@ internal fun AddonsSettingsPageContent(
     var formMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var installModalState by remember { mutableStateOf<AddonInstallModalState?>(null) }
     var updateUrlTarget by remember { mutableStateOf<ManagedAddon?>(null) }
+    var addonPendingDeletionUrl by rememberSaveable { mutableStateOf<String?>(null) }
     val enterAddonUrlMessage = stringResource(Res.string.addons_error_enter_url)
 
     val overview = remember(uiState.addons) { uiState.addons.toOverview() }
@@ -204,10 +205,29 @@ internal fun AddonsSettingsPageContent(
                         null
                     },
                     onUpdateUrlClick = { updateUrlTarget = addon },
-                    onDeleteClick = { AddonRepository.removeAddon(addon.manifestUrl) },
+                    onDeleteClick = { addonPendingDeletionUrl = addon.manifestUrl },
                 )
             }
         }
+    }
+
+    // Removing an addon is destructive and was a single unguarded click. Upstream:
+    // NuvioMobile@faae0cd. Uses the fork's existing NuvioStatusModal so it matches the
+    // install/update modals already on this screen.
+    val pendingDeletionUrl = addonPendingDeletionUrl
+    if (pendingDeletionUrl != null) {
+        NuvioStatusModal(
+            title = stringResource(Res.string.addons_delete_confirm_title),
+            message = stringResource(Res.string.action_delete_confirm_message),
+            isVisible = true,
+            confirmText = stringResource(Res.string.action_yes),
+            dismissText = stringResource(Res.string.action_no),
+            onConfirm = {
+                AddonRepository.removeAddon(pendingDeletionUrl)
+                addonPendingDeletionUrl = null
+            },
+            onDismiss = { addonPendingDeletionUrl = null },
+        )
     }
 
     val modalState = installModalState

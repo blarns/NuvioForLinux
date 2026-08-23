@@ -303,6 +303,12 @@ object ProfileRepository {
             val result = SupabaseProvider.client.postgrest.rpc("verify_profile_pin", params)
             result.decodeSingle<PinVerifyResult>().also { verifyResult ->
                 if (verifyResult.unlocked) {
+                    // Refresh from the server BEFORE caching. The PIN may have been changed on
+                    // another device, in which case the local profile row is stale and the value
+                    // cached here would be one the server no longer accepts. pullProfiles()
+                    // swallows its own failures, so this cannot break unlocking.
+                    // Upstream: NuvioMobile@5327166.
+                    pullProfiles()
                     rememberVerifiedPin(profileIndex = profileIndex, pin = pin)
                 }
             }

@@ -5,6 +5,8 @@
     <string name="action_cancel">Cancel</string>
     <string name="action_close">Close</string>
     <string name="action_delete">Delete</string>
+    <string name="action_delete_confirm_message">Are you sure you want to delete it?</string>
+    <string name="action_delete_confirm_title">Delete?</string>
     <string name="action_done">Done</string>
     <string name="action_edit">Edit</string>
     <string name="action_import">Import</string>
@@ -31,6 +33,7 @@
     <string name="addons_badge_unavailable">Unavailable</string>
     <string name="addons_configure">Configure addon</string>
     <string name="addons_delete">Delete addon</string>
+    <string name="addons_delete_confirm_title">Delete addon?</string>
     <string name="addons_empty_subtitle">Add a manifest URL to start loading catalogs, metadata, streams or subtitles into Nuvio.</string>
     <string name="addons_empty_title">No addons installed yet.</string>
     <string name="addons_error_enter_url">Enter an addon URL.</string>
