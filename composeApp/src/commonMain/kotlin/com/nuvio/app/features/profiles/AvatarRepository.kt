@@ -13,11 +13,16 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 @Serializable
 private data class StoredAvatarCatalogPayload(
     val items: List<AvatarCatalogItem> = emptyList(),
 )
+
+private val AvatarCatalogRefreshInterval = 15.minutes
 
 object AvatarRepository {
     private val log = Logger.withTag("AvatarRepository")
@@ -29,6 +34,7 @@ object AvatarRepository {
     private var loaded = false
     private var cacheHydrated = false
     private var fetchInFlight = false
+    private var lastRefresh: TimeMark? = null
 
     suspend fun fetchAvatars() {
         hydrateFromCacheIfNeeded()
@@ -36,10 +42,24 @@ object AvatarRepository {
         doFetch()
     }
 
-    suspend fun refreshAvatars() {
+    /**
+     * Refetches the avatar catalog, at most once per [AvatarCatalogRefreshInterval].
+     *
+     * Three screens call this on open — profile selection, profile edit and the switcher tab —
+     * and moving between them is normal navigation, so each transition used to cost a catalog
+     * request. The catalog is a slow-moving public list; a stale one for a few minutes is not a
+     * defect. [force] is there for a deliberate user-initiated refresh.
+     */
+    suspend fun refreshAvatars(force: Boolean = false) {
         hydrateFromCacheIfNeeded()
-        doFetch()
+        if (force || isRefreshDue()) {
+            doFetch()
+        }
     }
+
+    // Monotonic, so a wall-clock change cannot make the catalog look fresh for hours.
+    private fun isRefreshDue(): Boolean =
+        lastRefresh?.let { it.elapsedNow() >= AvatarCatalogRefreshInterval } ?: true
 
     private fun hydrateFromCacheIfNeeded() {
         if (cacheHydrated) return
@@ -82,6 +102,9 @@ object AvatarRepository {
             if (!activeItems.isNullOrEmpty()) {
                 _avatars.value = activeItems
                 loaded = true
+                // Only a fetch that actually produced a catalog starts the window; a failed
+                // one must stay retryable rather than being suppressed for 15 minutes.
+                lastRefresh = TimeSource.Monotonic.markNow()
                 AvatarStorage.savePayload(
                     json.encodeToString(StoredAvatarCatalogPayload(items = activeItems)),
                 )
