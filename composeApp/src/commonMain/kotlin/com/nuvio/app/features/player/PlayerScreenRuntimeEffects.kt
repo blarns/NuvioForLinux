@@ -601,19 +601,42 @@ internal fun PlayerScreenRuntime.tryRefreshCredentialedSourceAfterError(message:
     errorMessage = null
     controlsVisible = !playerControlsLocked
 
+    // Only the addon that issued the dead link can mint a new one, so ask just that addon.
+    // The full fan-out this replaces hit every addon and every enabled scraper to refresh a
+    // single URL — and a `/stream/` request is not always a pure read: a usenet debrid addon
+    // answers "what do you have?" by submitting candidates to the user's account. Measured on
+    // 2026-08-25: one fan-out, two unrequested submissions.
+    val scopedRefreshAddonId = expectedProviderAddonId?.takeIf { it.isNotBlank() }
+
     credentialRefreshJob = scope.launch {
-        PlayerStreamsRepository.loadSources(
-            type = type,
-            videoId = currentVideoId,
-            season = season,
-            episode = episode,
-            forceRefresh = true,
-        )
+        if (scopedRefreshAddonId != null) {
+            PlayerStreamsRepository.refreshSourcesForAddon(
+                type = type,
+                videoId = currentVideoId,
+                season = season,
+                episode = episode,
+                addonId = scopedRefreshAddonId,
+            )
+        } else {
+            // No addon id recorded for the playing stream — findCredentialRefreshCandidate falls
+            // back to matching on addon NAME, which needs the full set to match against.
+            PlayerStreamsRepository.loadSources(
+                type = type,
+                videoId = currentVideoId,
+                season = season,
+                episode = episode,
+                forceRefresh = true,
+            )
+        }
 
         var refreshedStream: StreamItem? = null
         var pollCount = 0
         while (pollCount < CREDENTIAL_REFRESH_POLL_COUNT && refreshedStream == null) {
-            val state = PlayerStreamsRepository.sourceState.value
+            val state = if (scopedRefreshAddonId != null) {
+                PlayerStreamsRepository.credentialRefreshState.value
+            } else {
+                PlayerStreamsRepository.sourceState.value
+            }
             refreshedStream = findCredentialRefreshCandidate(
                 streams = state.groups.flatMap { it.streams },
                 failedUrl = failedUrl,

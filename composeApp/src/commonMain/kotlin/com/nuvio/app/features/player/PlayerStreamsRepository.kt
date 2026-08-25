@@ -56,6 +56,14 @@ object PlayerStreamsRepository {
     private var sourceJob: Job? = null
     private var sourceRequestKey: String? = null
 
+    // Credential refresh. A failing playback URL only needs a fresh link from the ONE addon that
+    // issued it, so that refetch is scoped to that addon and lands here rather than in
+    // _sourceState — refreshing must never leave the sources panel showing a single source.
+    private val _credentialRefreshState = MutableStateFlow(StreamsUiState())
+    val credentialRefreshState: StateFlow<StreamsUiState> = _credentialRefreshState.asStateFlow()
+    private var credentialRefreshJob: Job? = null
+    private var credentialRefreshRequestKey: String? = null
+
     // episode streams panel
     private val _episodeStreamsState = MutableStateFlow(StreamsUiState())
     val episodeStreamsState: StateFlow<StreamsUiState> = _episodeStreamsState.asStateFlow()
@@ -80,6 +88,40 @@ object PlayerStreamsRepository {
             setRequestKey = { sourceRequestKey = it },
             jobHolder = { sourceJob },
             setJob = { sourceJob = it },
+        )
+    }
+
+    /**
+     * Refetches ONE addon's streams so an expired playback URL can be replaced.
+     *
+     * The full fan-out this replaces asked every installed addon and every enabled scraper —
+     * ~140 requests — to refresh a single link, and expired signed URLs are routine on debrid
+     * and scraper sources. Worse, a `/stream/` request is not always the pure read the addon
+     * protocol implies: a usenet debrid addon has no infohash to check availability with, so it
+     * answers by SUBMITTING candidates to the user's account. Re-asking all of them to refresh
+     * one link is therefore not free, and is not the caller's intent.
+     *
+     * Results land in [credentialRefreshState], never in [sourceState].
+     */
+    fun refreshSourcesForAddon(
+        type: String,
+        videoId: String,
+        season: Int? = null,
+        episode: Int? = null,
+        addonId: String,
+    ) {
+        fetchStreams(
+            type = type,
+            videoId = videoId,
+            season = season,
+            episode = episode,
+            forceRefresh = true,
+            restrictToAddonIds = setOf(addonId),
+            stateFlow = _credentialRefreshState,
+            requestKeyHolder = { credentialRefreshRequestKey },
+            setRequestKey = { credentialRefreshRequestKey = it },
+            jobHolder = { credentialRefreshJob },
+            setJob = { credentialRefreshJob = it },
         )
     }
 
@@ -122,6 +164,9 @@ object PlayerStreamsRepository {
         sourceJob?.cancel()
         sourceRequestKey = null
         _sourceState.value = StreamsUiState()
+        credentialRefreshJob?.cancel()
+        credentialRefreshRequestKey = null
+        _credentialRefreshState.value = StreamsUiState()
         clearEpisodeStreams()
     }
 
@@ -131,13 +176,16 @@ object PlayerStreamsRepository {
         season: Int?,
         episode: Int?,
         forceRefresh: Boolean,
+        /** When non-null, only these addon ids are asked. Null fans out to everything. */
+        restrictToAddonIds: Set<String>? = null,
         stateFlow: MutableStateFlow<StreamsUiState>,
         requestKeyHolder: () -> String?,
         setRequestKey: (String?) -> Unit,
         jobHolder: () -> Job?,
         setJob: (Job) -> Unit,
     ) {
-        val requestKey = "$type::$videoId::$season::$episode"
+        val requestKey = "$type::$videoId::$season::$episode::" +
+            (restrictToAddonIds?.sorted()?.joinToString(",") ?: "*")
         val current = stateFlow.value
         val isLoadJobActive = jobHolder()?.isActive == true
         if (
@@ -192,14 +240,14 @@ object PlayerStreamsRepository {
         PlayerSettingsRepository.ensureLoaded()
         val playerSettings = PlayerSettingsRepository.uiState.value
         val debridSettings = DebridSettingsRepository.snapshot()
-        val pluginScrapers = if (AppFeaturePolicy.pluginsEnabled) {
+        val allPluginScrapers = if (AppFeaturePolicy.pluginsEnabled) {
             PluginRepository.initialize()
             PluginRepository.getEnabledScrapersForType(type)
         } else {
             emptyList()
         }
 
-        if (installedAddons.isEmpty() && pluginScrapers.isEmpty()) {
+        if (installedAddons.isEmpty() && allPluginScrapers.isEmpty()) {
             stateFlow.value = StreamsUiState(
                 isAnyLoading = false,
                 emptyStateReason = com.nuvio.app.features.streams.StreamsEmptyStateReason.NoAddonsInstalled,
@@ -224,6 +272,17 @@ object PlayerStreamsRepository {
                     manifest = manifest,
                 )
             }
+            .let { targets ->
+                if (restrictToAddonIds == null) targets else targets.filter { it.addonId in restrictToAddonIds }
+            }
+
+        // Scrapers carry the same "plugin:<id>" address the UI and the refresh matcher use, so
+        // one id set filters both kinds of source.
+        val pluginScrapers = if (restrictToAddonIds == null) {
+            allPluginScrapers
+        } else {
+            allPluginScrapers.filter { "plugin:${it.id}" in restrictToAddonIds }
+        }
 
         if (streamAddons.isEmpty() && pluginScrapers.isEmpty()) {
             stateFlow.value = StreamsUiState(
