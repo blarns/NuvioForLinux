@@ -2936,6 +2936,11 @@ private fun TabletFloatingTopBar(
                         tokens.colors.surface
                     },
                     shape = tokens.shapes.chip,
+                    // On the pill, not the label: the click target used to be the word
+                    // "Profile" alone, so the padding around it and the gap beside the avatar
+                    // were dead. The avatar keeps its own handler — a child clickable consumes
+                    // the event before this one sees it.
+                    modifier = Modifier.clickable { onTabSelected(AppScreenTab.Settings) },
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = tokens.spacing.listGap, vertical = tokens.spacing.controlGap),
@@ -2950,7 +2955,6 @@ private fun TabletFloatingTopBar(
                         )
                         Text(
                             text = stringResource(Res.string.compose_nav_profile),
-                            modifier = Modifier.clickable { onTabSelected(AppScreenTab.Settings) },
                             style = MaterialTheme.typography.labelLarge,
                             color = if (selectedTab == AppScreenTab.Settings) {
                                 tokens.colors.textPrimary
