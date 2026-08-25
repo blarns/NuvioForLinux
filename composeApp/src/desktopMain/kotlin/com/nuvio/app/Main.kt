@@ -28,6 +28,7 @@ import com.nuvio.app.features.player.DesktopScreenshot
 import com.nuvio.app.features.player.PlayerControlBridge
 import com.nuvio.app.features.player.PlayerLaunchStore
 import com.nuvio.app.features.player.PlayerSettingsStorage
+import com.nuvio.app.features.settings.AppIconRepository
 import com.nuvio.app.features.settings.AppLanguage
 import com.nuvio.app.features.settings.ThemeSettingsStorage
 
@@ -54,11 +55,24 @@ fun main(args: Array<String>) {
     // to stock skiko, so the default build renders exactly as before.
     println("[nuvio] libmpv player engine: ${DesktopEngineFlags.describe()}")
     EglRenderer.install()
+    // Before application {} so the very first window already carries the chosen icon.
+    AppIconRepository.ensureLoaded()
+
     application {
     System.setProperty("compose.interop.blending", "true")
     val mediaTitle by PlayerLaunchStore.currentTitle.collectAsState()
     val windowTitle = if (mediaTitle != null) "Nuvio — $mediaTitle" else "Nuvio"
-    val appIcon = runCatching { BitmapPainter(useResource("nuvio-icon.png", ::loadImageBitmap)) }.getOrNull()
+    // Window icon follows the Appearance > App Icon choice. Loaded the fork's way — synchronous
+    // useResource rather than compose-resources painterResource — so the icon is present on the
+    // very first frame instead of arriving a composition later, and so an unreadable file falls
+    // back to the shipped default instead of throwing.
+    val appIconState by AppIconRepository.state.collectAsState()
+    val appIcon = remember(appIconState.selected, appIconState.blackBackground) {
+        val suffix = if (appIconState.blackBackground) "" else "-transparent"
+        val selectedPath = "icons/app-icon-${appIconState.selected.key}$suffix.png"
+        runCatching { BitmapPainter(useResource(selectedPath, ::loadImageBitmap)) }.getOrNull()
+            ?: runCatching { BitmapPainter(useResource("nuvio-icon.png", ::loadImageBitmap)) }.getOrNull()
+    }
     // Size the window from the screen it is actually starting on. A hardcoded default read as
     // "the window is smaller than my screen" on anything bigger than 1280x720, and a size
     // restored from a larger monitor could leave the title bar off screen — issues/4.

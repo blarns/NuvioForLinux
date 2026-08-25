@@ -51,6 +51,9 @@ import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.cd_selected
 import nuvio.composeapp.generated.resources.compose_settings_page_continue_watching
 import nuvio.composeapp.generated.resources.compose_settings_page_poster_customization
+import nuvio.composeapp.generated.resources.settings_appearance_app_icon
+import nuvio.composeapp.generated.resources.settings_appearance_app_icon_black_background
+import nuvio.composeapp.generated.resources.settings_appearance_app_icon_black_background_description
 import nuvio.composeapp.generated.resources.settings_appearance_app_language
 import nuvio.composeapp.generated.resources.settings_appearance_app_language_sheet_title
 import nuvio.composeapp.generated.resources.settings_appearance_amoled_black
@@ -63,6 +66,9 @@ import nuvio.composeapp.generated.resources.settings_appearance_section_display
 import nuvio.composeapp.generated.resources.settings_appearance_section_home
 import nuvio.composeapp.generated.resources.settings_appearance_section_theme
 import org.jetbrains.compose.resources.StringResource
+import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -113,6 +119,14 @@ internal fun LazyListScope.appearanceSettingsContent(
 
     item {
         var showLanguageSheet by remember { mutableStateOf(false) }
+        var showAppIconPicker by remember { mutableStateOf(false) }
+        // Collected here rather than threaded through MobileSettingsScreen and
+        // TabletSettingsScreen: AppIconRepository is a singleton like the fork's other
+        // repositories, and four more parameters through two long argument lists and both
+        // call sites buys nothing.
+        val appIconState by AppIconRepository.state.collectAsStateWithLifecycle()
+        val appIconScope = rememberCoroutineScope()
+        LaunchedEffect(Unit) { AppIconRepository.ensureLoaded() }
         SettingsSection(
             title = stringResource(Res.string.settings_appearance_section_display),
             isTablet = isTablet,
@@ -135,6 +149,33 @@ internal fun LazyListScope.appearanceSettingsContent(
                         onCheckedChange = onLiquidGlassNativeTabBarToggle,
                     )
                 }
+                if (AppIconPlatform.isSupported) {
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsNavigationRow(
+                        title = stringResource(Res.string.settings_appearance_app_icon),
+                        description = stringResource(appIconState.selected.labelResource),
+                        // The fork's SettingsNavigationRow has no trailingContent slot, so the
+                        // icon leads the row like every other row on this page rather than
+                        // upstream's trailing thumbnail.
+                        iconPainter = painterResource(
+                            appIconState.selected.previewResource(appIconState.blackBackground),
+                        ),
+                        enabled = appIconState.pending == null,
+                        isTablet = isTablet,
+                        onClick = {
+                            AppIconRepository.clearFailure()
+                            showAppIconPicker = true
+                        },
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsSwitchRow(
+                        title = stringResource(Res.string.settings_appearance_app_icon_black_background),
+                        description = stringResource(Res.string.settings_appearance_app_icon_black_background_description),
+                        checked = appIconState.blackBackground,
+                        isTablet = isTablet,
+                        onCheckedChange = AppIconRepository::setBlackBackground,
+                    )
+                }
                 SettingsGroupDivider(isTablet = isTablet)
                 SettingsNavigationRow(
                     title = stringResource(Res.string.settings_appearance_app_language),
@@ -144,6 +185,18 @@ internal fun LazyListScope.appearanceSettingsContent(
                     onClick = { showLanguageSheet = true },
                 )
             }
+        }
+
+        if (showAppIconPicker) {
+            AppIconPicker(
+                isTablet = isTablet,
+                state = appIconState,
+                onSelected = { icon -> appIconScope.launch { AppIconRepository.select(icon) } },
+                onDismiss = {
+                    AppIconRepository.clearFailure()
+                    showAppIconPicker = false
+                },
+            )
         }
 
         if (showLanguageSheet) {
