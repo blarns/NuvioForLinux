@@ -58,6 +58,7 @@ import com.nuvio.app.features.cloud.CloudLibraryContentType
 import com.nuvio.app.features.cloud.cloudLibraryDisplayArtworkUrl
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.watchprogress.ContinueWatchingItem
+import com.nuvio.app.features.watchprogress.WatchProgressCompletionPercentThreshold
 import com.nuvio.app.features.watchprogress.ContinueWatchingSectionStyle
 import com.nuvio.app.features.watchprogress.CurrentDateProvider
 import com.nuvio.app.features.watchprogress.computeAirDateBadgeText
@@ -177,6 +178,29 @@ private fun ContinueWatchingItem.continueWatchingCardArtworkUrl(
         episodeThumbnail,
         imageUrl,
     )
+}
+
+/**
+ * Whether a Continue Watching card's artwork should be blurred to avoid a spoiler.
+ *
+ * The setting only ever hid NEXT-UP episodes, which misses the case it most needs to cover:
+ * an episode you started but have barely watched still shows its thumbnail unblurred, and
+ * that frame can be from anywhere in the episode. Anything below the completion threshold
+ * counts as unwatched.
+ *
+ * Blurring is limited to the episode thumbnail specifically — a series poster or backdrop is
+ * not a spoiler, so the artwork actually being shown has to be the thumbnail before it is hidden.
+ */
+internal fun ContinueWatchingItem.shouldBlurContinueWatchingArtwork(
+    blurUnwatchedEpisodes: Boolean,
+    useEpisodeThumbnails: Boolean,
+    artworkUrl: String?,
+): Boolean {
+    if (!blurUnwatchedEpisodes || !useEpisodeThumbnails) return false
+    val thumbnail = episodeThumbnail?.trim()?.takeIf { it.isNotBlank() } ?: return false
+    val artwork = artworkUrl?.trim()?.takeIf { it.isNotBlank() } ?: return false
+    val isUnwatched = isNextUp || progressFraction < WatchProgressCompletionPercentThreshold / 100f
+    return isUnwatched && artwork == thumbnail
 }
 
 private fun firstNonBlank(vararg values: String?): String? =
@@ -604,7 +628,11 @@ private fun ContinueWatchingCard(
         useEpisodeThumbnails = useEpisodeThumbnails,
         preferBackdropForNextUp = preferBackdropForNextUp,
     )
-    val shouldBlurArtwork = blurNextUp && useEpisodeThumbnails && item.isNextUp
+    val shouldBlurArtwork = item.shouldBlurContinueWatchingArtwork(
+        blurUnwatchedEpisodes = blurNextUp,
+        useEpisodeThumbnails = useEpisodeThumbnails,
+        artworkUrl = imageUrl,
+    )
     val episodeCode = if (item.seasonNumber != null && item.episodeNumber != null) {
         stringResource(Res.string.streams_episode_badge, item.seasonNumber, item.episodeNumber)
     } else {
@@ -807,8 +835,12 @@ private fun ContinueWatchingWideCard(
             )
             .let { if (onLongClick != null) it.onRightClick(onLongClick) else it },
     ) {
-        val shouldBlurArtwork = blurNextUp && useEpisodeThumbnails && item.isNextUp
         val artworkUrl = item.continueWatchingArtworkUrl(useEpisodeThumbnails)
+        val shouldBlurArtwork = item.shouldBlurContinueWatchingArtwork(
+            blurUnwatchedEpisodes = blurNextUp,
+            useEpisodeThumbnails = useEpisodeThumbnails,
+            artworkUrl = artworkUrl,
+        )
         ArtworkPanel(
             imageUrl = artworkUrl,
             width = layout.widePosterStripWidth,
@@ -930,10 +962,11 @@ private fun ContinueWatchingPosterCard(
                 .posterCardClickable(onClick = onClick, onLongClick = onLongClick),
         ) {
             val imageUrl = item.continueWatchingPosterArtworkUrl(useEpisodeThumbnails)
-            val shouldBlurArtwork = blurNextUp &&
-                useEpisodeThumbnails &&
-                item.isNextUp &&
-                imageUrl == firstNonBlank(item.episodeThumbnail)
+            val shouldBlurArtwork = item.shouldBlurContinueWatchingArtwork(
+                blurUnwatchedEpisodes = blurNextUp,
+                useEpisodeThumbnails = useEpisodeThumbnails,
+                artworkUrl = imageUrl,
+            )
             if (imageUrl != null) {
                 AsyncImage(
                     model = cloudLibraryDisplayArtworkUrl(imageUrl),
