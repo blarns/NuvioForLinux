@@ -48,6 +48,7 @@ private const val WATCH_PROGRESS_METADATA_RESOLUTION_LIMIT = 64
 private const val WATCH_PROGRESS_DELTA_PAGE_SIZE = 900
 private const val WATCH_PROGRESS_DELTA_OPERATION_UPSERT = "upsert"
 private const val WATCH_PROGRESS_DELTA_OPERATION_DELETE = "delete"
+private const val WATCH_PROGRESS_REMOTE_WRITE_DEDUP_WINDOW_MS = 5_000L
 
 // Regression-guard tuning: a save is treated as a startup/reload transient (and skipped) only
 // when the reported position is below NearZero while the stored position is at least
@@ -82,6 +83,59 @@ private data class WatchProgressDeltaApplyResult(
     val changed: Boolean,
 )
 
+private data class RemoteProgressWriteKey(
+    val profileId: Int,
+    val videoId: String,
+)
+
+private data class RemoteProgressWrite(
+    val entry: WatchProgressEntry,
+    val sentAtEpochMs: Long,
+)
+
+/**
+ * Suppresses byte-identical progress pushes fired within [windowMs] of each other.
+ *
+ * A terminal event (pause, stop, completion) can be reported by more than one path for the
+ * same instant — the player's own stop handler and the screen teardown both scrobble — and
+ * each one costs a Supabase round trip. The entry is compared with `lastUpdatedEpochMs`
+ * zeroed, because that field is stamped from the clock at call time and would otherwise make
+ * two otherwise-identical writes look different.
+ *
+ * Ported from upstream NuvioMobile `d0c7bff`. Adapted: upstream returns from the scrobble
+ * entirely on a duplicate, which also skips its local upsert/publish. The fork guards only the
+ * remote push — the local path here is cheap, idempotent, and drives the UI, so there is no
+ * reason to make deduplication observable on screen.
+ */
+internal class RemoteProgressWriteDeduplicator(
+    private val windowMs: Long = WATCH_PROGRESS_REMOTE_WRITE_DEDUP_WINDOW_MS,
+) {
+    private val lock = SynchronizedObject()
+    private val recentWrites = mutableMapOf<RemoteProgressWriteKey, RemoteProgressWrite>()
+
+    fun shouldSend(
+        profileId: Int,
+        entry: WatchProgressEntry,
+        nowEpochMs: Long,
+    ): Boolean = synchronized(lock) {
+        // A clock that went backwards drops the entry too: a negative age is not a window we
+        // can reason about, and forgetting is the safe direction (an extra write, never a lost one).
+        recentWrites.entries.removeAll { (_, write) ->
+            val elapsedMs = nowEpochMs - write.sentAtEpochMs
+            elapsedMs < 0L || elapsedMs >= windowMs
+        }
+        val key = RemoteProgressWriteKey(profileId = profileId, videoId = entry.videoId)
+        val normalizedEntry = entry.copy(lastUpdatedEpochMs = 0L)
+        if (recentWrites[key]?.entry == normalizedEntry) return@synchronized false
+        recentWrites[key] = RemoteProgressWrite(entry = normalizedEntry, sentAtEpochMs = nowEpochMs)
+        true
+    }
+
+    fun clear() {
+        synchronized(lock) { recentWrites.clear() }
+    }
+}
+
 object WatchProgressRepository {
     private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val log = Logger.withTag("WatchProgressRepository")
@@ -100,6 +154,7 @@ object WatchProgressRepository {
     private var deltaCursorEventId = 0L
     private var deltaInitialized = false
     private var lastAddonMetadataReadyFingerprint: String? = null
+    private val remoteWriteDeduplicator = RemoteProgressWriteDeduplicator()
     internal var syncAdapter: ProgressSyncAdapter = SupabaseProgressSyncAdapter
 
     init {
@@ -184,6 +239,7 @@ object WatchProgressRepository {
         lastSuccessfulPushEpochMs = 0L
         deltaCursorEventId = 0L
         deltaInitialized = false
+        remoteWriteDeduplicator.clear()
         TraktProgressRepository.clearLocalState()
         TraktSettingsRepository.clearLocalState()
         _uiState.value = WatchProgressUiState()
@@ -957,7 +1013,12 @@ object WatchProgressRepository {
             if (persist) {
                 upsertStoredProfileProgress(profileId = targetProfileId, entry = entry)
             }
-            if (syncRemote) {
+            if (syncRemote && remoteWriteDeduplicator.shouldSend(
+                    profileId = targetProfileId,
+                    entry = entry,
+                    nowEpochMs = entry.lastUpdatedEpochMs,
+                )
+            ) {
                 pushScrobbleToServer(entry = entry, profileId = targetProfileId)
             }
             return
@@ -976,7 +1037,12 @@ object WatchProgressRepository {
         if (entry.poster.isNullOrBlank() || entry.background.isNullOrBlank()) {
             resolveRemoteMetadata()
         }
-        if (syncRemote) {
+        if (syncRemote && remoteWriteDeduplicator.shouldSend(
+                profileId = targetProfileId,
+                entry = entry,
+                nowEpochMs = entry.lastUpdatedEpochMs,
+            )
+        ) {
             pushScrobbleToServer(entry = entry, profileId = targetProfileId)
         }
         if (shouldCascadeCompletedProgressToWatchedHistory(entry, useTraktProgress)) {
