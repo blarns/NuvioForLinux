@@ -8,8 +8,12 @@ import com.nuvio.app.features.profiles.ProfileRepository
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.postgrest.rpc
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,6 +48,8 @@ private data class AddonPushItem(
     @SerialName("sort_order") val sortOrder: Int = 0,
 )
 
+private const val ADDON_PUSH_DEBOUNCE_MS = 500L
+
 object AddonRepository {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val log = Logger.withTag("AddonRepository")
@@ -55,6 +61,11 @@ object AddonRepository {
     private var pulledFromServer = false
     private var currentProfileId: Int = 1
     private val activeRefreshJobs = mutableMapOf<String, Job>()
+
+    // Written from UI callbacks and cleared from the push coroutine's finally, so unlike
+    // activeRefreshJobs this one is genuinely cross-thread and needs the lock.
+    private val pushJobsLock = SynchronizedObject()
+    private val pushJobsByProfile = mutableMapOf<Int, Job>()
 
     fun initialize() {
         val effectiveProfileId = resolveEffectiveProfileId(ProfileRepository.activeProfileId)
@@ -100,6 +111,10 @@ object AddonRepository {
 
     fun clearLocalState() {
         cancelActiveRefreshes()
+        synchronized(pushJobsLock) {
+            pushJobsByProfile.values.forEach(Job::cancel)
+            pushJobsByProfile.clear()
+        }
         currentProfileId = 1
         initialized = false
         pulledFromServer = false
@@ -323,17 +338,20 @@ object AddonRepository {
     fun removeAddon(manifestUrl: String) {
         if (isUsingPrimaryAddonsFromSecondaryProfile()) return
         log.i { "removeAddon() — ${redactSourceUrl(manifestUrl)}" }
+        var changed = false
         _uiState.update { current ->
-            current.copy(
-                addons = current.addons.filterNot { it.manifestUrl == manifestUrl },
-            )
+            val updatedAddons = current.addons.filterNot { it.manifestUrl == manifestUrl }
+            changed = updatedAddons.size != current.addons.size
+            if (changed) current.copy(addons = updatedAddons) else current
         }
+        if (!changed) return
         persist()
         pushToServer()
     }
 
     fun moveAddon(fromIndex: Int, toIndex: Int) {
         if (isUsingPrimaryAddonsFromSecondaryProfile()) return
+        var changed = false
         _uiState.update { current ->
             val addons = current.addons
             if (
@@ -347,8 +365,10 @@ object AddonRepository {
             val reordered = addons.toMutableList()
             val movingAddon = reordered.removeAt(fromIndex)
             reordered.add(toIndex, movingAddon)
+            changed = true
             current.copy(addons = reordered)
         }
+        if (!changed) return
         persist()
         pushToServer()
     }
@@ -356,18 +376,21 @@ object AddonRepository {
     fun setAddonEnabled(manifestUrl: String, enabled: Boolean) {
         if (isUsingPrimaryAddonsFromSecondaryProfile()) return
         var shouldRefresh = false
+        var changed = false
         _uiState.update { current ->
             current.copy(
                 addons = current.addons.map { addon ->
                     if (addon.manifestUrl != manifestUrl || addon.enabled == enabled) {
                         addon
                     } else {
+                        changed = true
                         shouldRefresh = enabled && addon.manifest == null && !addon.isRefreshing
                         addon.copy(enabled = enabled)
                     }
                 },
             )
         }
+        if (!changed) return
         persist()
         pushToServer()
         if (shouldRefresh) {
@@ -431,23 +454,34 @@ object AddonRepository {
         activeRefreshJobs[manifestUrl] = refreshJob
     }
 
+    /**
+     * Pushes the addon list, debounced per profile.
+     *
+     * Reordering a list is a burst of single-step moves and toggling several addons is a burst
+     * of toggles; each one used to be its own `sync_push_addons` round trip, and every push
+     * sends the WHOLE list, so all but the last were wasted. Coalescing them into one send
+     * costs [ADDON_PUSH_DEBOUNCE_MS] of latency on a write nothing is waiting for.
+     *
+     * The snapshot is taken eagerly, before the delay, so the push reflects the state at the
+     * moment of the last edit rather than whatever the list happens to be 500ms later.
+     */
     private fun pushToServer() {
-        scope.launch {
-            runCatching {
-                if (isUsingPrimaryAddonsFromSecondaryProfile()) {
-                    return@runCatching
-                }
-                val profileId = currentProfileId
-                val addons = _uiState.value.addons
-                    .distinctBy { it.manifestUrl }
-                    .mapIndexed { index, addon ->
-                        AddonPushItem(
-                            url = addon.manifestUrl,
-                            name = addon.userSetName?.takeIf { it.isNotBlank() } ?: addon.manifest?.name ?: "",
-                            enabled = addon.enabled,
-                            sortOrder = index,
-                        )
-                    }
+        if (isUsingPrimaryAddonsFromSecondaryProfile()) return
+        val profileId = currentProfileId
+        val addons = _uiState.value.addons
+            .distinctBy { it.manifestUrl }
+            .mapIndexed { index, addon ->
+                AddonPushItem(
+                    url = addon.manifestUrl,
+                    name = addon.userSetName?.takeIf { it.isNotBlank() } ?: addon.manifest?.name ?: "",
+                    enabled = addon.enabled,
+                    sortOrder = index,
+                )
+            }
+        var pushJob: Job? = null
+        pushJob = scope.launch {
+            try {
+                delay(ADDON_PUSH_DEBOUNCE_MS)
                 log.d { "pushToServer() — profileId=$profileId, pushing ${addons.size} addons" }
                 val params = buildJsonObject {
                     put("p_profile_id", profileId)
@@ -456,9 +490,20 @@ object AddonRepository {
                 }
                 SupabaseProvider.client.postgrest.rpc("sync_push_addons", params)
                 log.d { "pushToServer() — success" }
-            }.onFailure { e ->
-                log.e(e) { "pushToServer() — FAILED" }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                log.e(error) { "pushToServer() — FAILED" }
+            } finally {
+                synchronized(pushJobsLock) {
+                    if (pushJobsByProfile[profileId] === pushJob) {
+                        pushJobsByProfile.remove(profileId)
+                    }
+                }
             }
+        }
+        synchronized(pushJobsLock) {
+            pushJobsByProfile.put(profileId, pushJob)?.cancel()
         }
     }
 

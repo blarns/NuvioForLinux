@@ -3,6 +3,29 @@ package com.nuvio.app.features.plugins
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
+/**
+ * How long a plugin repository manifest is trusted before it is refetched.
+ *
+ * Every profile switch and every sync pull used to refetch EVERY repository manifest. With
+ * several repositories and a scraper each, that is a burst of requests on a list that changes
+ * a few times a year. Six hours keeps new scrapers arriving the same day without making
+ * startup a fan-out.
+ */
+internal const val PLUGIN_REPOSITORY_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1_000L
+
+internal fun isPluginRepositoryRefreshDue(
+    lastUpdatedEpochMs: Long,
+    nowEpochMs: Long,
+): Boolean {
+    if (lastUpdatedEpochMs <= 0L) return true
+    val elapsedMs = nowEpochMs - lastUpdatedEpochMs
+    // A stamp in the future means the clock moved backwards since it was written. Upstream's
+    // version returns false here, which pins the repository as fresh until the clock catches
+    // up — potentially forever after a large skew. Refetching is the recoverable direction.
+    if (elapsedMs < 0L) return true
+    return elapsedMs >= PLUGIN_REPOSITORY_REFRESH_INTERVAL_MS
+}
+
 @Serializable
 data class PluginManifest(
     val name: String,

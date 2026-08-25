@@ -61,9 +61,13 @@ actual object PluginRepository {
         ensureStateLoadedForProfile(effectiveProfileId)
         if (!shouldRefreshStoredRepos) return
 
-        _uiState.value.repositories.forEach { repo ->
-            refreshRepositoryInternal(repo.manifestUrl, pushAfterRefresh = false, ensureInitialized = false)
-        }
+        val state = _uiState.value
+        val nowEpochMs = currentEpochMillis()
+        state.repositories
+            .filter { repo -> shouldRefreshRepository(repo, state.scrapers, nowEpochMs) }
+            .forEach { repo ->
+                refreshRepositoryInternal(repo.manifestUrl, pushAfterRefresh = false, ensureInitialized = false)
+            }
     }
 
     actual fun onProfileChanged(profileId: Int) {
@@ -108,29 +112,44 @@ actual object PluginRepository {
                 }
             }
 
-            val existingReposByUrl = _uiState.value.repositories.associateBy { it.manifestUrl }
+            val existingState = _uiState.value
+            val existingReposByUrl = existingState.repositories.associateBy { it.manifestUrl }
+            val nowEpochMs = currentEpochMillis()
             val nextRepos = urls.map { url ->
-                existingReposByUrl[url]?.copy(isRefreshing = true, errorMessage = null)
-                    ?: PluginRepositoryItem(
+                val existing = existingReposByUrl[url]
+                if (existing == null) {
+                    // Never seen before: always fetch, there is nothing cached to serve.
+                    PluginRepositoryItem(
                         manifestUrl = url,
                         name = url.substringBefore("?").substringAfterLast('/'),
                         isRefreshing = true,
                     )
+                } else {
+                    val shouldRefresh = shouldRefreshRepository(
+                        repository = existing,
+                        scrapers = existingState.scrapers,
+                        nowEpochMs = nowEpochMs,
+                    )
+                    existing.copy(
+                        isRefreshing = shouldRefresh,
+                        errorMessage = if (shouldRefresh) null else existing.errorMessage,
+                    )
+                }
             }
-            val nextScrapers = _uiState.value.scrapers.filter { scraper ->
+            val nextScrapers = existingState.scrapers.filter { scraper ->
                 urls.contains(scraper.repositoryUrl)
             }
 
             _uiState.value = PluginsUiState(
-                pluginsEnabled = _uiState.value.pluginsEnabled,
-                groupStreamsByRepository = _uiState.value.groupStreamsByRepository,
+                pluginsEnabled = existingState.pluginsEnabled,
+                groupStreamsByRepository = existingState.groupStreamsByRepository,
                 repositories = nextRepos,
                 scrapers = nextScrapers,
             )
             persist()
 
-            urls.forEach { url ->
-                refreshRepository(url, pushAfterRefresh = false)
+            nextRepos.filter(PluginRepositoryItem::isRefreshing).forEach { repository ->
+                refreshRepository(repository.manifestUrl, pushAfterRefresh = false)
             }
 
             pulledFromServer = true
@@ -411,6 +430,18 @@ actual object PluginRepository {
         if (platformTags.any { it in disabled }) return false
         return true
     }
+
+    /**
+     * A repository is refetched when its manifest is stale, or when the scrapers we actually
+     * hold for it fall short of the count the manifest advertised — the second condition is
+     * what stops a partially-applied refresh from being cached as complete for six hours.
+     */
+    private fun shouldRefreshRepository(
+        repository: PluginRepositoryItem,
+        scrapers: List<PluginScraper>,
+        nowEpochMs: Long,
+    ): Boolean = isPluginRepositoryRefreshDue(repository.lastUpdated, nowEpochMs) ||
+        scrapers.count { scraper -> scraper.repositoryUrl == repository.manifestUrl } < repository.scraperCount
 
     private fun markRefreshing(manifestUrl: String) {
         _uiState.update { state ->
