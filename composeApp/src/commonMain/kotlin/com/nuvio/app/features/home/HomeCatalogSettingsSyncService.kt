@@ -250,6 +250,27 @@ object HomeCatalogSettingsSyncService {
             platform = HOME_CATALOG_SHARED_SYNC_PLATFORM,
             localPayload = localPayload,
         )
+
+        // Two extra round trips per pull exist only to pick up rows written by the old mobile/TV
+        // apps. Nothing writes them any more — this fork pushes to the shared platform only, and
+        // NuvioTV's own sync service has a single platform constant, also the shared one — so a
+        // legacy row is frozen history and a shared row is always at least as new.
+        //
+        // ⚠ Skipping them entirely (as upstream f9c13a9 does) is NOT safe here: applyRemotePayload
+        // suppresses the push-back for anything it applies, so a legacy-sourced pull never
+        // migrates itself to the shared row. A user whose settings only ever landed under the old
+        // platform would silently lose them. The read is skipped only when the shared row already
+        // answers everything the legacy rows could contribute — its items AND both standalone
+        // flags, which withNewestStandaloneSettings would otherwise go looking for.
+        if (
+            shared != null &&
+            shared.payload.items.isNotEmpty() &&
+            shared.hasHideUnreleasedContent &&
+            shared.hasHideCatalogUnderline
+        ) {
+            return shared
+        }
+
         val legacyRows = HOME_CATALOG_LEGACY_SYNC_PLATFORMS
             .mapNotNull { platform ->
                 fetchRemotePayload(
