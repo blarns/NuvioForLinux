@@ -8,10 +8,14 @@ import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.functions.Functions
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.realtime.Realtime
+import io.ktor.client.plugins.HttpRequestRetry
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.http.HttpHeaders
 
 object SupabaseProvider {
+    // Shared by every request through this client, so a 429 on one call backs off the rest.
+    private val rateLimitCoordinator = BackendRateLimitCoordinator()
+
     @OptIn(SupabaseInternal::class)
     val client by lazy {
         val userAgent = "NuvioMobile/${AppVersionConfig.VERSION_NAME.ifBlank { "dev" }}"
@@ -20,6 +24,26 @@ object SupabaseProvider {
             supabaseKey = SupabaseConfig.ANON_KEY,
         ) {
             httpConfig {
+                // Honour the backend's own back-off instead of retrying straight into it. The
+                // plugin parks outgoing requests until any cooldown a 429/503 asked for has
+                // elapsed; the retry below only ever repeats requests that are safe to repeat.
+                install(BackendRateLimitPlugin) {
+                    coordinator = rateLimitCoordinator
+                }
+                install(HttpRequestRetry) {
+                    retryIf(maxRetries = 1) { request, response ->
+                        isSafeBackendRetryRequest(
+                            method = request.method.value,
+                            encodedPath = request.url.encodedPath,
+                        ) && isRetryableBackendResponse(response.status.value)
+                    }
+                    delayMillis { retry ->
+                        backendRetryDelayMillis(
+                            retryCount = retry,
+                            retryAfterHeader = response?.headers?.get(HttpHeaders.RetryAfter),
+                        )
+                    }
+                }
                 defaultRequest {
                     headers.append(HttpHeaders.UserAgent, userAgent)
                 }
