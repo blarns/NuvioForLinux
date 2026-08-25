@@ -204,6 +204,26 @@ fun LibraryScreen(
                         },
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
+                    // Cloud has its own provider/type chips and its own ordering; this sorts the
+                    // saved library, so it is hidden there rather than shown doing nothing.
+                    if (sourceMode != LibraryViewMode.Cloud) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        NuvioDropdownChip(
+                            title = stringResource(Res.string.library_sort_title),
+                            label = librarySortModeLabel(uiState.sortMode),
+                            selectedKey = uiState.sortMode.name,
+                            options = LibrarySortMode.entries.map { mode ->
+                                NuvioDropdownOption(
+                                    key = mode.name,
+                                    label = librarySortModeLabel(mode),
+                                )
+                            },
+                            onSelected = { option ->
+                                LibraryRepository.setSortMode(LibrarySortMode.fromStorage(option.key))
+                            },
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                        )
+                    }
                     Spacer(modifier = Modifier.height(6.dp))
                 }
             }
@@ -1027,3 +1047,10 @@ private fun LazyListScope.librarySections(
 }
 
 private const val LIBRARY_SECTION_PREVIEW_LIMIT = 18
+
+@Composable
+private fun librarySortModeLabel(mode: LibrarySortMode): String = when (mode) {
+    LibrarySortMode.DATE_ADDED -> stringResource(Res.string.library_sort_date_added)
+    LibrarySortMode.LAST_WATCHED -> stringResource(Res.string.library_sort_last_watched)
+    LibrarySortMode.NAME -> stringResource(Res.string.library_sort_name)
+}

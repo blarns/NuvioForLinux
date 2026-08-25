@@ -1365,6 +1365,10 @@
     <string name="library_remove_from_list_message">Remove %1$s from %2$s?</string>
     <string name="library_remove_message">Remove %1$s from your library?</string>
     <string name="library_remove_title">Remove from Library?</string>
+    <string name="library_sort_title">Sort library</string>
+    <string name="library_sort_date_added">Date added</string>
+    <string name="library_sort_last_watched">Last watched</string>
+    <string name="library_sort_name">Name</string>
     <string name="media_movie">Movie</string>
     <string name="notifications_channel_episode_releases_description">Alerts when a saved show's new episode is released.</string>
     <string name="notifications_test_preview_body">Preview episode release alert.</string>

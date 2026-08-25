@@ -8,6 +8,7 @@ import com.nuvio.app.core.network.SupabaseProvider
 import com.nuvio.app.core.sync.putSyncOriginClientId
 import com.nuvio.app.features.home.PosterShape
 import com.nuvio.app.features.profiles.ProfileRepository
+import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import com.nuvio.app.features.trakt.TraktAuthRepository
 import com.nuvio.app.features.trakt.TraktLibraryRepository
 import com.nuvio.app.features.trakt.TraktListTab
@@ -45,6 +46,9 @@ import org.jetbrains.compose.resources.getString
 @Serializable
 private data class StoredLibraryPayload(
     val items: List<LibraryItem> = emptyList(),
+    // Rides the existing payload rather than a new LibraryStorage key: the payload is already
+    // profile-scoped, so this needs no expect/actual across three platforms to persist.
+    val sortMode: String = LibrarySortMode.Default.name,
 )
 
 @Serializable
@@ -80,11 +84,23 @@ object LibraryRepository {
     private var currentProfileId: Int = 1
     private var profileGeneration: Long = 0L
     private var itemsById: MutableMap<String, LibraryItem> = mutableMapOf()
+    private var sortMode: LibrarySortMode = LibrarySortMode.Default
     private var isPullingNuvioSyncFromServer = false
     private var hasCompletedInitialNuvioSyncPull = false
     private var pushJob: Job? = null
 
     init {
+        // Only matters while sorting by LAST_WATCHED, and only when the derived ordering key
+        // actually moved — watch progress ticks constantly during playback, and republishing the
+        // whole library on every tick would reshuffle the grid under the user's cursor.
+        syncScope.launch {
+            WatchProgressRepository.uiState
+                .map { lastWatchedAtByContentId() }
+                .distinctUntilChanged()
+                .collectLatest {
+                    if (sortMode == LibrarySortMode.LAST_WATCHED) publish()
+                }
+        }
         syncScope.launch {
             TraktAuthRepository.isAuthenticated.collectLatest { authenticated ->
                 if (authenticated) {
@@ -173,7 +189,9 @@ object LibraryRepository {
         val payload = LibraryStorage.loadPayload(profileId).orEmpty().trim()
         if (payload.isNotEmpty()) {
             val items = runCatching {
-                json.decodeFromString<StoredLibraryPayload>(payload).items
+                val stored = json.decodeFromString<StoredLibraryPayload>(payload)
+                sortMode = LibrarySortMode.fromStorage(stored.sortMode)
+                stored.items
             }.getOrDefault(emptyList())
             itemsById = items.associateBy { libraryItemKey(it.id, it.type) }.toMutableMap()
         }
@@ -472,6 +490,7 @@ object LibraryRepository {
 
             _uiState.value = LibraryUiState(
                 sourceMode = LibrarySourceMode.TRAKT,
+                sortMode = sortMode,
                 items = traktState.allItems,
                 sections = sections,
                 isLoaded = traktState.hasLoaded,
@@ -481,21 +500,27 @@ object LibraryRepository {
             return
         }
 
-        val items = itemsById.values
-            .sortedByDescending { it.savedAtEpochMs }
+        val lastWatchedAtByContentId = lastWatchedAtByContentId()
+        val items = sortLibraryItems(
+            items = itemsById.values.toList(),
+            mode = sortMode,
+            lastWatchedAtByContentId = lastWatchedAtByContentId,
+        )
         val sections = items
             .groupBy { it.type }
             .map { (type, typeItems) ->
                 LibrarySection(
                     type = type,
                     displayTitle = type.toLibraryDisplayTitle(),
-                    items = typeItems.sortedByDescending { it.savedAtEpochMs },
+                    // Already ordered by the sort above; grouping preserves it.
+                    items = typeItems,
                 )
             }
             .sortedBy { it.displayTitle }
 
         _uiState.value = LibraryUiState(
             sourceMode = LibrarySourceMode.LOCAL,
+            sortMode = sortMode,
             items = items,
             sections = sections,
             isLoaded = true,
@@ -504,12 +529,40 @@ object LibraryRepository {
         )
     }
 
+    fun setSortMode(mode: LibrarySortMode) {
+        if (sortMode == mode) return
+        sortMode = mode
+        persist()
+        publish()
+    }
+
+    /**
+     * Most recent watch-progress update per library item id.
+     *
+     * Progress is recorded per episode, so a series' entries all share one parentMetaId and the
+     * newest of them is when the series was last watched. Movies record against their own id.
+     */
+    private fun lastWatchedAtByContentId(): Map<String, Long> {
+        val entries = WatchProgressRepository.uiState.value.entries
+        if (entries.isEmpty()) return emptyMap()
+        val newestByContentId = mutableMapOf<String, Long>()
+        entries.forEach { entry ->
+            val contentId = entry.parentMetaId.takeIf { it.isNotBlank() } ?: return@forEach
+            val existing = newestByContentId[contentId]
+            if (existing == null || entry.lastUpdatedEpochMs > existing) {
+                newestByContentId[contentId] = entry.lastUpdatedEpochMs
+            }
+        }
+        return newestByContentId
+    }
+
     private fun persist() {
         LibraryStorage.savePayload(
             currentProfileId,
             json.encodeToString(
                 StoredLibraryPayload(
                     items = itemsById.values.sortedByDescending { it.savedAtEpochMs },
+                    sortMode = sortMode.name,
                 ),
             ),
         )
