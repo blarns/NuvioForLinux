@@ -6,6 +6,29 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.6.2] — 2026-08-25
+
+A crash hotfix. Nothing else changed.
+
+### Fixed
+
+- **The app could die outright while searching for streams.** 0.3.6.1 could hard-crash the whole
+  application — not an error message, the process gone — while scraper plugins were fanning out
+  to look for sources. The more plugins installed, the likelier it was.
+
+  0.3.6.1 adopted the upstream fix that lets a plugin's web request pause and hand its thread
+  back rather than holding it. That change is correct in itself, but this fork runs plugins on a
+  pool of several threads, and the JavaScript engine each plugin runs in is tied to the one thread
+  that created it. Once a request could pause, the work could resume on a *different* thread from
+  that pool and reach into the engine from the wrong one, which crashes the process at a level no
+  error handling can catch.
+
+  Each plugin's engine now stays on a single thread for its entire life, so a paused request
+  always resumes where it started.
+
+  This was a race, so it did not happen every time — but with a large plugin set it happened often
+  enough to interrupt a session. Anyone running scraper plugins on 0.3.6.1 should update.
+
 ## [0.3.6.1] — 2026-08-22
 
 A single fix on top of 0.3.6, replacing that release's workaround with the real one.
