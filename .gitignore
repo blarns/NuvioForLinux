@@ -41,3 +41,7 @@ IMPLEMENTATION_COMPLETE.md
 # AppImage packaging build artifacts (downloaded tools, staged JDK/VLC, AppDir, dist) — regenerable
 appimage-build/
 local.properties.bak-*
+
+# JVM fatal-error logs — build detritus, never source
+hs_err_pid*.log
+replay_pid*.log
