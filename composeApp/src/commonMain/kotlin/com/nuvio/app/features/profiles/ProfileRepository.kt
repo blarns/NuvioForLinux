@@ -214,6 +214,8 @@ object ProfileRepository {
                 usesPrimaryPlugins = profile.usesPrimaryPlugins,
                 avatarId = profile.avatarId,
                 avatarUrl = profile.avatarUrl,
+                profileBackgroundId = profile.profileBackgroundId,
+                profileBackgroundUrl = profile.profileBackgroundUrl,
             )
         } + ProfilePushPayload(
             profileIndex = nextIndex,
@@ -233,6 +235,8 @@ object ProfileRepository {
         avatarColorHex: String,
         avatarId: String? = null,
         avatarUrl: String? = null,
+        profileBackgroundId: String? = null,
+        profileBackgroundUrl: String? = null,
         usesPrimaryAddons: Boolean = false,
     ) {
         val allPayloads = _state.value.profiles.map { profile ->
@@ -248,6 +252,8 @@ object ProfileRepository {
                     usesPrimaryPlugins = profile.usesPrimaryPlugins,
                     avatarId = avatarId,
                     avatarUrl = avatarUrl,
+                    profileBackgroundId = profileBackgroundId,
+                    profileBackgroundUrl = profileBackgroundUrl,
                 )
             } else {
                 ProfilePushPayload(
@@ -258,6 +264,8 @@ object ProfileRepository {
                     usesPrimaryPlugins = profile.usesPrimaryPlugins,
                     avatarId = profile.avatarId,
                     avatarUrl = profile.avatarUrl,
+                    profileBackgroundId = profile.profileBackgroundId,
+                    profileBackgroundUrl = profile.profileBackgroundUrl,
                 )
             }
         }
@@ -396,6 +404,8 @@ object ProfileRepository {
                 avatarColorHex = p.avatarColorHex,
                 avatarId = p.avatarId,
                 avatarUrl = p.avatarUrl,
+                profileBackgroundId = p.profileBackgroundId,
+                profileBackgroundUrl = p.profileBackgroundUrl,
                 usesPrimaryAddons = p.usesPrimaryAddons,
                 usesPrimaryPlugins = p.usesPrimaryPlugins,
             )
