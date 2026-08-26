@@ -39,7 +39,7 @@ internal val PlayerScreenRuntime.playbackSession: WatchProgressPlaybackSession
         providerAddonId = activeProviderAddonId,
         lastStreamTitle = activeStreamTitle,
         lastStreamSubtitle = activeStreamSubtitle,
-        pauseDescription = pauseDescription,
+        pauseDescription = activePauseDescription,
         lastSourceUrl = activeSourceUrl,
     )
 
