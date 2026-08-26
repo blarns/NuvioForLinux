@@ -17,8 +17,8 @@ crash and performance fixes lands.
   shows it and unlocks the same cosmetics the other apps have. Entitlement is checked against
   your account, so nothing extra is needed here beyond being signed in.
 
-  - A **Supporter / Supporter+ badge** beside the Nuvio wordmark, on the profile screen and in
-    Settings.
+  - A **Supporter / Supporter+ badge** beside the Nuvio wordmark on the profile screen, and
+    beside the wordmark in Settings.
   - **Five supporter themes** — Gold, Jade, Rose Gold, Arctic Blue and Graphite — with gradient
     accents rather than a single flat colour. They appear in Settings > Appearance only if your
     account includes them, and the app wordmark follows the theme you pick.

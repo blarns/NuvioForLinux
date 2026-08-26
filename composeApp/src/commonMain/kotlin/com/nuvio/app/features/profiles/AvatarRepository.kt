@@ -2,6 +2,8 @@ package com.nuvio.app.features.profiles
 
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.network.SupabaseConfig
+import com.nuvio.app.core.auth.AuthRepository
+import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.network.SupabaseProvider
 import com.nuvio.app.features.addons.httpPostJsonWithHeaders
 import com.nuvio.app.features.membership.CosmeticEntitlement
@@ -21,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -138,20 +141,28 @@ object AvatarRepository {
         if (accessObserverStarted) return
         accessObserverStarted = true
         MemberAccessRepository.ensureStarted()
-        // ensureStarted() hydrates from cache synchronously, so the entitlement is usually
-        // already known here — take it now rather than waiting for the first collect.
+        // ensureStarted() hydrates from cache synchronously, so the entitlement is usually already
+        // known — publish whatever is cached on disk right away.
         hasMemberAccess = MemberAccessRepository.access.value.entitlements
             .includes(CosmeticEntitlement.PROFILE_AVATARS)
         publishCatalog()
-        if (hasMemberAccess) scope.launch { fetchMemberCatalog() }
         scope.launch {
-            MemberAccessRepository.access.collectLatest { access ->
-                val nextAccess = access.entitlements.includes(CosmeticEntitlement.PROFILE_AVATARS)
-                if (nextAccess == hasMemberAccess) return@collectLatest
-                hasMemberAccess = nextAccess
-                if (nextAccess) {
+            // Gated on the auth state as well as the entitlement. The private bucket needs a live
+            // session, and a StateFlow conflates equal values, so reacting to `access` alone would
+            // fire the fetch off the cached entitlement before the session had loaded — an
+            // unauthenticated RPC that always fails — and then never fire again, because resolving
+            // to the same value produces no second emission. Combining the two re-emits when auth
+            // settles.
+            combine(MemberAccessRepository.access, AuthRepository.state) { access, auth ->
+                access.entitlements.includes(CosmeticEntitlement.PROFILE_AVATARS) &&
+                    auth is AuthState.Authenticated &&
+                    !auth.isAnonymous
+            }.collectLatest { entitledAndSignedIn ->
+                val changed = entitledAndSignedIn != hasMemberAccess
+                hasMemberAccess = entitledAndSignedIn
+                if (entitledAndSignedIn && memberCatalog.isEmpty()) {
                     fetchMemberCatalog()
-                } else {
+                } else if (changed) {
                     publishCatalog()
                 }
             }

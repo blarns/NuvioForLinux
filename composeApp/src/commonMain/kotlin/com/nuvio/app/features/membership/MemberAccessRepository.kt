@@ -146,7 +146,10 @@ object MemberAccessRepository {
         val cached = loadStoredAccess()?.toMemberAccess() ?: return
         _access.value = cached
         _accessResolved.value = true
-        warmMemberAssets(cached)
+        // Deliberately does NOT warm the remote asset catalogues. Upstream does, and it races the
+        // Supabase session restore: both catalogue RPCs go out unauthenticated and come back
+        // "permission denied" on every cold start. loadAccess() warms them instead, by which point
+        // the account is known to be signed in.
     }
 
     private fun loadStoredAccess(): StoredMemberAccess? {
