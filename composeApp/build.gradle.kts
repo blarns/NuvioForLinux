@@ -446,6 +446,13 @@ kotlin {
         val jvmMain by getting {
             dependsOn(commonMain)
             kotlin.srcDir("src/desktopMain/kotlin")
+            // ⚠ The matching resources dir, and it was missing until 0.3.7. Only the *kotlin*
+            // half of desktopMain was ever registered, so every file under
+            // src/desktopMain/resources was silently dropped from the build — including the 12
+            // app-icon PNGs the window icon picker loads by classpath path. Nothing failed
+            // loudly: Main.kt falls back to nuvio-icon.png, which happens to exist because a
+            // duplicate copy sits in src/jvmMain/resources.
+            resources.srcDir("src/desktopMain/resources")
             kotlin.srcDir(fullPluginSourceDir)
             dependencies {
                 implementation(compose.desktop.currentOs)
