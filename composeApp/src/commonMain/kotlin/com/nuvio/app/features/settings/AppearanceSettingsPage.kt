@@ -46,6 +46,9 @@ import com.nuvio.app.core.ui.NuvioModalBottomSheet
 import com.nuvio.app.core.ui.dismissNuvioBottomSheet
 import com.nuvio.app.core.ui.labelRes
 import com.nuvio.app.core.ui.ThemeColors
+import com.nuvio.app.core.ui.accentBrush
+import com.nuvio.app.features.membership.MemberAccessRepository
+import com.nuvio.app.features.membership.availableAppThemes
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.cd_selected
@@ -94,7 +97,11 @@ internal fun LazyListScope.appearanceSettingsContent(
             isTablet = isTablet,
         ) {
             SettingsGroup(isTablet = isTablet) {
-                val themes = listOf(AppTheme.WHITE) + AppTheme.entries.filterNot { it == AppTheme.WHITE }
+                val memberAccess by remember {
+                    MemberAccessRepository.ensureStarted()
+                    MemberAccessRepository.access
+                }.collectAsStateWithLifecycle()
+                val themes = availableAppThemes(memberAccess.entitlements)
                 FlowRow(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -340,7 +347,7 @@ private fun ThemeChip(
             modifier = Modifier
                 .size(44.dp)
                 .clip(CircleShape)
-                .background(palette.secondary),
+                .background(palette.accentBrush()),
             contentAlignment = Alignment.Center,
         ) {
             if (isSelected) {

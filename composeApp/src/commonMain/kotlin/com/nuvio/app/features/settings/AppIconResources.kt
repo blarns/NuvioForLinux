@@ -1,5 +1,7 @@
 package com.nuvio.app.features.settings
 
+import com.nuvio.app.core.ui.AppTheme
+
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.StringResource
@@ -45,4 +47,14 @@ internal val AppIconOption.transparentPreviewResource: DrawableResource
         AppIconOption.ROSE_GOLD -> Res.drawable.app_icon_rose_gold_transparent
         AppIconOption.COPPER -> Res.drawable.app_icon_copper_transparent
         AppIconOption.GRAPHITE -> Res.drawable.app_icon_graphite_transparent
+    }
+
+internal fun AppTheme.wordmarkResource(fallback: AppIconOption): DrawableResource =
+    when (this) {
+        AppTheme.GOLD -> Res.drawable.app_logo_wordmark_gold
+        AppTheme.JADE -> AppIconOption.EMERALD.wordmarkResource
+        AppTheme.ROSE_GOLD -> AppIconOption.ROSE_GOLD.wordmarkResource
+        AppTheme.ARCTIC_BLUE -> AppIconOption.ARCTIC_BLUE.wordmarkResource
+        AppTheme.GRAPHITE -> AppIconOption.GRAPHITE.wordmarkResource
+        else -> fallback.wordmarkResource
     }
