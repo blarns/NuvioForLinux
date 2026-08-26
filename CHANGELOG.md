@@ -6,6 +6,66 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.7] — 2026-08-26
+
+Supporter perks arrive on Linux, the Library gets a sort menu, and a batch of upstream
+crash and performance fixes lands.
+
+### Added
+
+- **Supporter perks.** If your Nuvio account is a Supporter or Supporter+, the desktop app now
+  shows it and unlocks the same cosmetics the other apps have. Entitlement is checked against
+  your account, so nothing extra is needed here beyond being signed in.
+
+  - A **Supporter / Supporter+ badge** beside the Nuvio wordmark, on the profile screen and in
+    Settings.
+  - **Five supporter themes** — Gold, Jade, Rose Gold, Arctic Blue and Graphite — with gradient
+    accents rather than a single flat colour. They appear in Settings > Appearance only if your
+    account includes them, and the app wordmark follows the theme you pick.
+  - **Profile backgrounds.** Pick one per profile when editing it; it paints behind the
+    "Who's watching?" screen. Custom background URLs set on the Nuvio web panel are honoured too.
+  - **Supporter avatars**, merged into the normal avatar picker.
+
+  Everything is cached locally, so after the first load these appear immediately on launch
+  rather than after a round trip.
+
+- **Sort your Library.** A sort control sits under the Saved/Cloud switch with three options:
+  Date added (the previous behaviour, still the default), Name, and **Last watched**. The choice
+  is remembered per profile. Thanks to @c1ag for the request.
+
+- **Choose your app icon.** Six colourways — Original, Arctic Blue, Emerald, Rose Gold, Copper
+  and Graphite — in Settings > Appearance, with a black or transparent background. The window
+  icon follows your choice.
+
+### Fixed
+
+- **Auto-play could break on a regex with a nested exclusion.** An auto-play pattern such as
+  `^(?!.*\b(CAM(?!RIP)|TS)\b).*1080p` made stream selection throw and stop selecting anything.
+  Patterns like that now work.
+- **Home catalog settings could throw while syncing.** Reordering or toggling catalogs at the
+  same moment a sync landed could hit a concurrent-modification error. Reads now always see a
+  complete, consistent set of preferences.
+- **Copying collection JSON no longer fails silently** — if the clipboard rejects it you get a
+  message instead of nothing happening.
+- **A search result arriving after you had moved on** could throw instead of being discarded.
+- **The pause overlay showed the wrong episode's description** after an auto-play or after
+  switching to a downloaded episode.
+- **Unwatched episode thumbnails are blurred consistently.** The blur setting was applied in the
+  episode list but not on the stream picker's header, the next-episode card, or the currently
+  playing row, so unwatched artwork leaked through anyway.
+- **The whole profile pill in the top bar is clickable**, not just the word "Profile".
+- **Unwatched episode artwork in Continue Watching** is blurred for every card layout, not only
+  the next-up one.
+
+### Changed
+
+- **Far fewer redundant network requests.** Several things that quietly re-fetched on every
+  navigation or every foreground now throttle themselves: the avatar catalog (at most once every
+  15 minutes), addon list pushes, the plugin repository (every 6 hours), and duplicate
+  watch-progress writes. The app also honours the backend's own retry delays instead of
+  hammering through them, and a credential refresh now re-asks only the addon that needs it
+  rather than every installed addon.
+
 ## [0.3.6.2] — 2026-08-25
 
 A crash hotfix. Nothing else changed.
