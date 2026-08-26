@@ -427,6 +427,7 @@ fun App() {
 
         LaunchedEffect(Unit) {
             NetworkStatusRepository.ensureStarted()
+            MemberAccessRepository.ensureStarted()
             ProfileRepository.loadCachedProfiles()
             AvatarRepository.fetchAvatars()
         }

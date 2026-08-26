@@ -36,6 +36,7 @@ private const val MemberAvatarBucket = "membership-profile-avatars"
 @Serializable
 private data class StoredAvatarCatalogPayload(
     val items: List<AvatarCatalogItem> = emptyList(),
+    val memberItems: List<MemberAvatarCatalogItem> = emptyList(),
 )
 
 @Serializable
@@ -70,6 +71,7 @@ object AvatarRepository {
     // a refetch.
     private var standardCatalog = emptyList<AvatarCatalogItem>()
     private var memberCatalog = emptyList<AvatarCatalogItem>()
+    private var memberCatalogMetadata = emptyList<MemberAvatarCatalogItem>()
 
     private var loaded = false
     private var cacheHydrated = false
@@ -121,11 +123,14 @@ object AvatarRepository {
             json.decodeFromString<StoredAvatarCatalogPayload>(payload)
         }.getOrNull() ?: return
 
-        val items = stored.items.activeSorted()
-        if (items.isEmpty()) return
-
-        standardCatalog = items
-        loaded = true
+        standardCatalog = stored.items.activeSorted()
+        // Supporter avatars already on disk are republished here so they are on screen on the
+        // first frame rather than after a round trip to the private bucket.
+        memberCatalogMetadata = stored.memberItems
+        memberCatalog = memberCatalogMetadata
+            .mapNotNull(::loadCachedMemberAvatar)
+            .sortedWith(compareBy({ it.category }, { it.sortOrder }))
+        loaded = standardCatalog.isNotEmpty()
         publishCatalog()
     }
 
@@ -133,6 +138,12 @@ object AvatarRepository {
         if (accessObserverStarted) return
         accessObserverStarted = true
         MemberAccessRepository.ensureStarted()
+        // ensureStarted() hydrates from cache synchronously, so the entitlement is usually
+        // already known here — take it now rather than waiting for the first collect.
+        hasMemberAccess = MemberAccessRepository.access.value.entitlements
+            .includes(CosmeticEntitlement.PROFILE_AVATARS)
+        publishCatalog()
+        if (hasMemberAccess) scope.launch { fetchMemberCatalog() }
         scope.launch {
             MemberAccessRepository.access.collectLatest { access ->
                 val nextAccess = access.entitlements.includes(CosmeticEntitlement.PROFILE_AVATARS)
@@ -172,9 +183,7 @@ object AvatarRepository {
                 // Only a fetch that actually produced a catalog starts the window; a failed
                 // one must stay retryable rather than being suppressed for 15 minutes.
                 lastRefresh = TimeSource.Monotonic.markNow()
-                AvatarStorage.savePayload(
-                    json.encodeToString(StoredAvatarCatalogPayload(items = activeItems)),
-                )
+                saveCachedCatalog()
             }
         } finally {
             fetchInFlight = false
@@ -188,6 +197,8 @@ object AvatarRepository {
             val remote = SupabaseProvider.client.postgrest
                 .rpc("get_member_profile_avatar_catalog")
                 .decodeList<MemberAvatarCatalogItem>()
+            memberCatalogMetadata = remote
+            saveCachedCatalog()
             memberCatalog = coroutineScope {
                 remote.map { item -> async { loadMemberAvatar(item) } }.awaitAll().filterNotNull()
             }.sortedWith(compareBy({ it.category }, { it.sortOrder }))
@@ -203,31 +214,54 @@ object AvatarRepository {
 
     private suspend fun loadMemberAvatar(item: MemberAvatarCatalogItem): AvatarCatalogItem? {
         return try {
-            val extension = item.storagePath.substringAfterLast('.', "img")
-                .takeIf { it.length in 2..5 && it.all(Char::isLetterOrDigit) }
-                ?: "img"
-            val cacheKey = "${item.id}-v${item.assetVersion}.$extension"
+            val cacheKey = memberAvatarCacheKey(item)
             val localImageUrl = MemberAssetStorage.loadProfileAvatar(cacheKey)
                 ?: SupabaseProvider.client.storage[MemberAvatarBucket]
                     .downloadAuthenticated(item.storagePath)
                     .let { bytes -> MemberAssetStorage.saveProfileAvatar(cacheKey, bytes) }
                 ?: return null
-            AvatarCatalogItem(
-                id = item.id,
-                displayName = item.displayName,
-                storagePath = item.storagePath,
-                category = item.category,
-                sortOrder = item.sortOrder,
-                bgColor = item.bgColor,
-                localImageUrl = localImageUrl,
-                memberOnly = true,
-            )
+            item.toAvatarCatalogItem(localImageUrl)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
             log.w(error) { "Unable to load supporter avatar ${item.id}" }
             null
         }
+    }
+
+    private fun loadCachedMemberAvatar(item: MemberAvatarCatalogItem): AvatarCatalogItem? {
+        val localImageUrl = MemberAssetStorage.loadProfileAvatar(memberAvatarCacheKey(item)) ?: return null
+        return item.toAvatarCatalogItem(localImageUrl)
+    }
+
+    private fun memberAvatarCacheKey(item: MemberAvatarCatalogItem): String {
+        val extension = item.storagePath.substringAfterLast('.', "img")
+            .takeIf { it.length in 2..5 && it.all(Char::isLetterOrDigit) }
+            ?: "img"
+        return "${item.id}-v${item.assetVersion}.$extension"
+    }
+
+    private fun MemberAvatarCatalogItem.toAvatarCatalogItem(localImageUrl: String): AvatarCatalogItem =
+        AvatarCatalogItem(
+            id = id,
+            displayName = displayName,
+            storagePath = storagePath,
+            category = category,
+            sortOrder = sortOrder,
+            bgColor = bgColor,
+            localImageUrl = localImageUrl,
+            memberOnly = true,
+        )
+
+    private fun saveCachedCatalog() {
+        AvatarStorage.savePayload(
+            json.encodeToString(
+                StoredAvatarCatalogPayload(
+                    items = standardCatalog,
+                    memberItems = memberCatalogMetadata,
+                ),
+            ),
+        )
     }
 
     private fun publishCatalog() {

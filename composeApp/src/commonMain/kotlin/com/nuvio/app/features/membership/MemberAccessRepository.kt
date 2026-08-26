@@ -47,9 +47,16 @@ object MemberAccessRepository {
     fun ensureStarted() {
         if (started) return
         started = true
+        hydrateCachedAccess()
         scope.launch {
             combine(AuthRepository.state, refreshGeneration) { auth, _ -> auth }
                 .collectLatest(::loadAccess)
+        }
+        scope.launch {
+            while (true) {
+                delay(VerificationIntervalMs)
+                refreshIfStale()
+            }
         }
     }
 
@@ -76,20 +83,32 @@ object MemberAccessRepository {
     }
 
     private suspend fun loadAccess(auth: AuthState) {
-        val account = auth as? AuthState.Authenticated
-        if (account == null || account.isAnonymous) {
-            // Still "resolved": a signed-out or anonymous account definitively has no perks, and
-            // leaving the flag false would pin every gated choice in its unresolved state.
-            _access.value = MemberAccess.None
-            _accessResolved.value = auth !is AuthState.Loading
-            return
+        when (auth) {
+            // Nothing is known yet, so leave both the access and the resolved flag alone.
+            AuthState.Loading -> return
+            AuthState.Unauthenticated -> {
+                // Definitively no perks — "resolved" even though the answer is None.
+                _access.value = MemberAccess.None
+                _accessResolved.value = true
+                return
+            }
+            is AuthState.Authenticated -> {
+                if (auth.isAnonymous) {
+                    _access.value = MemberAccess.None
+                    _accessResolved.value = true
+                    return
+                }
+            }
         }
+        val account = auth as AuthState.Authenticated
         val cached = loadCached(account.userId)
         _access.value = cached ?: MemberAccess.None
         _accessResolved.value = true
+        warmMemberAssets(_access.value)
         val remote = fetchWithRetry() ?: return
         val effective = saveRemote(account.userId, remote)
         _access.value = effective
+        warmMemberAssets(effective)
         verifiedUserId = account.userId
         verifiedAtMs = WatchProgressClock.nowEpochMs()
     }
@@ -112,18 +131,45 @@ object MemberAccessRepository {
     }
 
     private fun loadCached(userId: String): MemberAccess? {
-        val payload = MemberAssetStorage.loadAccessPayload() ?: return null
-        val stored = runCatching { json.decodeFromString<StoredMemberAccess>(payload) }.getOrNull() ?: return null
+        val stored = loadStoredAccess() ?: return null
         if (stored.userId != userId) return null
-        val tier = stored.tier?.let { name -> MemberTier.entries.firstOrNull { it.name == name } }
+        return stored.toMemberAccess()
+    }
+
+    /**
+     * Publishes the cached entitlements synchronously, before the auth state has even settled,
+     * so the first composition already knows what the account is entitled to. The cached payload
+     * is not checked against a user id here — [loadAccess] corrects it a moment later if it
+     * belongs to someone else.
+     */
+    private fun hydrateCachedAccess() {
+        val cached = loadStoredAccess()?.toMemberAccess() ?: return
+        _access.value = cached
+        _accessResolved.value = true
+        warmMemberAssets(cached)
+    }
+
+    private fun loadStoredAccess(): StoredMemberAccess? {
+        val payload = MemberAssetStorage.loadAccessPayload() ?: return null
+        return runCatching { json.decodeFromString<StoredMemberAccess>(payload) }.getOrNull()
+    }
+
+    private fun StoredMemberAccess.toMemberAccess(): MemberAccess {
+        val tier = this.tier?.let { name -> MemberTier.entries.firstOrNull { it.name == name } }
             ?: return MemberAccess.None
-        val entitlements = stored.entitlements
+        val decodedEntitlements = this.entitlements
             .mapNotNull { name -> CosmeticEntitlement.entries.firstOrNull { it.name == name } }
             .toSet()
         return MemberAccess(
             tier = tier,
-            entitlements = CosmeticEntitlements(entitlements),
+            entitlements = CosmeticEntitlements(decodedEntitlements),
         )
+    }
+
+    private fun warmMemberAssets(access: MemberAccess) {
+        if (access.entitlements.includes(CosmeticEntitlement.PROFILE_BACKGROUNDS)) {
+            ProfileBackgroundRepository.ensureLoaded()
+        }
     }
 
     private fun saveRemote(userId: String, remote: MemberAccess): MemberAccess {
