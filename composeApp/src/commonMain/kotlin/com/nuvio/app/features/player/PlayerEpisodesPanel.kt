@@ -359,7 +359,7 @@ private fun EpisodeRow(
     onClick: () -> Unit,
 ) {
     val tokens = MaterialTheme.nuvio
-    val shouldBlurArtwork = blurUnwatchedEpisodes && !isWatched && !isCurrent
+    val shouldBlurArtwork = blurUnwatchedEpisodes && !isWatched
     // Show a resume bar only for genuinely in-progress episodes; the extremes read as
     // noise (barely started) or contradict the watched checkmark (effectively done).
     val resumeFraction = progressEntry

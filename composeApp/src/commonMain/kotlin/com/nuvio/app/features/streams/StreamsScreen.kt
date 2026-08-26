@@ -87,6 +87,7 @@ import com.nuvio.app.core.ui.NuvioModalBottomSheet
 import com.nuvio.app.core.ui.NuvioToastController
 import com.nuvio.app.core.ui.dismissNuvioBottomSheet
 import com.nuvio.app.features.downloads.DownloadsRepository
+import com.nuvio.app.features.details.MetaScreenSettingsRepository
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -101,6 +102,8 @@ import com.nuvio.app.features.debrid.DirectDebridPlaybackResolver
 import com.nuvio.app.features.debrid.toastMessage
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
+import com.nuvio.app.features.watched.WatchedRepository
+import com.nuvio.app.features.watched.watchedItemKey
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import nuvio.composeapp.generated.resources.*
@@ -154,6 +157,14 @@ fun StreamsScreen(
     val watchProgressUiState by remember {
         WatchProgressRepository.ensureLoaded()
         WatchProgressRepository.uiState
+    }.collectAsStateWithLifecycle()
+    val metaScreenSettings by remember {
+        MetaScreenSettingsRepository.ensureLoaded()
+        MetaScreenSettingsRepository.uiState
+    }.collectAsStateWithLifecycle()
+    val watchedUiState by remember {
+        WatchedRepository.ensureLoaded()
+        WatchedRepository.uiState
     }.collectAsStateWithLifecycle()
     remember {
         DownloadsRepository.ensureLoaded()
@@ -224,6 +235,21 @@ fun StreamsScreen(
         }
     }
 
+    // Fork: the fork indexes progress by video id and has no watchedItemKeys() list helper, so
+    // the watched check is a single watchedItemKey() lookup rather than upstream's any-of.
+    val isEpisodeWatched = watchProgressUiState.byVideoId[videoId]?.isEffectivelyCompleted == true ||
+        watchedUiState.watchedKeys.contains(
+            watchedItemKey(
+                type = parentMetaType,
+                id = parentMetaId,
+                season = seasonNumber,
+                episode = episodeNumber,
+            ),
+        )
+    val blurEpisodeThumbnail = metaScreenSettings.blurUnwatchedEpisodes &&
+        isEpisode &&
+        !isEpisodeWatched &&
+        !episodeThumbnail.isNullOrBlank()
     val heroArtwork = if (isEpisode) {
         episodeThumbnail ?: background ?: poster
     } else {
@@ -260,6 +286,7 @@ fun StreamsScreen(
             )
         } else {
             MobileStreamsLayout(
+                blurEpisodeThumbnail = blurEpisodeThumbnail,
                 isEpisode = isEpisode,
                 title = title,
                 logo = logo,
@@ -481,6 +508,7 @@ fun StreamsScreen(
 
 @Composable
 private fun MobileStreamsLayout(
+    blurEpisodeThumbnail: Boolean,
     isEpisode: Boolean,
     title: String,
     logo: String?,
@@ -523,6 +551,7 @@ private fun MobileStreamsLayout(
                     episodeNumber = episodeNumber,
                     episodeTitle = episodeTitle ?: title,
                     thumbnail = heroArtwork,
+                    blurred = blurEpisodeThumbnail,
                     showTitle = title,
                 )
             } else {
@@ -676,6 +705,7 @@ private fun EpisodeHeroBlock(
     episodeNumber: Int,
     episodeTitle: String,
     thumbnail: String?,
+    blurred: Boolean,
     showTitle: String,
     modifier: Modifier = Modifier,
 ) {
@@ -691,7 +721,9 @@ private fun EpisodeHeroBlock(
             AsyncImage(
                 model = thumbnail,
                 contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (blurred) Modifier.blur(18.dp) else Modifier),
                 contentScale = ContentScale.Crop,
             )
         }
