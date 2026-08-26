@@ -6,6 +6,7 @@ internal actual object PlatformLocalAccountDataCleaner {
     private val plainKeys = listOf(
         "profile_payload",
         "avatar_catalog_payload",
+        "member_access_payload",
     )
     private val profilePinCachePrefixes = listOf("profile_pin_cache_")
     private val profileIndexedPrefixes = listOf(

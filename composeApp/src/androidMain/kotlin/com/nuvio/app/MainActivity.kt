@@ -21,6 +21,7 @@ import com.nuvio.app.features.downloads.DownloadsLiveStatusPlatform
 import com.nuvio.app.features.downloads.DownloadsPlatformDownloader
 import com.nuvio.app.features.downloads.DownloadsStorage
 import com.nuvio.app.features.library.LibraryStorage
+import com.nuvio.app.features.membership.MemberAssetStorage
 import com.nuvio.app.features.details.MetaScreenSettingsStorage
 import com.nuvio.app.features.home.HomeCatalogSettingsStorage
 import com.nuvio.app.features.mdblist.MdbListSettingsStorage
@@ -76,6 +77,7 @@ class MainActivity : AppCompatActivity() {
         ExternalPlayerPlatform.initialize(applicationContext)
         ProfileStorage.initialize(applicationContext)
         AvatarStorage.initialize(applicationContext)
+        MemberAssetStorage.initialize(applicationContext)
         ProfilePinCacheStorage.initialize(applicationContext)
         SearchHistoryStorage.initialize(applicationContext)
         SeasonViewModeStorage.initialize(applicationContext)

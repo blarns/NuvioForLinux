@@ -10,6 +10,7 @@ import com.nuvio.app.features.details.MetaScreenSettingsRepository
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.HomeRepository
 import com.nuvio.app.features.library.LibraryRepository
+import com.nuvio.app.features.membership.MemberAccessRepository
 import com.nuvio.app.features.notifications.EpisodeReleaseNotificationsRepository
 import com.nuvio.app.features.player.PlayerLaunchStore
 import com.nuvio.app.features.player.PlayerSettingsRepository
@@ -35,6 +36,7 @@ internal object LocalAccountDataCleaner {
         PlatformLocalAccountDataCleaner.wipe()
 
         ProfileRepository.clearInMemory()
+        MemberAccessRepository.clearLocalState()
         AddonRepository.clearLocalState()
         if (AppFeaturePolicy.pluginsEnabled) {
             PluginRepository.clearLocalState()

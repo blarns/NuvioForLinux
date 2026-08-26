@@ -1,4 +1,9 @@
 <resources>
+    <string name="theme_gold">Gold</string>
+    <string name="theme_jade">Jade</string>
+    <string name="theme_rose_gold">Rose Gold</string>
+    <string name="theme_arctic_blue">Arctic Blue</string>
+    <string name="theme_graphite">Graphite</string>
     <string name="about_licenses_attributions_subtitle">Data sources, acknowledgements, and platform licenses</string>
     <string name="about_supporters_contributors_subtitle">Open recognition and project credits</string>
     <string name="action_back">Back</string>

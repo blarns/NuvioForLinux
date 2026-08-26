@@ -166,7 +166,7 @@ object ProfileSettingsSync {
     @OptIn(FlowPreview::class)
     private fun observeLocalChangesAndPush() {
         val signatureFlows = listOf(
-            ThemeSettingsRepository.selectedTheme.map { "theme" },
+            ThemeSettingsRepository.selectedThemePreference.map { "theme" },
             ThemeSettingsRepository.amoledEnabled.map { "amoled" },
             ThemeSettingsRepository.liquidGlassNativeTabBarEnabled.map { "liquid_glass_tab_bar" },
             PosterCardStyleRepository.uiState.map { "poster_card_style" },
@@ -299,7 +299,7 @@ object ProfileSettingsSync {
         buildSignature(MobileProfileSettingsBlob())
 
     private fun currentObservedStateSignature(): String = listOf(
-        "theme=${ThemeSettingsRepository.selectedTheme.value.name}",
+        "theme=${ThemeSettingsRepository.selectedThemePreference.value?.name}",
         "amoled=${ThemeSettingsRepository.amoledEnabled.value}",
         "liquid_glass_tab_bar=${ThemeSettingsRepository.liquidGlassNativeTabBarEnabled.value}",
         "poster_card_style=${PosterCardStyleRepository.uiState.value}",
