@@ -45,3 +45,4 @@ local.properties.bak-*
 # JVM fatal-error logs — build detritus, never source
 hs_err_pid*.log
 replay_pid*.log
+smoke-*.log
