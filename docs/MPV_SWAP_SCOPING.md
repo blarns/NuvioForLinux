@@ -406,6 +406,17 @@ What *has* changed is direction: official desktop (Windows/macOS) and the commun
 `UmbraProjects/NuvioDesktop` fork are both on libmpv. Anything mpv-specific in those trees —
 Anime4K shaders, RTX HDR, buffer presets, >100% volume boost — is unreachable from VLCJ.
 
+> [!IMPORTANT]
+> **Superseded 2026-08-27 — the trigger has now fired.** `NuvioMedia/NuvioDesktop`
+> **0.1.21-alpha** adds *"Linux desktop support (native libmpv player bridge)"*:
+> `composeApp/src/desktopMain/native/linux/player_bridge.cpp` exists (libmpv embedded in the
+> host AWT Canvas's X11 window), and the release ships Linux `AppImage`/`deb`/`rpm`/`flatpak`
+> for `x86_64`, with libmpv as a system dependency (`libmpv2` / `mpv-libs`). So the paragraph
+> above — "there is **no** Linux bridge", "migrate to official instead is not currently an
+> option" — no longer holds. It is alpha and unverified on real hardware; parity with this
+> fork is unassessed. Re-read "Preconditions and triggers" below with that in mind. See
+> `CLAUDE.md` for the full record.
+
 ## Preconditions and triggers
 
 - **Sync 3 has landed (v0.1.15); the contract is stable.** Upstream's desktop merge —
