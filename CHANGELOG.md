@@ -6,6 +6,41 @@ This focuses on desktop-specific work; features synced from upstream
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.8] — 2026-08-28
+
+**Final release. NuvioForLinux is discontinued.**
+
+An official Nuvio desktop build for Linux now exists, which is what this fork was built to stand
+in for. Its stated goal was always to keep Linux working until the official port shipped Linux
+support and then hand its users across. That happened on 2026-08-27, so the fork stops here.
+
+There are no functional changes in this release. It exists so that the discontinuation notice
+reaches everyone through the in-app updater rather than only the people who visit the repository.
+
+### → Move to the official build
+
+**https://github.com/NuvioMedia/NuvioDesktop/releases/latest** — `.deb`, AppImage, `.flatpak` and
+`.rpm`, x86_64, using a native libmpv player bridge instead of this fork's VLCJ.
+
+Sign in there and your profiles, library, watch progress and addons restore from your Nuvio
+account. Don't run both builds at once — they share `~/.config/nuvio/`.
+
+Be aware the official desktop is **alpha** and says so ("intended only for testers… expect
+breaking changes with every update"), and is x86_64 only. Its `0.1.x` number reflects the
+project's age, not a loss of features — it ships plugins, P2P, downloads, in-app trailers,
+self-hosted server connections and its own updater all enabled.
+
+### Changed
+
+- README carries a permanent discontinuation notice, and the stale "actively developed" and
+  "regularly released" claims elsewhere in it have been corrected.
+
+### Note
+
+No further releases, bug fixes, security updates or upstream parity work. Issues and pull
+requests on this repository will not be actioned. v0.3.7 and every earlier release stay
+downloadable and keep working for as long as the Nuvio backend supports them.
+
 ## [0.3.7] — 2026-08-26
 
 Supporter perks arrive on Linux, the Library gets a sort menu, and a batch of upstream

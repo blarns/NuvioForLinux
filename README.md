@@ -1,3 +1,41 @@
+> [!IMPORTANT]
+> # This project is discontinued — permanently.
+>
+> **An official Nuvio desktop build for Linux now exists, and this fork has been retired.**
+>
+> NuvioForLinux was always a stand-in. Its stated goal, from the beginning, was to give Linux a
+> working Nuvio until the official desktop port shipped Linux support — and then to hand its users
+> over. As of **2026-08-27** that has happened, so the fork has done its job and stops here.
+>
+> ### → Move to the official build: [NuvioMedia/NuvioDesktop releases](https://github.com/NuvioMedia/NuvioDesktop/releases/latest)
+>
+> It ships `.deb`, AppImage, `.flatpak` and `.rpm` for x86_64, and uses a native **libmpv** player
+> bridge rather than this fork's VLCJ.
+>
+> **Migrating:**
+> - **Sign in on the official build and your data comes back** — profiles, library, watch progress
+>   and addons all restore from your Nuvio account. That is the mechanism to rely on; don't assume
+>   anything is carried over locally.
+> - On a test install here on 2026-08-28, the official `.deb` (`1.1.21-1`) installed over v0.3.7 as
+>   an ordinary `apt` upgrade, because both packages are named `nuvio`. That is an observation, not
+>   a guarantee — upstream is alpha and their version strings may change. If `apt` objects, remove
+>   `nuvio` first and install fresh.
+> - Don't run both builds at once — they share `~/.config/nuvio/` and will interleave writes to it.
+>
+> **Be aware of what you are moving to:** the official desktop is **alpha**, explicitly
+> "testers only", **x86_64 only** (no arm64), and numbered `0.1.x` against this fork's `0.3.7`.
+> The low version number reflects its age, not a downgrade in capability — it now enables plugins,
+> P2P, downloads, in-app trailers, self-hosted servers and its own updater, all of which this fork
+> either lacked or had to build separately.
+>
+> **What "discontinued" means here:** no further releases, no bug fixes, no security updates, and
+> no upstream parity work. Issues and pull requests will not be actioned. The code stays online,
+> GPL-3.0, for anyone who wants to read or fork it — but nobody is maintaining it.
+>
+> Thanks to everyone who ran it, filed bugs, and put up with the rough edges.
+
+---
+
 <div align="center">
 
   <img src="https://github.com/tapframe/NuvioTV/blob/main/assets/brand/app_logo_wordmark.png" alt="Nuvio" width="300" />
@@ -38,8 +76,9 @@
 
 ## About
 
-[EDIT] :Update as of 7/18/2026:
-I am considering taking this out of maintenence and back into active developement AND I will be working towards keeping it working untill the official version is released. The goal right now is to make it so that once the official version is released users can simply update from my fork to the offcial repo's version.
+**Update, 2026-08-28 — that goal is complete and this fork is retired.** The plan stated here was
+to keep the fork working until an official Linux version existed, then let users move straight
+across to it. The official Linux build shipped on 2026-08-27. See the notice at the top.
 
 This is a fork of [NuvioMedia/NuvioMobile](https://github.com/NuvioMedia/NuvioMobile) with an added **Linux Desktop target** via Kotlin Multiplatform JVM + VLCJ.
 
@@ -64,7 +103,7 @@ If you fork, modify, or distribute this code, you **must** also open-source your
 
 ## Project status
 > [!NOTE]
-> This community fork exists to give Linux desktop a working Nuvio **today** — the official desktop port targets macOS and Windows first. It's built on the upstream [NuvioMobile](https://github.com/NuvioMedia/NuvioMobile) Kotlin Multiplatform / Compose codebase — the same shared `commonMain` that powers the Android and iOS apps — with a Linux/JVM desktop layer added on top: VLCJ playback, MPRIS media keys, hardware-accelerated video, and `.deb` + AppImage packaging. It's actively used and regularly released (see [Releases](https://github.com/blarns/NuvioForLinux/releases)). Development is fast-moving and AI-assisted, so expect the occasional rough edge — issues and pull requests are very welcome.
+> This community fork existed to give Linux desktop a working Nuvio while the official desktop port targeted macOS and Windows only. It now supports Linux too, so the fork has been retired. It's built on the upstream [NuvioMobile](https://github.com/NuvioMedia/NuvioMobile) Kotlin Multiplatform / Compose codebase — the same shared `commonMain` that powers the Android and iOS apps — with a Linux/JVM desktop layer added on top: VLCJ playback, MPRIS media keys, hardware-accelerated video, and `.deb` + AppImage packaging. **It is no longer developed or released.** Final version: **v0.3.7** (2026-08-26). The [Releases](https://github.com/blarns/NuvioForLinux/releases) remain downloadable and will keep working for as long as the Nuvio backend supports them, but nothing further is planned — use the [official Linux build](https://github.com/NuvioMedia/NuvioDesktop/releases/latest) instead. Issues and pull requests will not be actioned.
 
 ## Environment Setup
 
@@ -104,7 +143,7 @@ Download the latest Android build from [NuvioMedia/NuvioMobile Releases](https:/
 
 ### Linux Desktop (JVM)
 
-**Status:** Community-maintained and actively developed. Video, audio, OAuth, addon
+**Status:** **Discontinued as of 2026-08-28 — see the notice at the top.** Everything below describes the final release, v0.3.7, and is kept for reference. Video, audio, OAuth, addon
 persistence, debrid, resume-across-restart, and experimental P2P torrent streaming all
 working. See known issues.
 
