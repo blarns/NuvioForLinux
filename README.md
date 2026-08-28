@@ -1,3 +1,41 @@
+> [!IMPORTANT]
+> # This project is discontinued — permanently.
+>
+> **An official Nuvio desktop build for Linux now exists, and this fork has been retired.**
+>
+> NuvioForLinux was always a stand-in. Its stated goal, from the beginning, was to give Linux a
+> working Nuvio until the official desktop port shipped Linux support — and then to hand its users
+> over. As of **2026-08-27** that has happened, so the fork has done its job and stops here.
+>
+> ### → Move to the official build: [NuvioMedia/NuvioDesktop releases](https://github.com/NuvioMedia/NuvioDesktop/releases/latest)
+>
+> It ships `.deb`, AppImage, `.flatpak` and `.rpm` for x86_64, and uses a native **libmpv** player
+> bridge rather than this fork's VLCJ.
+>
+> **Migrating:**
+> - **Sign in on the official build and your data comes back** — profiles, library, watch progress
+>   and addons all restore from your Nuvio account. That is the mechanism to rely on; don't assume
+>   anything is carried over locally.
+> - On a test install here on 2026-08-28, the official `.deb` (`1.1.21-1`) installed over v0.3.7 as
+>   an ordinary `apt` upgrade, because both packages are named `nuvio`. That is an observation, not
+>   a guarantee — upstream is alpha and their version strings may change. If `apt` objects, remove
+>   `nuvio` first and install fresh.
+> - Don't run both builds at once — they share `~/.config/nuvio/` and will interleave writes to it.
+>
+> **Be aware of what you are moving to:** the official desktop is **alpha**, explicitly
+> "testers only", **x86_64 only** (no arm64), and numbered `0.1.x` against this fork's `0.3.7`.
+> The low version number reflects its age, not a downgrade in capability — it now enables plugins,
+> P2P, downloads, in-app trailers, self-hosted servers and its own updater, all of which this fork
+> either lacked or had to build separately.
+>
+> **What "discontinued" means here:** no further releases, no bug fixes, no security updates, and
+> no upstream parity work. Issues and pull requests will not be actioned. The code stays online,
+> GPL-3.0, for anyone who wants to read or fork it — but nobody is maintaining it.
+>
+> Thanks to everyone who ran it, filed bugs, and put up with the rough edges.
+
+---
+
 <div align="center">
 
   <img src="https://github.com/tapframe/NuvioTV/blob/main/assets/brand/app_logo_wordmark.png" alt="Nuvio" width="300" />
